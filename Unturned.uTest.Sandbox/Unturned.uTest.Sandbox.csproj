@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+
+    <RootNamespace>uTest.Sandbox</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <LangVersion>13.0</LangVersion>
+
+    <IsUnturnedTestProject>True</IsUnturnedTestProject>
+
+  </PropertyGroup>
+
+  <ItemGroup>
+
+    <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
+    <ProjectReference Include="../Unturned.uTest.Runner/Unturned.uTest.Runner.csproj" />
+    <ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
+
+  </ItemGroup>
+
+  <Import Project="../Unturned.uTest.Runner/buildMultiTargeting/Unturned.uTest.Runner.props" />
+
+</Project>

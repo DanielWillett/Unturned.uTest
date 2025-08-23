@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Project>
+
+  <Choose>
+
+    <When Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETCoreApp'">
+      <PropertyGroup>
+        <uTestMode>NET</uTestMode>
+      </PropertyGroup>
+    </When>
+
+    <When Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETFramework'">
+      <PropertyGroup>
+        <uTestMode>NETFramework</uTestMode>
+      </PropertyGroup>
+    </When>
+
+    <Otherwise>
+      <PropertyGroup>
+        <uTestMode>Unsupported</uTestMode>
+      </PropertyGroup>
+    </Otherwise>
+
+  </Choose>
+
+  <Target BeforeTargets="Build" Name="uTest_CheckValidTargetFramework" >
+
+    <Error Condition="'$(uTestMode)' == 'Unsupported'"
+           Code="UNT900"
+           Text="Unsupported target framework: $(TargetFramework). Expected either .NET Framework (net481) or .NET 7.0 (net7.0) or earlier (for .NET Standard 2.1)."
+          />
+
+  </Target>
+
+  <PropertyGroup>
+
+    <!-- Update build file as well -->
+    <MTPVersion>2.0.0-preview.25415.9</MTPVersion>
+
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(uTestMode)' == 'NET' And $(IsUnturnedTestProject)">
+
+    <DisableImplicitFrameworkReferences>True</DisableImplicitFrameworkReferences>
+    <!--<NetStandardImplicitPackageVersion>2.1.0</NetStandardImplicitPackageVersion>-->
+
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsUnturnedTestProject)' == 'True'">
+
+    <IsPackable>False</IsPackable>
+    <IsPublishable>False</IsPublishable>
+    <DebugSymbols>True</DebugSymbols>
+    <DebugType>portable</DebugType>
+    <OutputType>Exe</OutputType>
+
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(uTestMode)' == 'NET'">
+
+    <!-- Simulate referencing .NET Standard 2.1 -->
+    <PackageDownload Include="NETStandard.Library.Ref" Version="[2.1.0]" Condition="$(IsUnturnedTestProject)" />
+    <Reference Include="$(NugetPackageRoot)\netstandard.library.ref\2.1.0\ref\netstandard2.1\*.dll" Private="false" Condition="$(IsUnturnedTestProject)" />
+
+    <!-- Reference .NET Standard 2.0 target for MTP -->
+    <PackageReference Include="Microsoft.Testing.Platform" ExcludeAssets="Compile" GeneratePathProperty="True" Version="$(MTPVersion)"/>
+    <PackageReference Include="Microsoft.Testing.Platform.MSBuild" ExcludeAssets="Compile" GeneratePathProperty="True" Version="$(MTPVersion)"/>
+
+    <Reference Include="Microsoft.Testing.Platform" HintPath="$(PkgMicrosoft_Testing_Platform)\lib\netstandard2.0\Microsoft.Testing.Platform.dll"/>
+    <Reference Include="Microsoft.Testing.Extensions.MSBuild" HintPath="$(PkgMicrosoft_Testing_Platform_MSBuild)\lib\netstandard2.0\Microsoft.Testing.Extensions.MSBuild.dll"/>
+
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(uTestMode)' == 'NETFramework'">
+
+    <!-- Reference .NET Standard 2.0 target for MTP -->
+    <PackageReference Include="Microsoft.Testing.Platform" Version="$(MTPVersion)"/>
+    <PackageReference Include="Microsoft.Testing.Platform.MSBuild" Version="$(MTPVersion)"/>
+
+  </ItemGroup>
+
+  <ItemGroup Condition="$(IsUnturnedTestProject)">
+
+    <!-- Testing Platform Extensions -->
+    
+    <TestingPlatformBuilderHook Include="5903866E-B8B1-486A-ACD6-EBD76462F241">
+      <DisplayName>uTest</DisplayName>
+      <TypeFullName>uTest.Runner.TestingPlatformBuilderHook</TypeFullName>
+    </TestingPlatformBuilderHook>
+
+  </ItemGroup>
+</Project>
