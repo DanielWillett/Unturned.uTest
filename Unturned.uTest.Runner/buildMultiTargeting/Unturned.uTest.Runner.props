@@ -3,9 +3,9 @@
 
   <Choose>
 
-    <When Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETCoreApp'">
+    <When Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETStandard'">
       <PropertyGroup>
-        <uTestMode>NET</uTestMode>
+        <uTestMode>NETStandard</uTestMode>
       </PropertyGroup>
     </When>
 
@@ -27,7 +27,7 @@
 
     <Error Condition="'$(uTestMode)' == 'Unsupported'"
            Code="UNT900"
-           Text="Unsupported target framework: $(TargetFramework). Expected either .NET Framework (net481) or .NET 7.0 (net7.0) or earlier (for .NET Standard 2.1)."
+           Text="Unsupported target framework: '$(TargetFramework)'. Expected either .NET Framework (&lt;= net481) or .NET Standard (&lt;= netstandard2.1)."
           />
 
   </Target>
@@ -39,37 +39,63 @@
 
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(uTestMode)' == 'NET' And $(IsUnturnedTestProject)">
-
-    <DisableImplicitFrameworkReferences>True</DisableImplicitFrameworkReferences>
-    <!--<NetStandardImplicitPackageVersion>2.1.0</NetStandardImplicitPackageVersion>-->
-
-  </PropertyGroup>
-
   <PropertyGroup Condition="'$(IsUnturnedTestProject)' == 'True'">
 
     <IsPackable>False</IsPackable>
     <IsPublishable>False</IsPublishable>
     <DebugSymbols>True</DebugSymbols>
     <DebugType>portable</DebugType>
+
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsUnturnedTestProject)' == 'True' And '$(uTestMoe)' != 'NETStandard'">
+    
     <OutputType>Exe</OutputType>
 
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(uTestMode)' == 'NET'">
+  <ItemGroup Condition="'$(uTestMode)' == 'NETStandard'">
 
-    <!-- Simulate referencing .NET Standard 2.1 -->
-    <PackageDownload Include="NETStandard.Library.Ref" Version="[2.1.0]" Condition="$(IsUnturnedTestProject)" />
-    <Reference Include="$(NugetPackageRoot)\netstandard.library.ref\2.1.0\ref\netstandard2.1\*.dll" Private="false" Condition="$(IsUnturnedTestProject)" />
-
-    <!-- Reference .NET Standard 2.0 target for MTP -->
-    <PackageReference Include="Microsoft.Testing.Platform" ExcludeAssets="Compile" GeneratePathProperty="True" Version="$(MTPVersion)"/>
-    <PackageReference Include="Microsoft.Testing.Platform.MSBuild" ExcludeAssets="Compile" GeneratePathProperty="True" Version="$(MTPVersion)"/>
-
-    <Reference Include="Microsoft.Testing.Platform" HintPath="$(PkgMicrosoft_Testing_Platform)\lib\netstandard2.0\Microsoft.Testing.Platform.dll"/>
-    <Reference Include="Microsoft.Testing.Extensions.MSBuild" HintPath="$(PkgMicrosoft_Testing_Platform_MSBuild)\lib\netstandard2.0\Microsoft.Testing.Extensions.MSBuild.dll"/>
+    <PackageReference Include="Microsoft.Testing.Platform" GeneratePathProperty="True" Version="$(MTPVersion)" />
+    <PackageReference Include="Microsoft.Testing.Platform.MSBuild" GeneratePathProperty="True" Version="$(MTPVersion)" />
 
   </ItemGroup>
+
+  <Target Name="uTest_CopyTPMToOutput" Condition="'$(uTestMode)' == 'NETStandard'" AfterTargets="Build">
+
+    <Copy SkipUnchangedFiles="True" SourceFiles="$(PkgMicrosoft_Testing_Platform)\lib\netstandard2.0\Microsoft.Testing.Platform.dll" DestinationFiles="$(OutDir)\Microsoft.Testing.Platform.dll" />
+    <Copy SkipUnchangedFiles="True" SourceFiles="$(PkgMicrosoft_Testing_Platform_MSBuild)\lib\netstandard2.0\Microsoft.Testing.Extensions.MSBuild.dll" DestinationFiles="$(OutDir)\Microsoft.Testing.Extensions.MSBuild.dll" />
+
+  </Target>
+  <Target Name="uTest_WriteRuntimeConfig" Condition="'$(uTestMode)' == 'NETStandard'" AfterTargets="Build">
+
+    <PropertyGroup Condition="'$(uTestNetTargetFramework)' == ''">
+
+      <uTestNetTargetFramework>net8.0</uTestNetTargetFramework>
+
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_RuntimeConfigLine Include="{" />
+      <_RuntimeConfigLine Include="  &quot;runtimeOptions&quot;: {" />
+      <_RuntimeConfigLine Include="    &quot;tfm&quot;: &quot;$(uTestNetTargetFramework)&quot;," />
+      <_RuntimeConfigLine Include="    &quot;framework&quot;: {" />
+      <_RuntimeConfigLine Include="      &quot;name&quot;: &quot;Microsoft.NETCore.App&quot;," />
+      <_RuntimeConfigLine Include="      &quot;version&quot;: &quot;$([MSBuild]::GetTargetFrameworkVersion($(uTestNetTargetFramework))).0&quot;" />
+      <_RuntimeConfigLine Include="    }" />
+      <_RuntimeConfigLine Include="  }" />
+      <_RuntimeConfigLine Include="}" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(OutDir)\$(AssemblyName).runtimeconfig.json"
+                      Overwrite="true"
+                      Lines="@(_RuntimeConfigLine)"
+                     />
+
+    <Copy SkipUnchangedFiles="True" SourceFiles="$(PkgMicrosoft_Testing_Platform)\lib\netstandard2.0\Microsoft.Testing.Platform.dll" DestinationFiles="$(OutDir)\Microsoft.Testing.Platform.dll" />
+    <Copy SkipUnchangedFiles="True" SourceFiles="$(PkgMicrosoft_Testing_Platform_MSBuild)\lib\netstandard2.0\Microsoft.Testing.Extensions.MSBuild.dll" DestinationFiles="$(OutDir)\Microsoft.Testing.Extensions.MSBuild.dll" />
+
+  </Target>
 
   <ItemGroup Condition="'$(uTestMode)' == 'NETFramework'">
 
@@ -89,4 +115,12 @@
     </TestingPlatformBuilderHook>
 
   </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="uTest"/>
+    <Using Include="uTest.Assertions.NUnit" Condition="'$(AssertionStyle)' == 'NUnit'" />
+    <Using Include="uTest.Assertions.xUnit" Condition="'$(AssertionStyle)' == 'xUnit'" />
+    <Using Include="uTest.Assertions.MSTest" Condition="'$(AssertionStyle)' != 'NUnit' And '$(AssertionStyle)' != 'xUnit'" />
+  </ItemGroup>
+
 </Project>

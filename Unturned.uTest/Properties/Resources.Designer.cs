@@ -97,6 +97,33 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to An assertion expression for a DateTimeOffset can not both define a tolerance and check that offsets are the same..
+        /// </summary>
+        internal static string AssertionExpressionCombinedDateTimeOffsetComparisonWithTolerance {
+            get {
+                return ResourceManager.GetString("AssertionExpressionCombinedDateTimeOffsetComparisonWithTolerance", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to This combination of assertion expressions is not supported..
+        /// </summary>
+        internal static string AssertionExpressionInvalidCombination {
+            get {
+                return ResourceManager.GetString("AssertionExpressionInvalidCombination", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Assertion expression &quot;{0}&quot; missing terminal point. This can happen when a modifier expression is used without supplying a constant value, such as &apos;Is.Not&apos; (in NUnit style)..
+        /// </summary>
+        internal static string AssertionExpressionMissingParent {
+            get {
+                return ResourceManager.GetString("AssertionExpressionMissingParent", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to This feature can only be used on the game thread..
         /// </summary>
         internal static string GameThreadExceptionDefault {

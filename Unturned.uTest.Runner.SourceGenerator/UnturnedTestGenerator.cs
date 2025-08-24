@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -69,21 +70,10 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         int lineStart = -1, lineEnd = -1;
                         int charStart = -1, charEnd = -1;
 
-                        Location? location = symbol.Locations.FirstOrDefault();
-                        if (location != null)
+                        SyntaxReference? syntaxRef = symbol.DeclaringSyntaxReferences.FirstOrDefault();
+                        if (syntaxRef != null)
                         {
-                            FileLinePositionSpan lineSpan = location.GetLineSpan();
-                            if (lineSpan is { HasMappedPath: false, IsValid: true })
-                            {
-                                LinePosition st = lineSpan.StartLinePosition;
-                                LinePosition end = lineSpan.EndLinePosition;
-
-                                lineStart = st.Line;
-                                lineEnd = end.Line;
-                                charStart = st.Character;
-                                charEnd = end.Character;
-                                fileName = lineSpan.Path;
-                            }
+                            GetMethodLocation(syntaxRef, ref lineStart, ref lineEnd, ref charStart, ref charEnd, ref fileName);
                         }
 
                         ImmutableArray<IParameterSymbol> parameters = method.Parameters;
@@ -288,6 +278,38 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 context.AddSource(classInfo.Namespace.Replace('.', '/') + "/" + classInfo.Name + ".cs", bldr.ToString());
             }
         );
+    }
+
+    private static void GetMethodLocation(SyntaxReference syntaxReference, ref int lineStart, ref int lineEnd, ref int charStart, ref int charEnd, ref string fileName)
+    {
+        if (syntaxReference.GetSyntax() is not MethodDeclarationSyntax methodDecl)
+        {
+            return;
+        }
+
+        LinePosition start;
+
+        SyntaxTokenList mods = methodDecl.Modifiers;
+        if (mods.Count > 0)
+        {
+            start = mods[0].GetLocation().GetLineSpan().StartLinePosition;
+        }
+        else
+        {
+            start = methodDecl.Identifier.GetLocation().GetLineSpan().StartLinePosition;
+        }
+
+        FileLinePositionSpan methodSpan = methodDecl.GetLocation().GetLineSpan();
+        LinePosition end = methodSpan.EndLinePosition;
+
+        if (methodSpan is { HasMappedPath: false, IsValid: true })
+        {
+            lineStart = start.Line;
+            lineEnd = end.Line;
+            charStart = start.Character;
+            charEnd = end.Character;
+            fileName = methodSpan.Path;
+        }
     }
 
     internal static readonly SymbolDisplayFormat FullTypeNameWithGlobalFormat = new SymbolDisplayFormat(

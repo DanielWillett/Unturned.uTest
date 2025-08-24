@@ -129,6 +129,15 @@
   <data name="ActorOutOfBoundsExceptionDefaultMessage" xml:space="preserve">
     <value>Unable to modify "{0}", this actor is out of bounds of the world.</value>
   </data>
+  <data name="AssertionExpressionCombinedDateTimeOffsetComparisonWithTolerance" xml:space="preserve">
+    <value>An assertion expression for a DateTimeOffset can not both define a tolerance and check that offsets are the same.</value>
+  </data>
+  <data name="AssertionExpressionInvalidCombination" xml:space="preserve">
+    <value>This combination of assertion expressions is not supported.</value>
+  </data>
+  <data name="AssertionExpressionMissingParent" xml:space="preserve">
+    <value>Assertion expression "{0}" missing terminal point. This can happen when a modifier expression is used without supplying a constant value, such as 'Is.Not' (in NUnit style).</value>
+  </data>
   <data name="GameThreadExceptionDefault" xml:space="preserve">
     <value>This feature can only be used on the game thread.</value>
   </data>
