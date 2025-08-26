@@ -25,11 +25,23 @@ public class UnturnedTest
     /// <inheritdoc />
     public override string ToString() => Uid;
 
-    internal void AddProperties(TestNode node)
+    public TestNode CreateTestNode()
     {
+        TestNode node = new TestNode
+        {
+            DisplayName = DisplayName,
+            Uid = new TestNodeUid(Uid)
+        };
+
         if (LocationInfo != null)
             node.Properties.Add(LocationInfo);
         if (IdentifierInfo != null)
             node.Properties.Add(IdentifierInfo);
+
+        return node;
+    }
+
+    internal void AddProperties(TestNode node)
+    {
     }
 }

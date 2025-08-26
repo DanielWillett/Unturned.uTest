@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using uTest.Adapter;
+using Assert = NUnit.Framework.Assert;
 
 namespace uTest.Test;
 

@@ -13,6 +13,7 @@ public static class GameThread
 {
     private static readonly List<IRunAndWaitState> Waiters = new List<IRunAndWaitState>();
     private static readonly ConcurrentQueue<Action> Continuations = new ConcurrentQueue<Action>();
+    private static readonly ConcurrentQueue<GameThreadTaskAwaiter> TaskAwaiters = new ConcurrentQueue<GameThreadTaskAwaiter>();
     private static bool _hasFlushedRunAndWaits;
 
     /// <summary>
@@ -29,6 +30,16 @@ public static class GameThread
     {
         if (!IsCurrent)
             throw new GameThreadException();
+    }
+
+    /// <summary>
+    /// Awaitable method that switches the currently running async method to the game thread until the next context switch.
+    /// </summary>
+    public static GameThreadTask Switch(CancellationToken token = default)
+    {
+        return IsCurrent
+            ? GameThreadTask.CompletedTask
+            : new GameThreadTask(false);
     }
 
     /// <summary>
@@ -53,6 +64,11 @@ public static class GameThread
 
     internal static void RunContinuations()
     {
+        while (TaskAwaiters.TryDequeue(out GameThreadTaskAwaiter awaiter))
+        {
+            awaiter.Complete();
+        }
+
         while (Continuations.TryDequeue(out Action action))
         {
             action();
@@ -138,6 +154,11 @@ public static class GameThread
 
         RunState<T> state = new RunState<T>(action, arg);
         Continuations.Enqueue(state.Run);
+    }
+
+    internal static void QueueTask(GameThreadTaskAwaiter awaiterTask)
+    {
+        TaskAwaiters.Enqueue(awaiterTask);
     }
 
     /// <summary>
@@ -316,7 +337,7 @@ public static class GameThread
         return state.ReturnValue!;
     }
 
-    private const TaskCreationOptions RunAndWaitAsyncOptions = TaskCreationOptions.PreferFairness;
+    private const TaskCreationOptions RunAndWaitAsyncOptions = TaskCreationOptions.None;
 
     /// <summary>
     /// Run a callback on the game thread and wait for it to complete.

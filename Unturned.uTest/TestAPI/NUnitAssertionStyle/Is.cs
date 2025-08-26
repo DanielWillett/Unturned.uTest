@@ -250,7 +250,7 @@ public static class Is
     /// <summary>
     /// Expression that is met when the two values are equal. Use the generic overload to specify tolerance.
     /// </summary>
-    /// <remarks>For collections, use <see cref="EquivalentTo(IEnumerable)"/></remarks>
+    /// <remarks>For collections, use <see cref="EquivalentTo{T}(IEnumerable{T})"/></remarks>
     public static ITerminalAssertionExpression<object, bool> EqualTo(object? expected)
     {
         if (expected == null)
@@ -281,7 +281,7 @@ public static class Is
     /// <summary>
     /// Expression that is met when a value is greater than the actual value.
     /// </summary>
-    public static ICompareAssertionExpression<T> GreaterThan<T>(T? other) where T : IComparable<T>
+    public static ICompareAssertionExpression<T> GreaterThan<T>(T? other) where T : IComparable<T?>?
     {
         return new CompareAssertionExpression<T>(other, 2);
     }
@@ -289,7 +289,7 @@ public static class Is
     /// <summary>
     /// Expression that is met when a value is greater than or equal to the actual value.
     /// </summary>
-    public static ICompareAssertionExpression<T> GreaterThanOrEqualTo<T>(T? other) where T : IComparable<T>
+    public static ICompareAssertionExpression<T> GreaterThanOrEqualTo<T>(T? other) where T : IComparable<T?>?
     {
         return new CompareAssertionExpression<T>(other, 1);
     }
@@ -297,7 +297,7 @@ public static class Is
     /// <summary>
     /// Expression that is met when a value is greater than or equal to the actual value.
     /// </summary>
-    public static ICompareAssertionExpression<T> AtLeast<T>(T? other) where T : IComparable<T>
+    public static ICompareAssertionExpression<T> AtLeast<T>(T? other) where T : IComparable<T?>?
     {
         return GreaterThanOrEqualTo(other);
     }
@@ -305,7 +305,7 @@ public static class Is
     /// <summary>
     /// Expression that is met when a value is less than the actual value.
     /// </summary>
-    public static ICompareAssertionExpression<T> LessThan<T>(T? other) where T : IComparable<T>
+    public static ICompareAssertionExpression<T> LessThan<T>(T? other) where T : IComparable<T?>?
     {
         return new CompareAssertionExpression<T>(other, -2);
     }
@@ -313,7 +313,7 @@ public static class Is
     /// <summary>
     /// Expression that is met when a value is less than or equal to the actual value.
     /// </summary>
-    public static ICompareAssertionExpression<T> LessThanOrEqualTo<T>(T? other) where T : IComparable<T>
+    public static ICompareAssertionExpression<T> LessThanOrEqualTo<T>(T? other) where T : IComparable<T?>?
     {
         return new CompareAssertionExpression<T>(other, -1);
     }
@@ -321,7 +321,7 @@ public static class Is
     /// <summary>
     /// Expression that is met when a value is less than or equal to the actual value.
     /// </summary>
-    public static ICompareAssertionExpression<T> AtMost<T>(T? other) where T : IComparable<T>
+    public static ICompareAssertionExpression<T> AtMost<T>(T? other) where T : IComparable<T?>?
     {
         return LessThanOrEqualTo(other);
     }

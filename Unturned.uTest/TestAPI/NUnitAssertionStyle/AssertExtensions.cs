@@ -21,7 +21,7 @@ public static partial class AssertExtensions
         {
             That(condition, Is.True, message, expr);
         }
-
+        
         [OverloadResolutionPriority(2)]
         public static void That(
             bool condition,
@@ -38,7 +38,7 @@ public static partial class AssertExtensions
         {
             That(operation, Is.True, message, expr);
         }
-
+        
         public static void That(
             [InstantHandle] Func<bool> operation,
             string? message = null,
@@ -88,7 +88,7 @@ public static partial class AssertExtensions
             expression.Value = operation();
             bool result = expression.Solve();
         }
-
+        
         public static void That(
             ReadOnlySpan<char> value,
             ITerminalAssertionExpression<string, bool> expression,
@@ -98,7 +98,7 @@ public static partial class AssertExtensions
             expression.Value = value.ToString();
             bool result = expression.Solve();
         }
-
+        
         public static void That(
             ReadOnlySpan<char> value,
             ITerminalAssertionExpression<string, bool> expression,
@@ -108,7 +108,7 @@ public static partial class AssertExtensions
             expression.Value = value.ToString();
             bool result = expression.Solve();
         }
-
+        
         public static void That<TElementType>(
             ReadOnlySpan<TElementType> value,
             ITerminalAssertionExpression<TElementType[], bool> expression,
@@ -118,7 +118,7 @@ public static partial class AssertExtensions
             expression.Value = value.ToArray();
             bool result = expression.Solve();
         }
-
+        
         public static void That<TElementType>(
             ReadOnlySpan<TElementType> value,
             ITerminalAssertionExpression<TElementType[], bool> expression,
@@ -128,6 +128,5 @@ public static partial class AssertExtensions
             expression.Value = value.ToArray();
             bool result = expression.Solve();
         }
-
     }
 }

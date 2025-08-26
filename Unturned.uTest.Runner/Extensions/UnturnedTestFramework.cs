@@ -1,11 +1,19 @@
+using System.Collections;
+using System.Diagnostics;
+using System.Reflection;
 using Microsoft.Testing.Platform.Capabilities.TestFramework;
 using Microsoft.Testing.Platform.Extensions;
 using Microsoft.Testing.Platform.Extensions.Messages;
 using Microsoft.Testing.Platform.Extensions.TestFramework;
 using Microsoft.Testing.Platform.Logging;
+using Microsoft.Testing.Platform.Messages;
 using Microsoft.Testing.Platform.Requests;
 using Microsoft.Testing.Platform.Services;
 using Microsoft.Testing.Platform.TestHost;
+using Newtonsoft.Json;
+using uTest.Module;
+using uTest.Protocol;
+using uTest.Runner.Unturned;
 using uTest.Runner.Util;
 
 namespace uTest.Runner;
@@ -27,9 +35,30 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
     }
 #pragma warning restore TPEXP
 
+    private static readonly TestNodeStateProperty[] TestResultStates =
+    [
+        new SkippedTestNodeStateProperty(uTest.Properties.Resources.TestResultInconclusive),
+        new PassedTestNodeStateProperty(uTest.Properties.Resources.TestResultPass),
+        new FailedTestNodeStateProperty(uTest.Properties.Resources.TestResultFail),
+        new CancelledTestNodeStateProperty(uTest.Properties.Resources.TestResultCancelled),
+        new TimeoutTestNodeStateProperty(uTest.Properties.Resources.TestResultTimeout),
+        new InProgressTestNodeStateProperty(uTest.Properties.Resources.TestResultInProgress),
+        new SkippedTestNodeStateProperty(uTest.Properties.Resources.TestResultSkipped)
+    ];
+
+    private static void AddResultState(TestNode node, TestResult result)
+    {
+        if ((int)result >= TestResultStates.Length)
+            result = TestResult.Inconclusive;
+
+        node.Properties.Add(TestResultStates[(int)result]);
+    }
+
     private readonly UnturnedTestExtension _uTest;
     private readonly ITestFrameworkCapabilities _capabilities;
+    private readonly IMessageBus _messageBus;
     private readonly ILogger<UnturnedTestFramework> _logger;
+    private readonly ILogger _uTestLogger;
     private readonly GracefulStopCapability? _stopCapability;
 
     // countdown pattern from https://github.com/microsoft/testfx/blob/main/src/Platform/Microsoft.Testing.Extensions.VSTestBridge/SynchronizedSingleSessionVSTestAndTestAnywhereAdapter.cs
@@ -38,6 +67,8 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
     // null = no session,
     // null UIDs are replaced with string.Empty
     private string? _currentSessionUid;
+
+    private UnturnedLauncher? _launcher;
 
     private bool _isSessionClosing;
 
@@ -51,6 +82,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
     {
         _uTest = uTest;
         _capabilities = serviceProvider.GetRequiredService<ITestFrameworkCapabilities>();
+        _messageBus = serviceProvider.GetRequiredService<IMessageBus>();
 
         _stopCapability = _capabilities.GetCapability<GracefulStopCapability>();
         if (_stopCapability != null)
@@ -59,6 +91,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         }
 
         _logger = serviceProvider.GetLoggerFactory().CreateLogger<UnturnedTestFramework>();
+        _uTestLogger = new TFPLogger(_logger);
 
         _runTestsAsync = RunTestsAsync;
         _discoverTestsAsync = DiscoverTestsAsync;
@@ -69,26 +102,36 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         return Task.CompletedTask;
     }
 
+    private async Task<List<UnturnedTest>?> GetTests(TestExecutionRequest r, CancellationToken token)
+    {
+        ITestRegistrationList? list = _capabilities.GetCapability<ITestRegistrationList>();
+
+        if (list == null)
+        {
+            _logger.LogInformation("No test registration.");
+            return null;
+        }
+
+        List<UnturnedTest> tests = await list.GetTestsAsync(token);
+        if (tests.Count == 0)
+        {
+            _logger.LogInformation("No tests.");
+            return null;
+        }
+
+        return tests;
+    }
+
     private async Task DiscoverTestsAsync(DiscoverTestExecutionRequest r, ExecuteRequestContext ctx, CancellationToken token = default)
     {
         try
         {
             await _logger.LogInformationAsync($"Discovering tests: {ctx.Request.Session.SessionUid.Value}.");
 
-            ITestRegistrationList? list = _capabilities.GetCapability<ITestRegistrationList>();
+            List<UnturnedTest>? tests = await GetTests(r, token).ConfigureAwait(false);
 
-            if (list == null)
-            {
-                _logger.LogInformation("No test registration.");
+            if (tests == null)
                 return;
-            }
-
-            List<UnturnedTest> tests = await list.GetTestsAsync(token);
-            if (tests.Count == 0)
-            {
-                _logger.LogInformation("No tests.");
-                return;
-            }
 
             Task[] publishTasks = new Task[tests.Count];
 
@@ -98,15 +141,9 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
             {
                 UnturnedTest test = tests[i];
 
-                TestNode node = new TestNode
-                {
-                    DisplayName = test.DisplayName,
-                    Uid = new TestNodeUid(test.Uid)
-                };
+                TestNode node = test.CreateTestNode();
 
                 node.Properties.Add(DiscoveredTestNodeStateProperty.CachedInstance);
-
-                test.AddProperties(node);
 
                 TestNodeUid? parentUid = test.ParentUid == null ? null : new TestNodeUid(test.ParentUid);
 
@@ -125,12 +162,169 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
     {
         try
         {
+            await _logger.LogInformationAsync($"Discovering tests: {ctx.Request.Session.SessionUid.Value}.");
 
+            List<UnturnedTest>? tests = await GetTests(r, token).ConfigureAwait(false);
+            if (tests == null)
+            {
+                return;
+            }
+
+            _launcher ??= new UnturnedLauncher(true, _uTestLogger);
+
+            string sessionId = r.Session.SessionUid.Value;
+
+            BitArray testReturnMask = new BitArray(tests.Count);
+
+            List<Task> runningPublishTasks = new List<Task>();
+
+            using IDisposable resultHandler = _launcher.Client.AddMessageHandler<ReportTestResultMessage>(result =>
+            {
+                if (!string.Equals(result.SessionUid, sessionId, StringComparison.Ordinal))
+                    return false;
+
+                int index = tests.FindIndex(x => string.Equals(x.Uid, result.Uid, StringComparison.Ordinal));
+                if (index < 0)
+                {
+                    _logger.LogWarning($"Received unknown method UID: \"{result.Uid}\"");
+                    return true;
+                }
+
+                UnturnedTest test = tests[index];
+                if (result.Result != TestResult.InProgress)
+                {
+                    testReturnMask[index] = true;
+                }
+
+                _logger.LogInformation($"reported {result.Result} result for test {test.Uid}.");
+
+                TestNode testNode = test.CreateTestNode();
+
+                AddResultState(testNode, result.Result);
+
+                lock (runningPublishTasks)
+                {
+                    runningPublishTasks.Add(
+                        _messageBus.PublishAsync(this, new TestNodeUpdateMessage(new SessionUid(sessionId), testNode))
+                    );
+                }
+
+                return true;
+            });
+
+            string settingsFile = _launcher.GetSettingsFile();
+
+            List<Assembly> testAssemblies = new List<Assembly>();
+
+            List<UnturnedTestReference> exportedTests = new List<UnturnedTestReference>(tests.Count);
+            foreach (UnturnedTest test in tests)
+            {
+                Assembly asm = test.Method.DeclaringType!.Assembly;
+                if (!testAssemblies.Contains(asm))
+                    testAssemblies.Add(asm);
+
+                exportedTests.Add(new UnturnedTestReference
+                {
+                    MethodName = test.IdentifierInfo?.MethodName ?? test.Method.Name,
+                    MetadataToken = test.Method.MetadataToken,
+                    Uid = test.Uid,
+                    TypeName = test.Method.DeclaringType!.AssemblyQualifiedName,
+                    ParameterTypeNames = test.Method
+                        .GetParameters()
+                        .Select(x => x.ParameterType.AssemblyQualifiedName)
+                        .ToArray()
+                });
+            }
+
+            using (JsonTextWriter writer = new JsonTextWriter(new StreamWriter(settingsFile)))
+            {
+                writer.CloseOutput = true;
+#if DEBUG
+                writer.Formatting = Formatting.Indented;
+                writer.IndentChar = ' ';
+                writer.Indentation = 4;
+#else
+                writer.Formatting = Formatting.None;
+#endif
+
+                JsonSerializer serializer = new JsonSerializer();
+                serializer.Serialize(writer, new UnturnedTestList
+                {
+                    SessionUid = r.Session.SessionUid.Value,
+                    Tests = exportedTests
+                });
+            }
+
+            Process process = await _launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssemblies, token);
+
+            _logger.LogInformation("Launched.");
+
+            if (isAlreadyLaunched)
+            {
+                await _logger.LogInformationAsync("Unturned already launched.");
+                await _launcher.Client.SendAsync(new RefreshTestsMessage(), token);
+            }
+
+            _logger.LogInformation("Running tests.");
+            await _launcher.Client.SendAsync(new RunTestsMessage(), token);
+
+            // wait for all tests to execute
+
+            using (token.Register(() =>
+            {
+                _logger.LogInformation("Kill requested.");
+                KillProcess(process);
+            }))
+            {
+                await Task.Factory.StartNew(() =>
+                {
+                    _logger.LogInformation("Waiting for exit.");
+                    process.WaitForExit();
+                    _logger.LogInformation("Done.");
+                }, TaskCreationOptions.LongRunning);
+            }
+
+            Task allPublished = Task.WhenAll(runningPublishTasks);
+
+            await Task.WhenAny(
+                Task.Delay(TimeSpan.FromSeconds(2), CancellationToken.None),
+                allPublished
+            );
+
+            if (!allPublished.IsCompleted)
+            {
+                _logger.LogInformation("All not published.");
+                for (int i = 0; i < tests.Count; ++i)
+                {
+                    if (testReturnMask[i])
+                        continue;
+
+                    TestNode testNode = tests[i].CreateTestNode();
+                    AddResultState(testNode, TestResult.Skipped);
+                    _logger.LogInformation($"Skipped {testNode.Uid}.");
+                    await _messageBus.PublishAsync(this, new TestNodeUpdateMessage(new SessionUid(sessionId), testNode));
+                }
+            }
         }
         finally
         {
             ctx.Complete();
         }
+    }
+
+    private void KillProcess(Process process)
+    {
+        _launcher!.Client.SendAsync(new GracefulShutdownMessage(), CancellationToken.None).Wait(1000);
+        try
+        {
+            process.WaitForExit(1500);
+        }
+        catch { /* ignored */ }
+        try
+        {
+            process.Kill();
+        }
+        catch { /* ignored */ }
     }
 
     public Task<CreateTestSessionResult> CreateTestSessionAsync(CreateTestSessionContext context)

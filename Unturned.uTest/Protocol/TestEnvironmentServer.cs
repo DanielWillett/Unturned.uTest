@@ -1,71 +1,30 @@
-using System;
 using System.IO.Pipes;
 
 namespace uTest.Protocol;
 
 /// <summary>
-/// Hosts test results and allows for triggering tests for test adapters.
+/// The test host server running on the Unturned instance.
 /// </summary>
-internal class TestEnvironmentServer : IDisposable
+internal class TestEnvironmentServer : TestEnvironmentBaseHost<NamedPipeServerStream>
 {
-    public const string PipeName = "Unturned.uTest.AdapterServer";
+    /// <inheritdoc />
+    internal TestEnvironmentServer(ILogger logger, int bufferSize = 8192) : base(true, logger, bufferSize) { }
 
-    private readonly NamedPipeServerStream _serverStream;
-
-    private readonly CancellationTokenSource _cts;
-    private readonly bool _isRunningInUnturned;
-
-    public TestEnvironmentServer(bool isRunningInUnturned)
+    /// <inheritdoc />
+    protected override NamedPipeServerStream CreateNewStream()
     {
-        _isRunningInUnturned = isRunningInUnturned;
-        _serverStream = new NamedPipeServerStream(
+        return new NamedPipeServerStream(
             PipeName,
             PipeDirection.InOut,
             NamedPipeServerStream.MaxAllowedServerInstances,
             PipeTransmissionMode.Byte,
             PipeOptions.Asynchronous
         );
-
-        _cts = new CancellationTokenSource();
-
-        Task.Factory.StartNew(async () =>
-        {
-            await _serverStream.WaitForConnectionAsync(_cts.Token);
-
-            OnConnected();
-
-        }, TaskCreationOptions.LongRunning);
-    }
-
-    private void Info(string msg)
-    {
-        if (_isRunningInUnturned)
-            CommandWindow.Log(msg);
-        else
-            Console.WriteLine(msg);
-    }
-
-    private void OnConnected()
-    {
-        Info("Client connected.");
     }
 
     /// <inheritdoc />
-    public void Dispose()
+    protected override Task ConnectAsync(NamedPipeServerStream pipeStream, CancellationToken token = default)
     {
-        if (!_cts.IsCancellationRequested)
-        {
-            try
-            {
-                _cts.Cancel();
-            }
-            catch { /* ignored */ }
-        }
-        try
-        {
-            _serverStream.Disconnect();
-        }
-        catch { /* ignored */ }
-        _serverStream.Dispose();
+        return pipeStream.WaitForConnectionAsync(token);
     }
 }

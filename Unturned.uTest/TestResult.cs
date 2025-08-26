@@ -3,7 +3,7 @@ namespace uTest;
 /// <summary>
 /// The result of a single test run.
 /// </summary>
-public enum TestResult
+public enum TestResult : byte
 {
     /// <summary>
     /// A test was unable to determine a result.
@@ -28,5 +28,15 @@ public enum TestResult
     /// <summary>
     /// The test hit it's timeout.
     /// </summary>
-    Timeout
+    Timeout,
+
+    /// <summary>
+    /// The test has started running but isn't finished yet.
+    /// </summary>
+    InProgress,
+
+    /// <summary>
+    /// The test was skipped.
+    /// </summary>
+    Skipped
 }

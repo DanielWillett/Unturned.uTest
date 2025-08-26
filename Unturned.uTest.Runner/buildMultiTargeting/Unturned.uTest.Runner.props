@@ -58,6 +58,7 @@
 
     <PackageReference Include="Microsoft.Testing.Platform" GeneratePathProperty="True" Version="$(MTPVersion)" />
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" GeneratePathProperty="True" Version="$(MTPVersion)" />
+    <PackageReference Include="Newtonsoft.Json" GeneratePathProperty="True" Version="13.0.3" />
 
   </ItemGroup>
 
@@ -65,6 +66,7 @@
 
     <Copy SkipUnchangedFiles="True" SourceFiles="$(PkgMicrosoft_Testing_Platform)\lib\netstandard2.0\Microsoft.Testing.Platform.dll" DestinationFiles="$(OutDir)\Microsoft.Testing.Platform.dll" />
     <Copy SkipUnchangedFiles="True" SourceFiles="$(PkgMicrosoft_Testing_Platform_MSBuild)\lib\netstandard2.0\Microsoft.Testing.Extensions.MSBuild.dll" DestinationFiles="$(OutDir)\Microsoft.Testing.Extensions.MSBuild.dll" />
+    <Copy SkipUnchangedFiles="True" SourceFiles="$(PkgNewtonsoft_Json)\lib\netstandard2.0\Newtonsoft.Json.dll" DestinationFiles="$(OutDir)\Newtonsoft.Json.dll" />
 
   </Target>
   <Target Name="uTest_WriteRuntimeConfig" Condition="'$(uTestMode)' == 'NETStandard'" AfterTargets="Build">

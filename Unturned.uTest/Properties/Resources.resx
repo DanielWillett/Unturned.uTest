@@ -201,6 +201,9 @@
   <data name="RunOnMainThreadError" xml:space="preserve">
     <value>Error while running a callback on the main thread from "{0}".</value>
   </data>
+  <data name="TestResultCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+  </data>
   <data name="TestResultExceptionDefaultMessage" xml:space="preserve">
     <value>Test result: {0}.</value>
   </data>
@@ -210,7 +213,19 @@
   <data name="TestResultInconclusive" xml:space="preserve">
     <value>Inconclusive</value>
   </data>
+  <data name="TestResultInProgress" xml:space="preserve">
+    <value>In Progress</value>
+  </data>
   <data name="TestResultPass" xml:space="preserve">
     <value>Pass</value>
+  </data>
+  <data name="TestResultSkipped" xml:space="preserve">
+    <value>Skipped</value>
+  </data>
+  <data name="TestResultTimeout" xml:space="preserve">
+    <value>Timed Out</value>
+  </data>
+  <data name="UnturnedStartExceptionDefaultMessage" xml:space="preserve">
+    <value>The Unturned instance failed to start with uTest.</value>
   </data>
 </root>

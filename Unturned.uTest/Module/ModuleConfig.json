@@ -1,0 +1,18 @@
+﻿{
+    "IsEnabled": "$enabled$",
+    "Name": "uTest",
+    "Version": "$version$",
+    "Assemblies":
+    [
+        {
+            "Path": "/netstandard.dll",
+            "Role": "Both_Optional",
+            "Load_As_Byte_Array": true
+        },
+        {
+            "Path": "/Unturned.uTest.dll",
+            "Role": "Both_Optional",
+            "Load_As_Byte_Array": true
+        }
+    ]
+}

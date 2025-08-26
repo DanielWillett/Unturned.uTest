@@ -313,6 +313,15 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Cancelled.
+        /// </summary>
+        internal static string TestResultCancelled {
+            get {
+                return ResourceManager.GetString("TestResultCancelled", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Test result: {0}..
         /// </summary>
         internal static string TestResultExceptionDefaultMessage {
@@ -340,11 +349,47 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to In Progress.
+        /// </summary>
+        internal static string TestResultInProgress {
+            get {
+                return ResourceManager.GetString("TestResultInProgress", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Pass.
         /// </summary>
         internal static string TestResultPass {
             get {
                 return ResourceManager.GetString("TestResultPass", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Skipped.
+        /// </summary>
+        internal static string TestResultSkipped {
+            get {
+                return ResourceManager.GetString("TestResultSkipped", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Timed Out.
+        /// </summary>
+        internal static string TestResultTimeout {
+            get {
+                return ResourceManager.GetString("TestResultTimeout", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to The Unturned instance failed to start with uTest..
+        /// </summary>
+        internal static string UnturnedStartExceptionDefaultMessage {
+            get {
+                return ResourceManager.GetString("UnturnedStartExceptionDefaultMessage", resourceCulture);
             }
         }
     }
