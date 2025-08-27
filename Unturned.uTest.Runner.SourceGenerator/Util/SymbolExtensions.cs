@@ -8,6 +8,29 @@ namespace uTest.Util;
 
 internal static class SymbolExtensions
 {
+    public static object? GetValueAsObject(this TypedConstant constant)
+    {
+        switch (constant.Kind)
+        {
+            case TypedConstantKind.Primitive:
+            case TypedConstantKind.Enum: // will be the underlying value
+                return constant.Value; 
+
+            case TypedConstantKind.Type:
+                return (ITypeSymbol?)constant.Value;
+
+            case TypedConstantKind.Array:
+                ImmutableArray<TypedConstant> values = constant.Values;
+                object?[] args = new object?[values.Length];
+                for (int i = 0; i < args.Length; ++i)
+                    args[i] = values[i].GetValueAsObject();
+                return args;
+
+            default:
+                return null;
+        }
+    }
+
     public static bool CanBeGenericArgument(this ITypeSymbol symbol)
     {
         if (symbol == null)

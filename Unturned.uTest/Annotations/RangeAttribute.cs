@@ -148,6 +148,20 @@ public sealed class RangeAttribute : Attribute
     }
 
     /// <summary>
+    /// Create a range from <see cref="char"/> values.
+    /// </summary>
+    /// <param name="from">Lower-bound value.</param>
+    /// <param name="to">Upper-bound value.</param>
+    /// <param name="step">Number of characters to increment value by for each test.</param>
+    public RangeAttribute(char from, char to, ushort step = 1)
+    {
+        FromI32 = from;
+        ToI32 = to;
+        StepI32 = step;
+        Type = DataType.Int32;
+    }
+
+    /// <summary>
     /// Create a range from <see cref="uint"/> values.
     /// </summary>
     /// <param name="from">Lower-bound value.</param>
@@ -222,7 +236,7 @@ public sealed class RangeAttribute : Attribute
     /// </summary>
     public enum DataType
     {
-        /// <summary><see cref="int"/></summary>
+        /// <summary><see cref="int"/>, <see cref="char"/>, <see cref="ushort"/>, <see cref="short"/>, <see cref="byte"/>, <see cref="sbyte"/>.</summary>
         Int32,
 
         /// <summary><see cref="uint"/></summary>

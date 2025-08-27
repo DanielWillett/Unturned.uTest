@@ -45,7 +45,11 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 string typeName = ctx.TargetSymbol.ToDisplayString(FullTypeNameFormat);
                 string managedType;
 
-                INamedTypeSymbol? expectedTestAttribute = ctx.SemanticModel.Compilation.GetTypeByMetadataName("uTest.TestAttribute");
+                Compilation compilation = ctx.SemanticModel.Compilation;
+                INamedTypeSymbol? expectedTestAttribute = compilation.GetTypeByMetadataName("uTest.TestAttribute");
+                INamedTypeSymbol? setAttribute = compilation.GetTypeByMetadataName("uTest.SetAttribute");
+                INamedTypeSymbol? rangeAttribute = compilation.GetTypeByMetadataName("uTest.RangeAttribute");
+                INamedTypeSymbol? testArgsAttribute = compilation.GetTypeByMetadataName("uTest.TestArgsAttribute");
 
                 if (ctx.TargetSymbol is INamedTypeSymbol namedType)
                 {
@@ -84,9 +88,18 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             parameterInfo = new EquatableList<TestParameterInfo>(parameters.Length);
                             foreach (IParameterSymbol parameter in parameters)
                             {
+                                ImmutableArray<AttributeData> attributes = parameter.GetAttributes();
+                                AttributeData? setAttributeData = attributes
+                                    .FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, setAttribute));
+
+                                AttributeData? rangeAttributeData = attributes
+                                    .FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, rangeAttribute));
+
                                 parameterInfo.Add(new TestParameterInfo(
                                     MetadataNameFormatter.GetFullName(ctx.SemanticModel.Compilation, parameter.Type, parameter.RefKind != RefKind.None),
-                                    parameter.Type.ToDisplayString(FullTypeNameWithGlobalFormat)
+                                    parameter.Type.ToDisplayString(FullTypeNameWithGlobalFormat),
+                                    TestParameterSetAttributeInfo.Create(setAttributeData),
+                                    TestParameterRangeAttributeInfo.Create(rangeAttributeData)
                                 ));
                             }
                         }
@@ -105,9 +118,10 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 MethodMetadataName: method.MetadataName,
                                 MethodName: method.Name,
                                 Parameters: parameterInfo,
+                                ArgsAttributes: new EquatableList<TestArgsAttributeInfo>(0), // todo
                                 ReturnTypeFullName: MetadataNameFormatter.GetFullName(ctx.SemanticModel.Compilation, method.ReturnType),
                                 ReturnTypeGloballyQualifiedName: method.ReturnType.ToDisplayString(FullTypeNameWithGlobalFormat),
-                                DelegateType: new DelegateType(method)
+                                DelegateType: new DelegateType(method),
                             ));
                     }
                 }

@@ -1,6 +1,9 @@
 using Microsoft.CodeAnalysis;
 using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
+using Microsoft.CodeAnalysis.CSharp;
 using uTest.Util;
 
 namespace uTest;
@@ -27,15 +30,105 @@ internal sealed record TestMethodInfo(
     string MethodMetadataName,
     string MethodName,
     EquatableList<TestParameterInfo>? Parameters,
+    EquatableList<TestArgsAttributeInfo> ArgsAttributes,
     string ReturnTypeFullName,
     string ReturnTypeGloballyQualifiedName,
     DelegateType DelegateType
 );
 
-internal record struct TestParameterInfo(
+internal record TestParameterInfo(
     string FullName,
-    string GloballyQualifiedName
+    string GloballyQualifiedName,
+    TestParameterSetAttributeInfo? SetParameter,
+    TestParameterRangeAttributeInfo? RangeParameter
 );
+
+internal record TestArgsAttributeInfo(
+    string? From,
+    EquatableObjectList? Values
+);
+
+internal record TestParameterSetAttributeInfo(
+    string? From,
+    EquatableObjectList? Values
+)
+{
+    public static TestParameterSetAttributeInfo? Create(AttributeData? attribute)
+    {
+        if (attribute == null)
+            return null;
+
+        if (attribute.NamedArguments.FirstOrDefault(x => 
+                x.Key.Equals("From", StringComparison.Ordinal)) is { Value.Value: string fromMember })
+        {
+            return new TestParameterSetAttributeInfo(fromMember, null);
+        }
+
+        if (attribute.ConstructorArguments.Length > 0
+            && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Array } arg0)
+        {
+            object?[] array = (object?[]?)arg0.GetValueAsObject() ?? Array.Empty<object>();
+            return new TestParameterSetAttributeInfo(null, new EquatableObjectList(array));
+        }
+
+        return null;
+    }
+}
+
+internal record TestParameterRangeAttributeInfo(
+    object From,
+    object To
+)
+{
+    public static TestParameterRangeAttributeInfo? Create(AttributeData? attribute)
+    {
+        if (attribute?.AttributeConstructor is not { Parameters: { Length: 2 or 3 } ctorParams }
+            || attribute.ConstructorArguments is not { Length: 2 or 3 } args)
+        {
+            return null;
+        }
+        
+        switch (ctorParams[0].Type.SpecialType)
+        {
+            case SpecialType.System_Object: // Enums
+                if (args[0].Kind != TypedConstantKind.Enum && args[1].Kind != TypedConstantKind.Enum)
+                    return null;
+
+                // todo
+                break;
+
+            case SpecialType.System_Int32:
+
+                break;
+
+            case SpecialType.System_Char:
+
+                break;
+
+            case SpecialType.System_UInt32:
+
+                break;
+
+            case SpecialType.System_Int64:
+
+                break;
+
+            case SpecialType.System_UInt64:
+
+                break;
+
+            case SpecialType.System_Single:
+
+                break;
+
+            case SpecialType.System_Double:
+
+                break;
+        }
+
+        return null;
+    }
+}
 
 internal sealed class DelegateType : IEquatable<DelegateType>
 {
