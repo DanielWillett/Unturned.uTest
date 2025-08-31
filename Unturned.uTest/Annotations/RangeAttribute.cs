@@ -153,7 +153,7 @@ public sealed class RangeAttribute : Attribute
     /// <param name="from">Lower-bound value.</param>
     /// <param name="to">Upper-bound value.</param>
     /// <param name="step">Number of characters to increment value by for each test.</param>
-    public RangeAttribute(char from, char to, ushort step = 1)
+    public RangeAttribute(char from, char to, int step = 1)
     {
         FromI32 = from;
         ToI32 = to;

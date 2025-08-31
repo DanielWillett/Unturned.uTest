@@ -143,6 +143,13 @@ public sealed class SourceStringBuilder
             _builder._hasNewLine = false;
         }
 
+        public void AppendFormatted<T>(CodeSegment<T> value)
+        {
+            _builder.StartLine();
+            value.Appender?.Invoke(ref value.State, _builder.UnderlyingBuilder);
+            _builder._hasNewLine = false;
+        }
+
         public void AppendFormatted(string? value)
         {
             _builder.StartLine();
@@ -405,5 +412,18 @@ public sealed class SourceStringBuilder
 
             _builder._hasNewLine = false;
         }
+    }
+}
+
+public struct CodeSegment<T>
+{
+    public delegate void AppenderHandler(ref T state, StringBuilder bldr);
+    public readonly AppenderHandler Appender;
+    public T State;
+
+    public CodeSegment(AppenderHandler appender, T state)
+    {
+        Appender = appender;
+        State = state;
     }
 }

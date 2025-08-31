@@ -90,7 +90,7 @@
 
     <None Include="..\README.md" Pack="true" PackagePath="/" />
 
-    <None Include="..\Unturned.uTest.Runner.SourceGenerator\bin\$(Configuration)\netstandard2.0\$(OutputPath)\Unturned.uTest.SG.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="..\Unturned.uTest.Runner.SourceGenerator\$(OutputPath)\netstandard2.0\Unturned.uTest.SG.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 
   </ItemGroup>
 

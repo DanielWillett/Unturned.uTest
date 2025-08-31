@@ -123,7 +123,16 @@
   <data name="LogErrorAlreadyStarted" xml:space="preserve">
     <value>There is already a test session in progress (UID "{0}").</value>
   </data>
+  <data name="LogErrorCreatingRunner" xml:space="preserve">
+    <value>Failed to create an instance of test class "{0}".</value>
+  </data>
+  <data name="LogErrorMissingFromMember" xml:space="preserve">
+    <value>Member referred to by 'From' property ({0}) does not exist in {1}.</value>
+  </data>
   <data name="LogErrorNotStarted" xml:space="preserve">
     <value>This test session (UID "{0}") has already been closed.</value>
+  </data>
+  <data name="LogErrorReadingFromMember" xml:space="preserve">
+    <value>Exception encountered accessing member referred to by 'From' property ({0}) in {1}.</value>
   </data>
 </root>

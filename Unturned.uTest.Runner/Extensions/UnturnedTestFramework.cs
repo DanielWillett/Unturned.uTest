@@ -60,6 +60,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
     private readonly ILogger<UnturnedTestFramework> _logger;
     private readonly ILogger _uTestLogger;
     private readonly GracefulStopCapability? _stopCapability;
+    private readonly ILoggerFactory _loggerFactory;
 
     // countdown pattern from https://github.com/microsoft/testfx/blob/main/src/Platform/Microsoft.Testing.Extensions.VSTestBridge/SynchronizedSingleSessionVSTestAndTestAnywhereAdapter.cs
     private CountdownEvent? _countdown;
@@ -90,7 +91,8 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
             _stopCapability.InvokeExecution = StopTestExecutionAsync;
         }
 
-        _logger = serviceProvider.GetLoggerFactory().CreateLogger<UnturnedTestFramework>();
+        _loggerFactory = serviceProvider.GetLoggerFactory();
+        _logger = _loggerFactory.CreateLogger<UnturnedTestFramework>();
         _uTestLogger = new TFPLogger(_logger);
 
         _runTestsAsync = RunTestsAsync;
@@ -112,7 +114,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
             return null;
         }
 
-        List<UnturnedTest> tests = await list.GetTestsAsync(token);
+        List<UnturnedTest> tests = await list.GetTestsAsync(_loggerFactory.CreateLogger(list.GetType().FullName!), token);
         if (tests.Count == 0)
         {
             _logger.LogInformation("No tests.");

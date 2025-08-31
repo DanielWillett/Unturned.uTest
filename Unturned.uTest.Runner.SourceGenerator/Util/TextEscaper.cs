@@ -23,12 +23,14 @@ internal class TextEscaper
         int mask = (IsEscapable('\t') ? 1 : 0)
                    | (IsEscapable('\n') ? 2 : 0)
                    | (IsEscapable('\v') ? 4 : 0)
-                   | (IsEscapable('\r') ? 8 : 0);
+                   | (IsEscapable('\r') ? 8 : 0)
+                   | (IsEscapable('\0') ? 16 : 0);
 
         int size = ((mask & 1) == 1 ? 1 : 0)
                    + ((mask & 2) == 2 ? 1 : 0)
                    + ((mask & 4) == 4 ? 1 : 0)
-                   + ((mask & 8) == 8 ? 1 : 0);
+                   + ((mask & 8) == 8 ? 1 : 0)
+                   + ((mask & 16) == 16 ? 1 : 0);
 
         if (size == 0)
         {
@@ -37,6 +39,8 @@ internal class TextEscaper
         }
 
         _customMappings = new CharMap[size];
+        if ((mask & 16) != 0)
+            _customMappings[--size] = new CharMap('\0', '0');
         if ((mask & 8) != 0)
             _customMappings[--size] = new CharMap('\r', 'r');
         if ((mask & 4) != 0)

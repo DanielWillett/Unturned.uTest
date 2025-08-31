@@ -79,11 +79,38 @@ namespace uTest.Runner.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Failed to create an instance of test class &quot;{0}&quot;..
+        /// </summary>
+        internal static string LogErrorCreatingRunner {
+            get {
+                return ResourceManager.GetString("LogErrorCreatingRunner", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Member referred to by &apos;From&apos; property ({0}) does not exist in {1}..
+        /// </summary>
+        internal static string LogErrorMissingFromMember {
+            get {
+                return ResourceManager.GetString("LogErrorMissingFromMember", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to This test session (UID &quot;{0}&quot;) has already been closed..
         /// </summary>
         internal static string LogErrorNotStarted {
             get {
                 return ResourceManager.GetString("LogErrorNotStarted", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Exception encountered accessing member referred to by &apos;From&apos; property ({0}) in {1}..
+        /// </summary>
+        internal static string LogErrorReadingFromMember {
+            get {
+                return ResourceManager.GetString("LogErrorReadingFromMember", resourceCulture);
             }
         }
     }

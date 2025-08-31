@@ -1,10 +1,9 @@
-using System;
-using System.Collections.Generic;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -16,7 +15,7 @@ namespace uTest;
 [Generator(LanguageNames.CSharp)]
 public class UnturnedTestGenerator : IIncrementalGenerator
 {
-    private static readonly TextEscaper StringLiteralEscaper = new TextEscaper('\r', '\n', '\t', '\v', '\\', '\"');
+    internal static readonly TextEscaper StringLiteralEscaper = new TextEscaper('\r', '\n', '\t', '\v', '\\', '\"', '\0');
 
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -60,9 +59,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         if (symbol is not IMethodSymbol method)
                             continue;
 
-                        if (!method
-                                .GetAttributes()
-                                .Any(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, expectedTestAttribute)))
+                        ImmutableArray<AttributeData> methodAttributes = method.GetAttributes();
+                        if (!methodAttributes.Any(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, expectedTestAttribute)))
                         {
                             continue;
                         }
@@ -97,11 +95,25 @@ public class UnturnedTestGenerator : IIncrementalGenerator
 
                                 parameterInfo.Add(new TestParameterInfo(
                                     MetadataNameFormatter.GetFullName(ctx.SemanticModel.Compilation, parameter.Type, parameter.RefKind != RefKind.None),
+                                    parameter.Name,
                                     parameter.Type.ToDisplayString(FullTypeNameWithGlobalFormat),
                                     TestParameterSetAttributeInfo.Create(setAttributeData),
-                                    TestParameterRangeAttributeInfo.Create(rangeAttributeData)
+                                    TestParameterRangeAttributeInfo.Create(rangeAttributeData),
+                                    parameter.RefKind,
+                                    parameter.Type.TypeKind == TypeKind.Enum,
+                                    parameter.Type.SpecialType
                                 ));
                             }
+                        }
+
+                        EquatableList<TestArgsAttributeInfo> argsInfo = new EquatableList<TestArgsAttributeInfo>(0);
+                        foreach (AttributeData argsAttribute in methodAttributes)
+                        {
+                            if (!SymbolEqualityComparer.Default.Equals(argsAttribute.AttributeClass, testArgsAttribute))
+                                continue;
+
+                            if (TestArgsAttributeInfo.TryCreate(argsAttribute, out TestArgsAttributeInfo attributeInfo))
+                                argsInfo.Add(attributeInfo);
                         }
 
                         methods.Add(
@@ -118,10 +130,10 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 MethodMetadataName: method.MetadataName,
                                 MethodName: method.Name,
                                 Parameters: parameterInfo,
-                                ArgsAttributes: new EquatableList<TestArgsAttributeInfo>(0), // todo
+                                ArgsAttributes: argsInfo,
                                 ReturnTypeFullName: MetadataNameFormatter.GetFullName(ctx.SemanticModel.Compilation, method.ReturnType),
                                 ReturnTypeGloballyQualifiedName: method.ReturnType.ToDisplayString(FullTypeNameWithGlobalFormat),
-                                DelegateType: new DelegateType(method),
+                                DelegateType: new DelegateType(method)
                             ));
                     }
                 }
@@ -135,9 +147,12 @@ public class UnturnedTestGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(
             testFixtures,
-            (context, classInfo) =>
+            (context, input) =>
             {
+                ref TestClassInfo classInfo = ref input;
                 context.CancellationToken.ThrowIfCancellationRequested();
+
+                string fileName = classInfo.Namespace.Replace('.', '/') + "/" + classInfo.Name + ".cs";
 
                 SourceStringBuilder bldr = new SourceStringBuilder(CultureInfo.InvariantCulture);
 
@@ -235,6 +250,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     else
                         isFirst = false;
 
+                    string file = method.FilePath;
+
                     bldr.String("builder.Add(new global::uTest.Runner.UnturnedTest()")
                         .In().String("{").In()
                             .Build($"ManagedType = \"{escManagedType}\",")
@@ -252,7 +269,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     }
                     else
                     {
-                        string list = string.Join("\", \"", method.Parameters.Select(p => StringLiteralEscaper.Escape(p.FullName)));
+                        string list = string.Join("\", \"", method.Parameters.Select(p => StringLiteralEscaper.Escape(p.FullTypeName)));
                         bldr    .Build($"new string[] {{ \"{list}\" }},");
                     }
 
@@ -267,9 +284,252 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             .String("),")
                             .Build($"DisplayName = \"{StringLiteralEscaper.Escape(method.DisplayName)}\",")
                             .Build($"Uid = \"{StringLiteralEscaper.Escape(method.Uid)}\",")
-                            .Build($"Method = {delegateType.GetMethodByExpressionString(method, globalTestName, delegateName)}").Out()
+                            .Build($"Method = {delegateType.GetMethodByExpressionString(method, globalTestName, delegateName)},")
+                            .String("Parameters = ").In();
+                    if (method.Parameters is not { Count: > 0 })
+                    {
+                        bldr.String("global::System.Array.Empty<global::uTest.Runner.UnturnedTestParameter>(),").Out();
+                    }
+                    else
+                    {
+                        bldr.String("new global::uTest.Runner.UnturnedTestParameter[]")
+                            .String("{").In();
+
+                        for (int i = 0; i < method.Parameters.Count; i++)
+                        {
+                            TestParameterInfo parameter = method.Parameters[i];
+
+                            SpecialType destinationType = SpecialType.None;
+
+                            int mode;
+                            if (parameter.RangeParameter is null && parameter.SetParameter is null)
+                            {
+                                mode = 0;
+                                bldr.String("new global::uTest.Runner.UnturnedTestParameter()");
+                            }
+                            else if (parameter.RangeParameter is null)
+                            {
+                                mode = 1;
+                                bldr.String("new global::uTest.Runner.UnturnedTestSetParameter()");
+                            }
+                            else if (parameter.RangeParameter.EnumTypeGloballyQualified != null)
+                            {
+                                mode = 2;
+                                destinationType = parameter.RangeParameter.Type;
+                                bldr.Build($"new global::uTest.Runner.UnturnedTestRangeEnumParameter<{parameter.RangeParameter.EnumTypeGloballyQualified}, {parameter.RangeParameter.Type.GetTypeKeyword()}>()");
+                            }
+                            else if (parameter.RangeParameter.Type == SpecialType.System_Char)
+                            {
+                                mode = 3;
+                                destinationType = parameter.RangeParameter.Type;
+                                bldr.Build($"new global::uTest.Runner.UnturnedTestRangeCharParameter()");
+                            }
+                            else
+                            {
+                                mode = 4;
+                                destinationType = parameter.SpecialParameterType;
+                                if (destinationType is not (
+                                    SpecialType.System_Byte or
+                                    SpecialType.System_SByte or
+                                    SpecialType.System_UInt16 or
+                                    SpecialType.System_Int16 or
+                                    SpecialType.System_UInt32 or
+                                    SpecialType.System_Int32 or
+                                    SpecialType.System_UInt64 or
+                                    SpecialType.System_Int64 or
+                                    SpecialType.System_UIntPtr or
+                                    SpecialType.System_IntPtr or
+                                    SpecialType.System_Char or
+                                    SpecialType.System_Single or
+                                    SpecialType.System_Double or
+                                    SpecialType.System_Decimal or
+                                    SpecialType.System_String)
+                                )
+                                {
+                                    destinationType = parameter.RangeParameter.Type;
+                                }
+
+                                SpecialType encodedType = destinationType == SpecialType.System_String
+                                    ? parameter.RangeParameter.Type
+                                    : destinationType;
+
+                                string rangeType = encodedType switch
+                                {
+                                    SpecialType.System_Byte => "byte",
+                                    SpecialType.System_SByte => "sbyte",
+                                    SpecialType.System_UInt16 => "ushort",
+                                    SpecialType.System_Int16 => "short",
+                                    SpecialType.System_UInt32 => "uint",
+                                    SpecialType.System_Int32 => "int",
+                                    SpecialType.System_UInt64 => "ulong",
+                                    SpecialType.System_Int64 => "long",
+                                    SpecialType.System_UIntPtr => "UIntPtr",
+                                    SpecialType.System_IntPtr => "IntPtr",
+                                    SpecialType.System_Char => "char",
+                                    SpecialType.System_Single => "float",
+                                    SpecialType.System_Double => "double",
+                                    _ /* SpecialType.System_Decimal */ => "decimal"
+                                };
+
+                                bldr.Build($"new global::uTest.Runner.UnturnedTestRangeParameter<{rangeType}>()");
+                            }
+
+                            bldr.String("{").In()
+                                .Build($"Name = \"{StringLiteralEscaper.Escape(parameter.Name)}\",")
+                                .Build($"Type = typeof({parameter.GloballyQualifiedName}),")
+                                .Build($"IsByRef = {(parameter.RefKind == RefKind.None ? "false" : "true")},");
+                            if (mode == 0)
+                                bldr.Build($"Position = {i}");
+                            else
+                                bldr.Build($"Position = {i},");
+                            switch (mode)
+                            {
+                                case 1: // basic set
+                                    ExtendSet(in parameter, bldr, method, file);
+                                    break;
+
+                                case 2: // enum range
+                                    EquatableEnumValueContainer from = (EquatableEnumValueContainer)parameter.RangeParameter!.From;
+                                    EquatableEnumValueContainer to = (EquatableEnumValueContainer)parameter.RangeParameter!.To;
+
+                                    EquatableObjectList.ObjectArrayType destinationArrayType = new EquatableObjectList.ObjectArrayType(parameter.RangeParameter!.EnumTypeGloballyQualified!);
+                                    bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Build($"From = {EquatableObjectList.AppendLiteral(from, destinationArrayType)},")
+                                        .Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Build($"To = {EquatableObjectList.AppendLiteral(to, destinationArrayType)},");
+
+                                    if (from.ValueName != null)
+                                        bldr.Build($"FromFieldName = \"{StringLiteralEscaper.Escape(from.ValueName)}\",");
+                                    else
+                                        bldr.Build($"FromFieldName = string.Empty,");
+                                    if (to.ValueName != null)
+                                        bldr.Build($"ToFieldName = \"{StringLiteralEscaper.Escape(to.ValueName)}\",");
+                                    else
+                                        bldr.Build($"ToFieldName = string.Empty,");
+
+                                    string comma = parameter.SetParameter is not null ? "," : string.Empty;
+
+                                    destinationArrayType = new EquatableObjectList.ObjectArrayType(parameter.RangeParameter.Type);
+                                    bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Build($"FromUnderlying = {EquatableObjectList.AppendLiteral(from.UnqualifiedValue, destinationArrayType)},")
+                                        .Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Build($"ToUnderlying = {EquatableObjectList.AppendLiteral(to.UnqualifiedValue, destinationArrayType)}{comma}");
+                                    break;
+
+                                case 3: // char range
+                                    destinationArrayType = new EquatableObjectList.ObjectArrayType(SpecialType.System_Char);
+                                    bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Build($"From = {EquatableObjectList.AppendLiteral(parameter.RangeParameter!.From, destinationArrayType)},")
+                                        .Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Build($"To = {EquatableObjectList.AppendLiteral(parameter.RangeParameter!.To, destinationArrayType)},");
+
+                                    if (parameter.RangeParameter!.Step != null)
+                                    {
+                                        comma = parameter.SetParameter is not null ? "," : string.Empty;
+                                        bldr.Build($"Step = {EquatableObjectList.AppendLiteral(
+                                            parameter.RangeParameter!.Step,
+                                            new EquatableObjectList.ObjectArrayType(SpecialType.System_Int32))
+                                        }{comma}");
+                                    }
+                                    break;
+                                    
+                                case 4: // other range
+                                    destinationArrayType = new EquatableObjectList.ObjectArrayType(destinationType);
+                                    bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Build($"From = {EquatableObjectList.AppendLiteral(parameter.RangeParameter!.From, destinationArrayType)},")
+                                        .Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Build($"To = {EquatableObjectList.AppendLiteral(parameter.RangeParameter!.To, destinationArrayType)},");
+
+                                    if (parameter.RangeParameter!.Step != null)
+                                    {
+                                        comma = parameter.SetParameter is not null ? "," : string.Empty;
+                                        bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                            .Build($"Step = {EquatableObjectList.AppendLiteral(parameter.RangeParameter!.Step, destinationArrayType)}{comma}");
+                                    }
+                                    break;
+                            }
+
+                            if (mode is 2 or 3 or 4)
+                            {
+                                if (parameter.SetParameter is not null)
+                                {
+                                    bldr.Build($"SetParameterInfo = new global::uTest.Runner.UnturnedTestSetParameterInfo()")
+                                        .String("{").In()
+                                        .Preprocessor($"#line {method.LineNumberStart} \"{file}\"");
+                                    ExtendSet(in parameter, bldr, method, file);
+                                    bldr.Out()
+                                        .String("}");
+                                }
+                            }
+
+                            bldr.Out().String(i == method.Parameters.Count - 1 ? "}" : "},");
+                        }
+
+                        bldr.Out()
+                            .String("},")
+                            .Out();
+                    }
+                    
+                    bldr.String("Args = ").In();
+                    if (method.ArgsAttributes is not { Count: > 0 })
+                    {
+                        bldr.String("global::System.Array.Empty<global::uTest.Runner.UnturnedTestArgs>(),").Out();
+                    }
+                    else
+                    {
+                        bldr.String("new global::uTest.Runner.UnturnedTestArgs[]")
+                            .String("{").In();
+
+                        for (int i = 0; i < method.ArgsAttributes.Count; i++)
+                        {
+                            TestArgsAttributeInfo argsAttribute = method.ArgsAttributes[i];
+                            bldr.String("new global::uTest.Runner.UnturnedTestArgs()")
+                                .String("{").In();
+                            if (argsAttribute.From != null)
+                            {
+                                bldr.Build($"From = \"{StringLiteralEscaper.Escape(argsAttribute.From)}\"");
+                            }
+                            else if (argsAttribute.Values != null)
+                            {
+                                int paramCount = method.Parameters?.Count ?? 0;
+                                EquatableObjectList.ObjectArrayType[] parameterTypes;
+                                if (paramCount == 0)
+                                    parameterTypes = Array.Empty<EquatableObjectList.ObjectArrayType>();
+                                else
+                                    parameterTypes = new EquatableObjectList.ObjectArrayType[paramCount];
+
+                                for (int j = 0; j < paramCount; ++j)
+                                {
+                                    TestParameterInfo p = method.Parameters![j];
+                                    if (p.IsEnum)
+                                    {
+                                        parameterTypes[j] = new EquatableObjectList.ObjectArrayType(p.GloballyQualifiedName);
+                                    }
+                                    else
+                                    {
+                                        parameterTypes[j] = new EquatableObjectList.ObjectArrayType(
+                                            p.FullTypeName.Equals("System.Type", StringComparison.Ordinal)
+                                                ? SpecialType.System_TypedReference
+                                                : p.SpecialParameterType
+                                        );
+                                    }
+                                }
+
+                                bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                    .Build($"Values = {argsAttribute.Values.ToCodeString(default, parameterTypes)}");
+                            }
+
+                            bldr.Out().String(i == method.ArgsAttributes.Count - 1 ? "}" : "},");
+                        }
+
+                        bldr.Out()
+                            .String("},")
+                            .Out();
+                    }
+                    bldr    .Out()
                         .String("}").Out()
-                    .String(");");
+                    .String(");")
+                    .Preprocessor("#line default");
                 }
 
                 // end method
@@ -289,9 +549,30 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 bldr.Preprocessor("#nullable restore");
 
                 // save file
-                context.AddSource(classInfo.Namespace.Replace('.', '/') + "/" + classInfo.Name + ".cs", bldr.ToString());
+                context.AddSource(fileName, bldr.ToString());
             }
         );
+    }
+
+    private static void ExtendSet(in TestParameterInfo parameter, SourceStringBuilder bldr, TestMethodInfo method, string file)
+    {
+        if (parameter.SetParameter!.From != null)
+            bldr.Build($"From = \"{StringLiteralEscaper.Escape(parameter.SetParameter!.From)}\"");
+        else if (parameter.SetParameter!.Values != null)
+        {
+            EquatableObjectList.ObjectArrayType targetType;
+            if (parameter.IsEnum)
+                targetType = new EquatableObjectList.ObjectArrayType(parameter.GloballyQualifiedName);
+            else
+                targetType =
+                    new EquatableObjectList.ObjectArrayType(
+                        parameter.FullTypeName.Equals("System.Type", StringComparison.Ordinal)
+                            ? SpecialType.System_TypedReference
+                            : parameter.SpecialParameterType
+                    );
+            bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                .Build($"Values = {parameter.SetParameter.Values.ToCodeString(targetType, null)}");
+        }
     }
 
     private static void GetMethodLocation(SyntaxReference syntaxReference, ref int lineStart, ref int lineEnd, ref int charStart, ref int charEnd, ref string fileName)
@@ -337,7 +618,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
         propertyStyle: SymbolDisplayPropertyStyle.NameOnly,
         localOptions: SymbolDisplayLocalOptions.None,
         kindOptions: SymbolDisplayKindOptions.None,
-        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers | SymbolDisplayMiscellaneousOptions.ExpandNullable | SymbolDisplayMiscellaneousOptions.ExpandValueTuple
+        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers | SymbolDisplayMiscellaneousOptions.ExpandNullable | SymbolDisplayMiscellaneousOptions.ExpandValueTuple | SymbolDisplayMiscellaneousOptions.UseSpecialTypes
     );
 
     internal static readonly SymbolDisplayFormat FullTypeNameFormat = new SymbolDisplayFormat(

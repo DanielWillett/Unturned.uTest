@@ -8,27 +8,56 @@ namespace uTest.Util;
 
 internal static class SymbolExtensions
 {
-    public static object? GetValueAsObject(this TypedConstant constant)
+    public static string? GetTypeKeyword(this SpecialType type)
     {
-        switch (constant.Kind)
+        return type switch
         {
-            case TypedConstantKind.Primitive:
-            case TypedConstantKind.Enum: // will be the underlying value
-                return constant.Value; 
+            SpecialType.System_Object => "object",
+            SpecialType.System_Void => "void",
+            SpecialType.System_Boolean => "bool",
+            SpecialType.System_Char => "char",
+            SpecialType.System_SByte => "sbyte",
+            SpecialType.System_Byte => "byte",
+            SpecialType.System_Int16 => "short",
+            SpecialType.System_UInt16 => "ushort",
+            SpecialType.System_Int32 => "int",
+            SpecialType.System_UInt32 => "uint",
+            SpecialType.System_Int64 => "long",
+            SpecialType.System_UInt64 => "ulong",
+            SpecialType.System_Decimal => "decimal",
+            SpecialType.System_Single => "float",
+            SpecialType.System_Double => "double",
+            SpecialType.System_String => "string",
+            SpecialType.System_IntPtr => "nint",
+            SpecialType.System_UIntPtr => "nuint",
+            _ => null
+        };
+    }
 
-            case TypedConstantKind.Type:
-                return (ITypeSymbol?)constant.Value;
+    public static IFieldSymbol? GetEnumMember(this ITypeSymbol enumType, object? underlyingValue)
+    {
+        ImmutableArray<ISymbol> allMembers = enumType.GetMembers();
 
-            case TypedConstantKind.Array:
-                ImmutableArray<TypedConstant> values = constant.Values;
-                object?[] args = new object?[values.Length];
-                for (int i = 0; i < args.Length; ++i)
-                    args[i] = values[i].GetValueAsObject();
-                return args;
+        IFieldSymbol? leadingObsolete = null;
 
-            default:
-                return null;
+        for (int i = 0; i < allMembers.Length; ++i)
+        {
+            if (allMembers[i] is not IFieldSymbol field)
+                continue;
+
+            if (!field.HasConstantValue)
+                continue;
+
+            if (!Equals(underlyingValue, field.ConstantValue))
+                continue;
+
+            if (field.HasAttribute("System.ObsoleteAttribute"))
+                leadingObsolete ??= field;
+            else
+                return field;
         }
+
+        return leadingObsolete;
     }
 
     public static bool CanBeGenericArgument(this ITypeSymbol symbol)

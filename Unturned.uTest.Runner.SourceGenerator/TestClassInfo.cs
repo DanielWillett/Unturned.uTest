@@ -1,9 +1,7 @@
 using Microsoft.CodeAnalysis;
 using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
-using Microsoft.CodeAnalysis.CSharp;
+using System.Runtime.CompilerServices;
 using uTest.Util;
 
 namespace uTest;
@@ -36,17 +34,45 @@ internal sealed record TestMethodInfo(
     DelegateType DelegateType
 );
 
-internal record TestParameterInfo(
-    string FullName,
+internal record struct TestParameterInfo(
+    string FullTypeName,
+    string Name,
     string GloballyQualifiedName,
     TestParameterSetAttributeInfo? SetParameter,
-    TestParameterRangeAttributeInfo? RangeParameter
+    TestParameterRangeAttributeInfo? RangeParameter,
+    RefKind RefKind,
+    bool IsEnum,
+    SpecialType SpecialParameterType
 );
 
-internal record TestArgsAttributeInfo(
+internal record struct TestArgsAttributeInfo(
     string? From,
     EquatableObjectList? Values
-);
+)
+{
+    public static bool TryCreate(AttributeData attribute, out TestArgsAttributeInfo attributeInfo)
+    {
+        Unsafe.SkipInit(out attributeInfo);
+        if (attribute == null)
+            return false;
+
+        if (attribute.NamedArguments.FirstOrDefault(x =>
+                x.Key.Equals("From", StringComparison.Ordinal)) is { Value.Value: string fromMember })
+        {
+            attributeInfo = new TestArgsAttributeInfo(fromMember, null);
+            return true;
+        }
+
+        if (attribute.ConstructorArguments.Length > 0
+            && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Array } arg0)
+        {
+            attributeInfo = new TestArgsAttributeInfo(null, new EquatableObjectList(in arg0));
+            return true;
+        }
+
+        return false;
+    }
+}
 
 internal record TestParameterSetAttributeInfo(
     string? From,
@@ -67,8 +93,7 @@ internal record TestParameterSetAttributeInfo(
         if (attribute.ConstructorArguments.Length > 0
             && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Array } arg0)
         {
-            object?[] array = (object?[]?)arg0.GetValueAsObject() ?? Array.Empty<object>();
-            return new TestParameterSetAttributeInfo(null, new EquatableObjectList(array));
+            return new TestParameterSetAttributeInfo(null, new EquatableObjectList(in arg0, distinct: true));
         }
 
         return null;
@@ -77,7 +102,10 @@ internal record TestParameterSetAttributeInfo(
 
 internal record TestParameterRangeAttributeInfo(
     object From,
-    object To
+    object To,
+    object? Step,
+    SpecialType Type,
+    string? EnumTypeGloballyQualified
 )
 {
     public static TestParameterRangeAttributeInfo? Create(AttributeData? attribute)
@@ -87,43 +115,60 @@ internal record TestParameterRangeAttributeInfo(
         {
             return null;
         }
-        
-        switch (ctorParams[0].Type.SpecialType)
+
+        TypedConstant a0 = args[0], a1 = args[1];
+        SpecialType ctorType = ctorParams[0].Type.SpecialType;
+        switch (ctorType)
         {
             case SpecialType.System_Object: // Enums
-                if (args[0].Kind != TypedConstantKind.Enum && args[1].Kind != TypedConstantKind.Enum)
+                if (a0.Kind != TypedConstantKind.Enum && a1.Kind != TypedConstantKind.Enum)
                     return null;
 
-                // todo
-                break;
+                if (a0.Type is not INamedTypeSymbol namedType1 || a1.Type is not INamedTypeSymbol namedType2)
+                    return null;
+
+                if (!SymbolEqualityComparer.Default.Equals(namedType1, namedType2) || namedType1.EnumUnderlyingType == null)
+                    return null;
+
+                SpecialType underlyingType = namedType1.EnumUnderlyingType.SpecialType;
+                if (underlyingType == SpecialType.None)
+                    return null;
+
+                string qualifiedTypeName = namedType1.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat);
+                IFieldSymbol? member1 = namedType1.GetEnumMember(a0.Value!),
+                              member2 = namedType1.GetEnumMember(a1.Value!);
+
+                EquatableEnumValueContainer e1 = new EquatableEnumValueContainer(qualifiedTypeName, member1?.Name, a0.Value!),
+                                            e2 = new EquatableEnumValueContainer(qualifiedTypeName, member2?.Name, a1.Value!);
+
+                return new TestParameterRangeAttributeInfo(e1, e2, null, underlyingType, namedType1.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat));
 
             case SpecialType.System_Int32:
-
-                break;
-
             case SpecialType.System_Char:
-
-                break;
-
             case SpecialType.System_UInt32:
-
-                break;
-
             case SpecialType.System_Int64:
-
-                break;
-
             case SpecialType.System_UInt64:
-
-                break;
-
             case SpecialType.System_Single:
-
-                break;
-
             case SpecialType.System_Double:
+                if (a0.Kind != TypedConstantKind.Primitive && a1.Kind != TypedConstantKind.Primitive)
+                    return null;
 
-                break;
+                object? step = args.Length > 2 ? args[2].Value : null;
+                return ctorType switch
+                {
+                    SpecialType.System_Int32 or SpecialType.System_Char
+                        => new TestParameterRangeAttributeInfo(a0.Value!, a1.Value!, step ?? 1, ctorType, null),
+                    SpecialType.System_UInt32
+                        => new TestParameterRangeAttributeInfo(a0.Value!, a1.Value!, step ?? 1u, ctorType, null),
+                    SpecialType.System_Int64
+                        => new TestParameterRangeAttributeInfo(a0.Value!, a1.Value!, step ?? 1L, ctorType, null),
+                    SpecialType.System_UInt64
+                        => new TestParameterRangeAttributeInfo(a0.Value!, a1.Value!, step ?? 1UL, ctorType, null),
+                    SpecialType.System_Single
+                        => new TestParameterRangeAttributeInfo(a0.Value!, a1.Value!, step ?? 1f, ctorType, null),
+                    _ // SpecialType.System_Double
+                        => new TestParameterRangeAttributeInfo(a0.Value!, a1.Value!, step ?? 1d, ctorType, null)
+                };
         }
 
         return null;
@@ -168,9 +213,7 @@ internal sealed class DelegateType : IEquatable<DelegateType>
         NeedsUnsafe = methodSymbol.ReturnType is IPointerTypeSymbol or IFunctionPointerTypeSymbol
                       || methodSymbol.Parameters.Any(x => x.Type is IPointerTypeSymbol or IFunctionPointerTypeSymbol);
 
-        ReturnType = methodSymbol.ReturnType.SpecialType == SpecialType.System_Void
-            ? "void"
-            : methodSymbol.ReturnType.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat);
+        ReturnType = methodSymbol.ReturnType.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat);
         ReturnRefKind = methodSymbol.ReturnsByRef
             ? RefKind.Ref : methodSymbol.ReturnsByRefReadonly
                 ? RefKind.RefReadOnly : RefKind.None;
