@@ -126,11 +126,20 @@
   <data name="LogErrorCreatingRunner" xml:space="preserve">
     <value>Failed to create an instance of test class "{0}".</value>
   </data>
+  <data name="LogErrorMismatchedArgsParameterCount" xml:space="preserve">
+    <value>TestArgsAttribute was given {0} parameter(s) but test {1} should have exactly {2}.</value>
+  </data>
+  <data name="LogErrorMismatchedParameterType" xml:space="preserve">
+    <value>Value {0} can not be converted to type {1} for parameter "{2}" in test {3}.</value>
+  </data>
   <data name="LogErrorMissingFromMember" xml:space="preserve">
     <value>Member referred to by 'From' property ({0}) does not exist in {1}.</value>
   </data>
   <data name="LogErrorNotStarted" xml:space="preserve">
     <value>This test session (UID "{0}") has already been closed.</value>
+  </data>
+  <data name="LogErrorParametersMissingValues" xml:space="preserve">
+    <value>Not all parameters on test {0} in {1} have value sets or ranges. This could also be caused by a range containing too many elements, as a test can not have more than {2} variations.</value>
   </data>
   <data name="LogErrorReadingFromMember" xml:space="preserve">
     <value>Exception encountered accessing member referred to by 'From' property ({0}) in {1}.</value>

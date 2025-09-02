@@ -1,10 +1,13 @@
 using System;
+using NUnit.Framework;
+using uTest;
+using TestAttribute = NUnit.Framework.TestAttribute;
 
-namespace uTest.Test;
+namespace uTest_Test;
 
 public class InstallDirTests
 {
-    [NUnit.Framework.Test]
+    [Test]
     public void Client()
     {
         InstallDirUtility util = new InstallDirUtility(false, ConsoleLogger.Instance);
@@ -14,7 +17,7 @@ public class InstallDirTests
         Console.WriteLine(installDir);
     }
 
-    [NUnit.Framework.Test]
+    [Test]
     public void Server()
     {
         InstallDirUtility util = new InstallDirUtility(true, ConsoleLogger.Instance);

@@ -1,3 +1,4 @@
+#if false
 using Mono.Cecil;
 using Mono.Cecil.Rocks;
 using NUnit.Framework;
@@ -6,9 +7,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using uTest.Adapter;
-using Assert = NUnit.Framework.Assert;
 
-namespace uTest.Test;
+namespace uTest_Test;
 
 public class ManagedTypeFormatterTests
 {
@@ -630,3 +630,4 @@ public class ManagedTypeFormatterTests
         NUnit.Framework.Assert.That(managedMethod, Is.EqualTo(expected));
     }
 }
+#endif

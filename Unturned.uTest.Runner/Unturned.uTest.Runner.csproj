@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>net471;netstandard2.1</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Exe</OutputType>
@@ -40,6 +40,8 @@
 
     <NoWarn>CS1591;CS1573</NoWarn>
 
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
   </PropertyGroup>
 
   <ItemGroup>
@@ -47,6 +49,7 @@
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" Version="$(MTPVersion)" />
     <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <!--<PackageReference Include="System.ValueTuple" Version="4.3.0" Condition="'$(TargetFramework)' == 'netstandard2.0'" />-->
 
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
 

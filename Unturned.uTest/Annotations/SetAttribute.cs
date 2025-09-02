@@ -10,11 +10,11 @@ namespace uTest;
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.GenericParameter)]
 public sealed class SetAttribute : Attribute
 {
-    /// <summary>
-    /// List of values for this parameter that require testing.
-    /// </summary>
-    /// <remarks>All values should be the same type or convertible to the parameter type.</remarks>
-    public object?[]? Values { get; }
+    ///// <summary>
+    ///// List of values for this parameter that require testing.
+    ///// </summary>
+    ///// <remarks>All values should be the same type or convertible to the parameter type.</remarks>
+    //public object?[]? Values { get; }
 
     /// <summary>
     /// The name of a member (field, property, method) to fetch the arguments from in the declaring type.
@@ -78,7 +78,7 @@ public sealed class SetAttribute : Attribute
     [SetsRequiredMembers]
     public SetAttribute(params object?[] values)
     {
-        Values = values;
-        From = null;
+        //Values = values;
+        //From = null;
     }
 }

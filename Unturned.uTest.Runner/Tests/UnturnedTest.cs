@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Reflection;
+using System.Reflection.Emit;
 using Microsoft.Testing.Platform.Extensions.Messages;
+using uTest.Runner.Util;
 
 namespace uTest.Runner;
 
@@ -27,22 +29,6 @@ public class UnturnedTest
 
     /// <inheritdoc />
     public override string ToString() => Uid;
-
-    public TestNode CreateTestNode()
-    {
-        TestNode node = new TestNode
-        {
-            DisplayName = DisplayName,
-            Uid = new TestNodeUid(Uid)
-        };
-
-        if (LocationInfo != null)
-            node.Properties.Add(LocationInfo);
-        if (IdentifierInfo != null)
-            node.Properties.Add(IdentifierInfo);
-
-        return node;
-    }
 }
 
 /// <summary>
@@ -69,6 +55,13 @@ public class UnturnedTestParameter
     public required Type Type { get; init; }
     public required bool IsByRef { get; init; }
     public required int Position { get; init; }
+
+    protected internal virtual bool TryGetValues(out Array? values, out string? from)
+    {
+        from = null;
+        values = null;
+        return false;
+    }
 }
 
 /// <summary>
@@ -81,6 +74,23 @@ public sealed class UnturnedTestSetParameter : UnturnedTestParameter
 {
     public string? From { get; init; }
     public Array? Values { get; init; }
+
+    /// <inheritdoc />
+    protected internal override bool TryGetValues(out Array? values, out string? from)
+    {
+        if (!string.IsNullOrWhiteSpace(From))
+        {
+            values = null;
+            from = From;
+        }
+        else
+        {
+            values = Values;
+            from = null;
+        }
+
+        return values != null || from != null;
+    }
 }
 
 /// <summary>
@@ -95,12 +105,26 @@ public readonly struct UnturnedTestSetParameterInfo
     public Array? Values { get; init; }
 }
 
-internal interface IUnturnedTestRangeParameter<out T, out TStep>
+internal interface IUnturnedTestRangeParameter
+{
+    UnturnedTestSetParameterInfo SetParameterInfo { get; }
+    void Visit<TVisitor>(ref TVisitor visitor) where TVisitor : IUnturnedTestRangeParameterVisitor;
+}
+
+internal interface IUnturnedTestRangeParameter<out T, out TStep> : IUnturnedTestRangeParameter
+    where T : unmanaged, IConvertible
+    where TStep : unmanaged, IComparable<TStep>, IConvertible
 {
     T From { get; }
     T To { get; }
     TStep Step { get; }
-    UnturnedTestSetParameterInfo SetParameterInfo { get; }
+}
+
+internal interface IUnturnedTestRangeParameterVisitor
+{
+    void Visit<T, TStep>(IUnturnedTestRangeParameter<T, TStep> parameter)
+        where T : unmanaged, IConvertible
+        where TStep : unmanaged, IComparable<TStep>, IConvertible;
 }
 
 /// <summary>
@@ -130,6 +154,11 @@ public sealed class UnturnedTestRangeParameter<T> : UnturnedTestParameter, IUntu
 
     public UnturnedTestSetParameterInfo SetParameterInfo { get; init; }
 
+    void IUnturnedTestRangeParameter.Visit<TVisitor>(ref TVisitor visitor)
+    {
+        visitor.Visit(this);
+    }
+
     public override string ToString()
     {
         return $"{From.ToString(null, CultureInfo.InvariantCulture)} " +
@@ -151,6 +180,11 @@ public sealed class UnturnedTestRangeCharParameter : UnturnedTestParameter, IUnt
     public required int Step { get; init; }
 
     public UnturnedTestSetParameterInfo SetParameterInfo { get; init; }
+
+    void IUnturnedTestRangeParameter.Visit<TVisitor>(ref TVisitor visitor)
+    {
+        visitor.Visit(this);
+    }
 
     public override string ToString()
     {
@@ -182,6 +216,11 @@ public sealed class UnturnedTestRangeEnumParameter<T, TUnderlying> : UnturnedTes
     public required TUnderlying ToUnderlying { get; init; }
 
     public UnturnedTestSetParameterInfo SetParameterInfo { get; init; }
+
+    void IUnturnedTestRangeParameter.Visit<TVisitor>(ref TVisitor visitor)
+    {
+        visitor.Visit(this);
+    }
 
     public override string ToString() => $"{typeof(T).Name}.{FromFieldName} - {typeof(T).Name}.{ToFieldName}";
 }

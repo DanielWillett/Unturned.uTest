@@ -104,7 +104,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         return Task.CompletedTask;
     }
 
-    private async Task<List<UnturnedTest>?> GetTests(TestExecutionRequest r, CancellationToken token)
+    private async Task<List<UnturnedTestInstance>?> GetTests(TestExecutionRequest r, CancellationToken token)
     {
         ITestRegistrationList? list = _capabilities.GetCapability<ITestRegistrationList>();
 
@@ -114,14 +114,22 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
             return null;
         }
 
-        List<UnturnedTest> tests = await list.GetTestsAsync(_loggerFactory.CreateLogger(list.GetType().FullName!), token);
+        Microsoft.Testing.Platform.Logging.ILogger logger = _loggerFactory.CreateLogger(list.GetType().FullName!);
+        List<UnturnedTest> tests = await list.GetTestsAsync(logger, token).ConfigureAwait(false);
         if (tests.Count == 0)
         {
             _logger.LogInformation("No tests.");
             return null;
         }
 
-        return tests;
+        List<UnturnedTestInstance> testInstances = await list.ExpandTestsAsync(logger, tests, token).ConfigureAwait(false);
+        if (testInstances.Count == 0)
+        {
+            _logger.LogInformation("No tests.");
+            return null;
+        }
+
+        return testInstances;
     }
 
     private async Task DiscoverTestsAsync(DiscoverTestExecutionRequest r, ExecuteRequestContext ctx, CancellationToken token = default)
@@ -130,7 +138,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         {
             await _logger.LogInformationAsync($"Discovering tests: {ctx.Request.Session.SessionUid.Value}.");
 
-            List<UnturnedTest>? tests = await GetTests(r, token).ConfigureAwait(false);
+            List<UnturnedTestInstance>? tests = await GetTests(r, token).ConfigureAwait(false);
 
             if (tests == null)
                 return;
@@ -141,13 +149,11 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
             for (int i = 0; i < tests.Count; ++i)
             {
-                UnturnedTest test = tests[i];
+                UnturnedTestInstance test = tests[i];
 
-                TestNode node = test.CreateTestNode();
+                TestNode node = test.CreateTestNode(out TestNodeUid? parentUid);
 
                 node.Properties.Add(DiscoveredTestNodeStateProperty.CachedInstance);
-
-                TestNodeUid? parentUid = test.ParentUid == null ? null : new TestNodeUid(test.ParentUid);
 
                 publishTasks[i] = ctx.MessageBus.PublishAsync(this, new TestNodeUpdateMessage(id, node, parentUid));
             }
@@ -166,7 +172,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         {
             await _logger.LogInformationAsync($"Discovering tests: {ctx.Request.Session.SessionUid.Value}.");
 
-            List<UnturnedTest>? tests = await GetTests(r, token).ConfigureAwait(false);
+            List<UnturnedTestInstance>? tests = await GetTests(r, token).ConfigureAwait(false);
             if (tests == null)
             {
                 return;
@@ -192,7 +198,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                     return true;
                 }
 
-                UnturnedTest test = tests[index];
+                UnturnedTestInstance test = tests[index];
                 if (result.Result != TestResult.InProgress)
                 {
                     testReturnMask[index] = true;
@@ -200,14 +206,14 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
                 _logger.LogInformation($"reported {result.Result} result for test {test.Uid}.");
 
-                TestNode testNode = test.CreateTestNode();
+                TestNode testNode = test.CreateTestNode(out TestNodeUid? parentUid);
 
                 AddResultState(testNode, result.Result);
 
                 lock (runningPublishTasks)
                 {
                     runningPublishTasks.Add(
-                        _messageBus.PublishAsync(this, new TestNodeUpdateMessage(new SessionUid(sessionId), testNode))
+                        _messageBus.PublishAsync(this, new TestNodeUpdateMessage(new SessionUid(sessionId), testNode, parentUid))
                     );
                 }
 
@@ -219,19 +225,19 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
             List<Assembly> testAssemblies = new List<Assembly>();
 
             List<UnturnedTestReference> exportedTests = new List<UnturnedTestReference>(tests.Count);
-            foreach (UnturnedTest test in tests)
+            foreach (UnturnedTestInstance test in tests)
             {
-                Assembly asm = test.Method.DeclaringType!.Assembly;
+                Assembly asm = test.Test.Method.DeclaringType!.Assembly;
                 if (!testAssemblies.Contains(asm))
                     testAssemblies.Add(asm);
 
                 exportedTests.Add(new UnturnedTestReference
                 {
-                    MethodName = test.IdentifierInfo?.MethodName ?? test.Method.Name,
-                    MetadataToken = test.Method.MetadataToken,
+                    MethodName = test.Test.IdentifierInfo?.MethodName ?? test.Test.Method.Name,
+                    MetadataToken = test.Test.Method.MetadataToken,
                     Uid = test.Uid,
-                    TypeName = test.Method.DeclaringType!.AssemblyQualifiedName,
-                    ParameterTypeNames = test.Method
+                    TypeName = test.Test.Method.DeclaringType!.AssemblyQualifiedName,
+                    ParameterTypeNames = test.Test.Method
                         .GetParameters()
                         .Select(x => x.ParameterType.AssemblyQualifiedName)
                         .ToArray()
