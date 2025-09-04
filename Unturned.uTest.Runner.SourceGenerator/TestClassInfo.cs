@@ -1,7 +1,9 @@
 using Microsoft.CodeAnalysis;
 using System;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using uTest.Util;
 
 namespace uTest;
@@ -12,8 +14,9 @@ internal record struct TestClassInfo(
     string AssemblyFullName,
     string Namespace,
     string ManagedType,
-    EquatableList<TestMethodInfo> Methods
-);
+    EquatableList<TestMethodInfo> Methods,
+    EquatableList<TestTypeParameterInfo>? TypeParameters,
+    EquatableList<TestTypeArgsAttributeInfo>? TypeArgsAttributes);
 
 internal sealed record TestMethodInfo(
     string ManagedMethod,
@@ -29,9 +32,11 @@ internal sealed record TestMethodInfo(
     string MethodName,
     EquatableList<TestParameterInfo>? Parameters,
     EquatableList<TestArgsAttributeInfo> ArgsAttributes,
+    EquatableList<TestTypeParameterInfo>? TypeParameters,
+    EquatableList<TestTypeArgsAttributeInfo>? TypeArgsAttributes,
     string ReturnTypeFullName,
     string ReturnTypeGloballyQualifiedName,
-    DelegateType DelegateType
+    DelegateType? DelegateType
 );
 
 internal record struct TestParameterInfo(
@@ -44,6 +49,44 @@ internal record struct TestParameterInfo(
     bool IsEnum,
     SpecialType SpecialParameterType
 );
+internal record struct TestTypeParameterInfo(
+    string Name,
+    string GloballyQualifiedSampleType,
+    TestParameterSetAttributeInfo? SetParameter);
+
+internal record struct TestTypeArgsAttributeInfo(EquatableList<EquatableTypeContainer> Types)
+{
+    public static bool TryCreate(AttributeData attribute, out TestTypeArgsAttributeInfo attributeInfo)
+    {
+        Unsafe.SkipInit(out attributeInfo);
+        if (attribute == null)
+            return false;
+
+        if (attribute.ConstructorArguments.Length > 0
+            && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Array } arg0)
+        {
+            ImmutableArray<TypedConstant> v = arg0.Values;
+            EquatableList<EquatableTypeContainer> list = new EquatableList<EquatableTypeContainer>(v.Length);
+            
+            for (int i = 0; i < v.Length; ++i)
+            {
+                TypedConstant c = v[i];
+                if (c.Kind != TypedConstantKind.Type )
+                    continue;
+                ITypeSymbol? t = (ITypeSymbol?)c.Value;
+                if (t == null)
+                    continue;
+
+                list.Add(new EquatableTypeContainer(t.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat)));
+            }
+
+            attributeInfo = new TestTypeArgsAttributeInfo(list);
+            return true;
+        }
+
+        return false;
+    }
+}
 
 internal record struct TestArgsAttributeInfo(
     string? From,
@@ -177,8 +220,6 @@ internal record TestParameterRangeAttributeInfo(
 
 internal sealed class DelegateType : IEquatable<DelegateType>
 {
-    internal int Methods;
-
     public PredefinedDelegateType Predefined { get; }
     public string? ReturnType { get; }
     public RefKind ReturnRefKind { get; }
@@ -213,7 +254,15 @@ internal sealed class DelegateType : IEquatable<DelegateType>
         NeedsUnsafe = methodSymbol.ReturnType is IPointerTypeSymbol or IFunctionPointerTypeSymbol
                       || methodSymbol.Parameters.Any(x => x.Type is IPointerTypeSymbol or IFunctionPointerTypeSymbol);
 
-        ReturnType = methodSymbol.ReturnType.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat);
+        if (methodSymbol.ReturnType is ITypeParameterSymbol t)
+        {
+            ReturnType = t.GetSampleTypeArgument();
+        }
+        else
+        {
+            ReturnType = methodSymbol.ReturnType.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat);
+        }
+
         ReturnRefKind = methodSymbol.ReturnsByRef
             ? RefKind.Ref : methodSymbol.ReturnsByRefReadonly
                 ? RefKind.RefReadOnly : RefKind.None;
@@ -230,15 +279,31 @@ internal sealed class DelegateType : IEquatable<DelegateType>
         }
     }
 
-    public string GetMethodByExpressionString(TestMethodInfo method, string typeName, string? name)
+    public string GetMethodByExpressionString(in TestClassInfo classInfo, TestMethodInfo method, string typeName, string? name)
     {
+        string methodName = method.MethodName;
+        if (method.TypeParameters is { Count: > 0 })
+        {
+            StringBuilder bldr = new StringBuilder(methodName).Append('<');
+            bool comma = false;
+            foreach (TestTypeParameterInfo p in method.TypeParameters)
+            {
+                if (comma) bldr.Append(',');
+                else comma = true;
+                bldr.Append(p.GloballyQualifiedSampleType);
+            }
+
+            bldr.Append('>');
+            methodName = bldr.ToString();
+        }
+
         switch (Predefined)
         {
             case PredefinedDelegateType.Action0:
-                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Action>(__uTest_instance__ => __uTest_instance__.@{method.MethodName})";
+                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Action>(__uTest_instance__ => __uTest_instance__.@{methodName})";
 
             case PredefinedDelegateType.Action1:
-                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Action<{method.Parameters![0].GloballyQualifiedName}>>(__uTest_instance__ => __uTest_instance__.@{method.MethodName})";
+                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Action<{GetParameterName(method.Parameters![0])}>>(__uTest_instance__ => __uTest_instance__.@{methodName})";
 
             case PredefinedDelegateType.Action2:
             case PredefinedDelegateType.Action3:
@@ -255,13 +320,13 @@ internal sealed class DelegateType : IEquatable<DelegateType>
             case PredefinedDelegateType.Action14:
             case PredefinedDelegateType.Action15:
             case PredefinedDelegateType.Action16:
-                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Action<{string.Join(", ", method.Parameters!.Select(x => x.GloballyQualifiedName))}>>(__uTest_instance__ => __uTest_instance__.@{method.MethodName})";
+                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Action<{string.Join(", ", method.Parameters!.Select(GetParameterName))}>>(__uTest_instance__ => __uTest_instance__.@{methodName})";
 
             case PredefinedDelegateType.Func0:
-                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Func<{method.ReturnTypeGloballyQualifiedName}>>(__uTest_instance__ => __uTest_instance__.@{method.MethodName})";
+                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Func<{GetReturnName(method)}>>(__uTest_instance__ => __uTest_instance__.@{methodName})";
 
             case PredefinedDelegateType.Func1:
-                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Func<{method.Parameters![0].GloballyQualifiedName}, {method.ReturnTypeGloballyQualifiedName}>>(__uTest_instance__ => __uTest_instance__.@{method.MethodName})";
+                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Func<{GetParameterName(method.Parameters![0])}, {GetReturnName(method)}>>(__uTest_instance__ => __uTest_instance__.@{methodName})";
 
             case PredefinedDelegateType.Func2:
             case PredefinedDelegateType.Func3:
@@ -278,13 +343,23 @@ internal sealed class DelegateType : IEquatable<DelegateType>
             case PredefinedDelegateType.Func14:
             case PredefinedDelegateType.Func15:
             case PredefinedDelegateType.Func16:
-                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Func<{string.Join(", ", method.Parameters!.Select(x => x.GloballyQualifiedName))}, {method.ReturnTypeGloballyQualifiedName}>>(__uTest_instance__ => __uTest_instance__.@{method.MethodName})";
+                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, global::System.Func<{string.Join(", ", method.Parameters!.Select(GetParameterName))}, {method.ReturnTypeGloballyQualifiedName}>>(__uTest_instance__ => __uTest_instance__.@{methodName})";
 
             default:
                 if (name == null)
                     throw new ArgumentNullException(nameof(name));
 
-                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, {name}>(__uTest_instance__ => __uTest_instance__.@{method.MethodName})";
+                return $"global::uTest.Runner.Util.SourceGenerationServices.GetMethodByExpression<{typeName}, {name}>(__uTest_instance__ => __uTest_instance__.@{methodName})";
+        }
+
+        static string GetReturnName(TestMethodInfo x)
+        {
+            return x.ReturnTypeGloballyQualifiedName;
+        }
+
+        static string GetParameterName(TestParameterInfo x)
+        {
+            return x.GloballyQualifiedName;
         }
     }
 
@@ -359,8 +434,36 @@ public sealed class DelegateParameter : IEquatable<DelegateParameter>
 
     public DelegateParameter(IParameterSymbol parameter)
     {
-        Definition = parameter.ToDisplayString(UnturnedTestGenerator.MethodDeclarationFormat);
         UnscopedRef = parameter.HasAttribute("global::System.Diagnostics.CodeAnalysis.UnscopedRefAttribute");
+
+        if (parameter is ITypeParameterSymbol t)
+        {
+            string replacementType = t.GetSampleTypeArgument();
+            ImmutableArray<SymbolDisplayPart> parts = parameter.ToDisplayParts(UnturnedTestGenerator.MethodDeclarationFormat);
+            int startIndex = -1;
+            int endIndex = 0;
+            for (; endIndex < parts.Length; ++endIndex)
+            {
+                if (startIndex == -1 && SymbolEqualityComparer.Default.Equals(parts[endIndex].Symbol, parameter.Type))
+                    startIndex = endIndex;
+                else if (startIndex != -1 && !SymbolEqualityComparer.Default.Equals(parts[endIndex].Symbol, parameter.Type))
+                    break;
+            }
+            
+            if (startIndex != -1)
+            {
+                int amt = endIndex - startIndex;
+                SymbolDisplayPart[] newArray = new SymbolDisplayPart[parts.Length - amt + 1];
+                parts.CopyTo(0, newArray, 0, startIndex);
+                parts.CopyTo(endIndex, newArray, startIndex + 1, parts.Length - endIndex);
+                newArray[startIndex] = new SymbolDisplayPart(SymbolDisplayPartKind.ClassName, null, replacementType);
+
+                Definition = string.Join(string.Empty, newArray);
+                return;
+            }
+        }
+
+        Definition = parameter.ToDisplayString(UnturnedTestGenerator.MethodDeclarationFormat);
     }
 
     /// <inheritdoc />

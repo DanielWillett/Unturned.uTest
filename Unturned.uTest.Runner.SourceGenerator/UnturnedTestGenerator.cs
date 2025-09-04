@@ -7,6 +7,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using uTest.Util;
 
 
@@ -49,9 +50,15 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 INamedTypeSymbol? setAttribute = compilation.GetTypeByMetadataName("uTest.SetAttribute");
                 INamedTypeSymbol? rangeAttribute = compilation.GetTypeByMetadataName("uTest.RangeAttribute");
                 INamedTypeSymbol? testArgsAttribute = compilation.GetTypeByMetadataName("uTest.TestArgsAttribute");
+                INamedTypeSymbol? typeArgsAttribute = compilation.GetTypeByMetadataName("uTest.TypeArgsAttribute");
+
+                EquatableList<TestTypeArgsAttributeInfo>? classTypeArgs = null;
+                EquatableList<TestTypeParameterInfo>? classTypeParameters = null;
 
                 if (ctx.TargetSymbol is INamedTypeSymbol namedType)
                 {
+                    ImmutableArray<AttributeData> classAttributes = namedType.GetAttributes();
+
                     managedType = ManagedTypeFormatter.GetManagedType(namedType);
                     ImmutableArray<ISymbol> allMembers = namedType.GetMembers();
                     foreach (ISymbol symbol in allMembers)
@@ -94,7 +101,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                     .FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, rangeAttribute));
 
                                 parameterInfo.Add(new TestParameterInfo(
-                                    MetadataNameFormatter.GetFullName(ctx.SemanticModel.Compilation, parameter.Type, parameter.RefKind != RefKind.None),
+                                    MetadataNameFormatter.GetFullName(ctx.SemanticModel.Compilation, parameter.Type, parameter.RefKind != RefKind.None, method),
                                     parameter.Name,
                                     parameter.Type.ToDisplayString(FullTypeNameWithGlobalFormat),
                                     TestParameterSetAttributeInfo.Create(setAttributeData),
@@ -116,6 +123,37 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 argsInfo.Add(attributeInfo);
                         }
 
+                        EquatableList<TestTypeParameterInfo>? methodTypeParameters = null;
+                        EquatableList<TestTypeArgsAttributeInfo>? methodTypeArgs = null;
+                        if (method.IsGenericMethod)
+                        {
+                            foreach (AttributeData argsAttribute in methodAttributes)
+                            {
+                                if (!SymbolEqualityComparer.Default.Equals(argsAttribute.AttributeClass, typeArgsAttribute))
+                                    continue;
+
+                                if (!TestTypeArgsAttributeInfo.TryCreate(argsAttribute, out TestTypeArgsAttributeInfo attributeInfo))
+                                    continue;
+
+                                methodTypeArgs ??= new EquatableList<TestTypeArgsAttributeInfo>();
+                                methodTypeArgs.Add(attributeInfo);
+                            }
+
+                            ImmutableArray<ITypeParameterSymbol> tps = method.TypeParameters;
+                            methodTypeParameters = new EquatableList<TestTypeParameterInfo>(tps.Length);
+                            foreach (ITypeParameterSymbol typeParam in tps)
+                            {
+                                AttributeData? setAttributeData = typeParam.GetAttributes()
+                                    .FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, setAttribute));
+
+                                methodTypeParameters.Add(new TestTypeParameterInfo(
+                                    typeParam.Name,
+                                    typeParam.GetSampleTypeArgument(),
+                                    TestParameterSetAttributeInfo.Create(setAttributeData))
+                                );
+                            }
+                        }
+
                         methods.Add(
                             new TestMethodInfo(
                                 ManagedMethod: managedMethod,
@@ -131,10 +169,41 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 MethodName: method.Name,
                                 Parameters: parameterInfo,
                                 ArgsAttributes: argsInfo,
-                                ReturnTypeFullName: MetadataNameFormatter.GetFullName(ctx.SemanticModel.Compilation, method.ReturnType),
+                                ReturnTypeFullName: MetadataNameFormatter.GetFullName(ctx.SemanticModel.Compilation, method.ReturnType, method.ReturnsByRef || method.ReturnsByRefReadonly, method),
                                 ReturnTypeGloballyQualifiedName: method.ReturnType.ToDisplayString(FullTypeNameWithGlobalFormat),
-                                DelegateType: new DelegateType(method)
+                                DelegateType: method.IsGenericMethod || namedType.IsGenericType ? null : new DelegateType(method),
+                                TypeParameters: methodTypeParameters,
+                                TypeArgsAttributes: methodTypeArgs
                             ));
+                    }
+
+                    if (namedType.IsGenericType)
+                    {
+                        ImmutableArray<ITypeParameterSymbol> tps = namedType.TypeParameters;
+                        classTypeParameters = new EquatableList<TestTypeParameterInfo>(tps.Length);
+                        foreach (ITypeParameterSymbol typeParam in tps)
+                        {
+                            AttributeData? setAttributeData = typeParam.GetAttributes()
+                                .FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, setAttribute));
+
+                            classTypeParameters.Add(new TestTypeParameterInfo(
+                                typeParam.Name,
+                                typeParam.GetSampleTypeArgument(),
+                                TestParameterSetAttributeInfo.Create(setAttributeData))
+                            );
+                        }
+
+                        foreach (AttributeData argsAttribute in classAttributes)
+                        {
+                            if (!SymbolEqualityComparer.Default.Equals(argsAttribute.AttributeClass, typeArgsAttribute))
+                                continue;
+
+                            if (!TestTypeArgsAttributeInfo.TryCreate(argsAttribute, out TestTypeArgsAttributeInfo attributeInfo))
+                                continue;
+
+                            classTypeArgs ??= new EquatableList<TestTypeArgsAttributeInfo>();
+                            classTypeArgs.Add(attributeInfo);
+                        }
                     }
                 }
                 else
@@ -142,7 +211,16 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     managedType = typeName;
                 }
 
-                return new TestClassInfo(ctx.TargetSymbol.MetadataName, ctx.TargetSymbol.Name, assemblyName, @namespace, managedType, methods);
+                return new TestClassInfo(
+                    ctx.TargetSymbol.MetadataName,
+                    ctx.TargetSymbol.Name,
+                    assemblyName,
+                    @namespace,
+                    managedType,
+                    methods,
+                    classTypeParameters,
+                    classTypeArgs
+                );
             });
 
         context.RegisterSourceOutput(
@@ -166,7 +244,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     ? null
                     : NamespaceHelper.SanitizeNamespace(classInfo.Namespace);
 
-                string globalName, globalTestName;
+                string globalName, globalTestName, openGlobalTestName;
                 if (classInfo.Namespace.Length > 0)
                 {
                     globalName = "global::" + @namespace + "." + className;
@@ -177,8 +255,27 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     globalName = "global::" + className;
                     globalTestName = "global::@" + classInfo.Name;
                 }
+                if (classInfo.TypeParameters is { Count: > 0 })
+                {
+                    openGlobalTestName = globalTestName + "<" + new string(',', classInfo.TypeParameters.Count - 1) + ">";
+                    StringBuilder sb = new StringBuilder(globalTestName).Append('<');
+                    bool comma = false;
+                    foreach (TestTypeParameterInfo p in classInfo.TypeParameters)
+                    {
+                        if (comma) sb.Append(',');
+                        else comma = true;
+                        sb.Append(p.GloballyQualifiedSampleType);
+                    }
 
-                bldr.Build($"[assembly: global::uTest.Runner.GeneratedTestBuilderAttribute(typeof({globalTestName}), typeof({globalName}))]")
+                    sb.Append('>');
+                    globalTestName = sb.ToString();
+                }
+                else
+                {
+                    openGlobalTestName = globalTestName;
+                }
+
+                bldr.Build($"[assembly: global::uTest.Runner.GeneratedTestBuilderAttribute(typeof({openGlobalTestName}), typeof({globalName}))]")
                     .Empty();
 
                 if (@namespace != null)
@@ -209,7 +306,9 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     {
                         ++ovlNum;
                     }
-                    DelegateType deleType = method.DelegateType;
+                    DelegateType? deleType = method.DelegateType;
+                    if (deleType == null)
+                        continue;
                     if (deleType.Predefined != PredefinedDelegateType.None)
                         continue;
 
@@ -230,15 +329,21 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 string escTypeName = StringLiteralEscaper.Escape(classInfo.Name);
 
                 bldr.Build($"builder.MethodCount = {classInfo.Methods.Count};");
-                bldr.Build($"builder.TestType = typeof({globalTestName});");
+                bldr.Build($"builder.TestType = typeof({openGlobalTestName});");
 
+                if (classInfo.Methods.Any(x => x.DelegateType == null))
+                {
+                    bldr.Empty()
+                        .Build($"global::System.Reflection.MethodInfo[] methods = typeof({openGlobalTestName}).GetMethods(global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.DeclaredOnly);")
+                        .Empty();
+                }
 
                 bool isFirst = true;
                 foreach (TestMethodInfo method in classInfo.Methods)
                 {
-                    DelegateType delegateType = method.DelegateType;
-                    string delegateName = method.DelegateType.Name;
-                    if (delegateType.Predefined == PredefinedDelegateType.None)
+                    DelegateType? delegateType = method.DelegateType;
+                    string? delegateName = method.DelegateType?.Name;
+                    if (delegateType != null && delegateType.Predefined == PredefinedDelegateType.None)
                     {
                         string? foundName = createdTypes.Find(x => ReferenceEquals(method.DelegateType, x.Item1)).Item2;
                         if (foundName != null)
@@ -252,10 +357,11 @@ public class UnturnedTestGenerator : IIncrementalGenerator
 
                     string file = method.FilePath;
 
+                    string escManagedMethod = StringLiteralEscaper.Escape(method.ManagedMethod);
                     bldr.String("builder.Add(new global::uTest.Runner.UnturnedTest()")
                         .In().String("{").In()
                             .Build($"ManagedType = \"{escManagedType}\",")
-                            .Build($"ManagedMethod = \"{StringLiteralEscaper.Escape(method.ManagedMethod)}\",")
+                            .Build($"ManagedMethod = \"{escManagedMethod}\",")
                             .Build($"IdentifierInfo = new global::Microsoft.Testing.Platform.Extensions.Messages.TestMethodIdentifierProperty(").In()
                                 .Build($"\"{escAssemblyFullName}\",")
                                 .Build($"\"{escNamespace}\",")
@@ -272,7 +378,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         string list = string.Join("\", \"", method.Parameters.Select(p => StringLiteralEscaper.Escape(p.FullTypeName)));
                         bldr    .Build($"new string[] {{ \"{list}\" }},");
                     }
-
+                    
                     bldr        .Build($"\"{StringLiteralEscaper.Escape(method.ReturnTypeFullName)}\"").Out()
                             .String("),")
                             .Build($"LocationInfo = new global::Microsoft.Testing.Platform.Extensions.Messages.TestFileLocationProperty(").In()
@@ -283,9 +389,18 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 .String(")").Out()
                             .String("),")
                             .Build($"DisplayName = \"{StringLiteralEscaper.Escape(method.DisplayName)}\",")
-                            .Build($"Uid = \"{StringLiteralEscaper.Escape(method.Uid)}\",")
-                            .Build($"Method = {delegateType.GetMethodByExpressionString(method, globalTestName, delegateName)},")
-                            .String("Parameters = ").In();
+                            .Build($"Uid = \"{StringLiteralEscaper.Escape(method.Uid)}\",");
+
+                    if (delegateType != null)
+                    {
+                        bldr.Build($"Method = {delegateType.GetMethodByExpressionString(classInfo, method, globalTestName, delegateName)},");
+                    }
+                    else
+                    {
+                        bldr.Build($"Method = global::uTest.Runner.Util.SourceGenerationServices.GetMethodInfoByManagedMethod(typeof({openGlobalTestName}), methods, \"{escManagedMethod}\"),");
+                    }
+
+                    bldr    .String("Parameters = ").In();
                     if (method.Parameters is not { Count: > 0 })
                     {
                         bldr.String("global::System.Array.Empty<global::uTest.Runner.UnturnedTestParameter>(),").Out();
@@ -376,7 +491,6 @@ public class UnturnedTestGenerator : IIncrementalGenerator
 
                             bldr.String("{").In()
                                 .Build($"Name = \"{StringLiteralEscaper.Escape(parameter.Name)}\",")
-                                .Build($"Type = typeof({parameter.GloballyQualifiedName}),")
                                 .Build($"IsByRef = {(parameter.RefKind == RefKind.None ? "false" : "true")},");
                             if (mode == 0)
                                 bldr.Build($"Position = {i}");

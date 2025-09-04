@@ -12,6 +12,7 @@
 
     <IsUnturnedTestProject>True</IsUnturnedTestProject>
     <AssertionStyle>NUnit</AssertionStyle>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
   </PropertyGroup>
 

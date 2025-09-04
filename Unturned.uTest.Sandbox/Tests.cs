@@ -1,14 +1,22 @@
 namespace uTest.Sandbox;
 
 [Test]
-public class Tests : ITestClass
+[TypeArgs(typeof(long))]
+public class Tests<[Set(typeof(string), typeof(Version))] T> : ITestClass
 {
     [Test]
+    [TestArgs(1, 2)]
+    public unsafe void TestGeneric<[Set(typeof(long), typeof(int))] T2>(List<T> t1, T2[] t2, T* ptr)
+    {
+        Test.Pass();
+    }
+
+    [Test]
     public void ParameterizedTestFromRange(
-        [Range(ConsoleColor.Black, ConsoleColor.Yellow)]
+        //[Range(ConsoleColor.Black, ConsoleColor.Yellow)]
         ConsoleColor testInt,
 
-        [Range(0, 15, step: 5)]
+        //[Range(0, 15, step: 5)] [Set(21, 18)]
         int spacing
     )
     {
@@ -16,9 +24,10 @@ public class Tests : ITestClass
     }
 
     [Test]
+    [TestArgs(-1)]
     public void ParameterizedTestFromSet(
-        [Set("string1", "", "string2")]
-        string str
+        //[Range(0, 16383)]
+        int str
     )
     {
         Test.Fail();

@@ -11,6 +11,7 @@ public interface IGeneratedTestBuilder
     int MethodCount { set; }
 
     Type TestType { set; }
+    UnturnedTestParameter[]? TypeParameters { set; }
 
     void Add(UnturnedTest test);
 }
@@ -32,6 +33,9 @@ internal class GeneratedTestBuilder : IGeneratedTestBuilder
 
     /// <inheritdoc />
     public Type? TestType { get; set; }
+
+    /// <inheritdoc />
+    public UnturnedTestParameter[]? TypeParameters { get; set; }
 
     public void Add(UnturnedTest test)
     {

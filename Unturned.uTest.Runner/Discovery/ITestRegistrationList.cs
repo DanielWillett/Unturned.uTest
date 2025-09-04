@@ -14,18 +14,42 @@ internal interface ITestRegistrationList : ITestFrameworkCapability
 internal readonly struct UnturnedTestInstance
 {
     public UnturnedTest Test { get; }
+    public UnturnedTestArgument[] TypeArguments { get; }
     public UnturnedTestArgument[] Arguments { get; }
 
     public string Uid { get; }
     public string DisplayName { get; }
+    public int Index { get; }
+    public int ArgHash { get; }
     public bool HasParameters => Arguments.Length > 0;
 
-    public UnturnedTestInstance(UnturnedTest test, UnturnedTestArgument[] arguments, string uid, string displayName)
+    public UnturnedTestInstance(UnturnedTest test, UnturnedTestArgument[] typeArguments, UnturnedTestArgument[] arguments, string uid, string displayName, int index, int argHash)
     {
         Test = test;
         Arguments = arguments;
         Uid = uid;
         DisplayName = displayName;
+        Index = index;
+        ArgHash = argHash;
+        TypeArguments = typeArguments;
+    }
+
+    internal static int CalculateArgumentHash(UnturnedTestArgument[] typeArguments, UnturnedTestArgument[] arguments)
+    {
+        int hashCode = -2128831035;
+        foreach (UnturnedTestArgument arg in typeArguments)
+        {
+            hashCode = unchecked( (hashCode ^ ((Type)arg.Value!).GetHashCode()) * 16777619 );
+        }
+        foreach (UnturnedTestArgument arg in arguments)
+        {
+            if (arg.Value != null)
+                hashCode = unchecked ( (hashCode ^ arg.Value.GetHashCode()) * 16777619 );
+            else
+                hashCode = ~hashCode;
+        }
+
+        return hashCode;
     }
 
     public TestNode CreateTestNode(out TestNodeUid? parentUid)
@@ -54,6 +78,12 @@ internal readonly struct UnturnedTestInstance
     {
         return CreateTestNode(out _);
     }
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+    {
+        return ArgHash ^ Test.Uid.GetHashCode();
+    }
 }
 
 internal readonly struct UnturnedTestArgument : IEquatable<UnturnedTestArgument>
@@ -62,6 +92,10 @@ internal readonly struct UnturnedTestArgument : IEquatable<UnturnedTestArgument>
 
     public object? Value { get; }
 
+    public UnturnedTestArgument(Type type)
+    {
+        Value = type;
+    }
     public UnturnedTestArgument(object? value)
     {
         Value = value;

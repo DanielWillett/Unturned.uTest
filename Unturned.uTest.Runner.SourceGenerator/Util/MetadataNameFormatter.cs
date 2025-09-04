@@ -2,6 +2,8 @@ using Microsoft.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -15,11 +17,11 @@ internal class MetadataNameFormatter
         public AssemblyQualifiedNameEscaper() : base('\r', '\n', '\t', '\v', '\\', ',', '+', '[', ']', '*', '&') { }
     }
 
-    private static string GetMetadataNameStr(Compilation compilation, ITypeSymbol type, bool byRef, bool includeAsmName)
+    private static string GetMetadataNameStr(Compilation compilation, ITypeSymbol type, bool byRef, bool includeAsmName, IMethodSymbol method)
     {
-        if (type.ContainingType != null)
+        if (type.ContainingType != null || type is INamedTypeSymbol { IsGenericType: true })
         {
-            return GetMetadataNameSlow(compilation, type, byRef, includeAsmName);
+            return GetMetadataNameSlow(compilation, type, byRef, includeAsmName, method);
         }
 
         string metaName = QualifiedNameEscaper.Escape(type.MetadataName);
@@ -43,32 +45,29 @@ internal class MetadataNameFormatter
         return metaName + ", " + asmName;
     }
 
-    public static string GetAssemblyQualifiedNameNoVersion(Compilation compilation, ITypeSymbol type, bool byRef = false)
+    public static string GetAssemblyQualifiedNameNoVersion(Compilation compilation, ITypeSymbol type, IMethodSymbol method, bool byRef = false)
     {
         if (type is not INamedTypeSymbol n || !n.IsGenericType || n.IsUnboundGenericType)
-            return GetMetadataNameStr(compilation, type, byRef, true);
+            return GetMetadataNameStr(compilation, type, byRef, true, method);
 
         if (n.TypeArguments.Any(x => x is IErrorTypeSymbol))
-            return GetMetadataNameStr(compilation, n, byRef, true);
+            return GetMetadataNameStr(compilation, n, byRef, true, method);
 
-        return GetMetadataNameSlow(compilation, type, byRef, true);
+        return GetMetadataNameSlow(compilation, type, byRef, true, method: method);
     }
 
-    public static string GetFullName(Compilation compilation, ITypeSymbol type, bool byRef = false)
+    public static string GetFullName(Compilation compilation, ITypeSymbol type, bool byRef, IMethodSymbol method)
     {
-        if (type is not INamedTypeSymbol n || !n.IsGenericType || n.IsUnboundGenericType)
-            return GetMetadataNameStr(compilation, type, byRef, false);
+        if (type is INamedTypeSymbol n && (n.TypeArguments.IsDefaultOrEmpty || n.TypeArguments.Any(x => x is IErrorTypeSymbol)))
+            return GetMetadataNameStr(compilation, type, byRef, false, method);
 
-        if (n.TypeArguments.Any(x => x is IErrorTypeSymbol))
-            return GetMetadataNameStr(compilation, n, byRef, false);
-
-        return GetMetadataNameSlow(compilation, type, byRef, false);
+        return GetMetadataNameSlow(compilation, type, byRef, false, method);
     }
 
-    private static string GetMetadataNameSlow(Compilation compilation, ITypeSymbol type, bool byRef, bool includeAsmName)
+    private static string GetMetadataNameSlow(Compilation compilation, ITypeSymbol type, bool byRef, bool includeAsmName, IMethodSymbol method)
     {
         StringBuilder sb = new StringBuilder(32 * (((type as INamedTypeSymbol)?.TypeArguments.Length ?? 0) + 1));
-        GetMetadataName(compilation, type, sb, byRef: byRef, includeAsmName: includeAsmName);
+        GetMetadataName(compilation, type, sb, byRef: byRef, includeAsmName: includeAsmName, method: method);
         return sb.ToString();
     }
 
@@ -121,7 +120,7 @@ internal class MetadataNameFormatter
         return foundType != null;
     }
 
-    private static void GetMetadataName(Compilation compilation, ITypeSymbol type, StringBuilder bldr, bool nested = false, bool byRef = false, bool includeAsmName = true)
+    private static void GetMetadataName(Compilation compilation, ITypeSymbol type, StringBuilder bldr, bool nested = false, bool byRef = false, bool includeAsmName = true, IMethodSymbol? method = null)
     {
         ITypeSymbol elementType = type;
         while (true)
@@ -134,19 +133,51 @@ internal class MetadataNameFormatter
                 break;
         }
 
-        if (!nested && elementType.ContainingNamespace != null)
+        bool typeParamAppended = false;
+        if (elementType is ITypeParameterSymbol p)
         {
-            bldr.Append(QualifiedNameEscaper.Escape(elementType.ContainingNamespace.ToDisplayString(UnturnedTestGenerator.FullTypeNameFormat)))
-                .Append('.');
-        }
+            switch (p.TypeParameterKind)
+            {
+                case TypeParameterKind.Method:
+                    int index = method?.TypeParameters.FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(elementType, x))?.Ordinal ?? -1;
+                    if (index != -1)
+                    {
+                        bldr.Append("!!").Append(index.ToString(CultureInfo.InvariantCulture));
+                        typeParamAppended = true;
+                    }
+                    break;
 
-        if (elementType.ContainingType != null)
+                case TypeParameterKind.Type:
+                    index = method?.ContainingType?.TypeParameters.FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(elementType, x))?.Ordinal ?? -1;
+                    if (index != -1)
+                    {
+                        bldr.Append('!').Append(index.ToString(CultureInfo.InvariantCulture));
+                        typeParamAppended = true;
+                    }
+                    break;
+            }
+
+            if (!typeParamAppended)
+            {
+                bldr.Append(p.MetadataName);
+            }
+        }
+        else
         {
-            GetMetadataName(compilation, elementType.ContainingType, bldr, nested: true);
-            bldr.Append('+');
-        }
+            if (!nested && elementType.ContainingNamespace != null)
+            {
+                bldr.Append(QualifiedNameEscaper.Escape(elementType.ContainingNamespace.ToDisplayString(UnturnedTestGenerator.FullTypeNameFormat)))
+                    .Append('.');
+            }
 
-        bldr.Append(QualifiedNameEscaper.Escape(elementType.MetadataName));
+            if (elementType.ContainingType != null)
+            {
+                GetMetadataName(compilation, elementType.ContainingType, bldr, nested: true, method: method);
+                bldr.Append('+');
+            }
+
+            bldr.Append(QualifiedNameEscaper.Escape(elementType.MetadataName));
+        }
 
         if (nested)
             return;
@@ -178,7 +209,7 @@ internal class MetadataNameFormatter
                                 bldr.Append(',');
 
                             bldr.Append('[');
-                            GetMetadataName(compilation, s, bldr);
+                            GetMetadataName(compilation, s, bldr, method: method);
                             bldr.Append(']');
                             ++ct;
                         }
@@ -191,7 +222,7 @@ internal class MetadataNameFormatter
                         bldr.Append(',');
 
                     bldr.Append('[');
-                    GetMetadataName(compilation, s, bldr);
+                    GetMetadataName(compilation, s, bldr, method: method);
                     bldr.Append(']');
                     ++ct;
                 }
@@ -236,7 +267,7 @@ internal class MetadataNameFormatter
                 break;
         }
 
-        if (!includeAsmName || IsAssemblyMscorlib(compilation, elementType) || elementType.ContainingAssembly == null)
+        if (typeParamAppended || !includeAsmName || IsAssemblyMscorlib(compilation, elementType) || elementType.ContainingAssembly == null)
             return;
 
         bldr.Append(", ")

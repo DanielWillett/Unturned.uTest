@@ -1,3 +1,4 @@
+using JetBrains.Annotations;
 using System;
 
 namespace uTest;
@@ -5,14 +6,14 @@ namespace uTest;
 /// <summary>
 /// Defines a set of arguments to use for one test. A test can declare this attribute multiple times. 
 /// </summary>
-/// <remarks>This attribute can also be used on generic classes, but not with <see cref="From"/>.</remarks>
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
+[AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = true)]
+[UsedImplicitly(ImplicitUseTargetFlags.Members)]
 public sealed class TestArgsAttribute : Attribute
 {
-    /// <summary>
-    /// List of parameter values in the order they're declared by the method definition.
-    /// </summary>
-    public object[]? Args { get; }
+    ///// <summary>
+    ///// List of parameter values in the order they're declared by the method definition.
+    ///// </summary>
+    //public object[]? Args { get; }
 
     /// <summary>
     /// The name of a member (field, property, method) to fetch the arguments from in the declaring type.
@@ -48,10 +49,6 @@ public sealed class TestArgsAttribute : Attribute
     /// <summary>
     /// Defines a set of arguments declared by a member in this type using the <see cref="From"/> property.
     /// </summary>
-    /// <remarks>
-    /// This constructor should NOT be used with generic classes.
-    /// Only <see cref="TestArgsAttribute(object[])"/> (with <see cref="Type"/> values) should be used for generic classes.
-    /// </remarks>
     public TestArgsAttribute() { }
 
     /// <summary>
@@ -71,14 +68,10 @@ public sealed class TestArgsAttribute : Attribute
     /// </example>
     /// </summary>
     /// <param name="args">List of parameter values in the order they're declared by the method definition.</param>
-    /// <remarks>
-    /// This constructor can be used with <see cref="Type"/> values on generic classes,
-    /// where there are the same amount of types as unbound generic parameters.
-    /// </remarks>
     [SetsRequiredMembers]
     public TestArgsAttribute(params object[] args)
     {
-        Args = args;
+        //Args = args;
         From = null;
     }
 }

@@ -1,6 +1,3 @@
-using System.Collections;
-using System.Diagnostics;
-using System.Reflection;
 using Microsoft.Testing.Platform.Capabilities.TestFramework;
 using Microsoft.Testing.Platform.Extensions;
 using Microsoft.Testing.Platform.Extensions.Messages;
@@ -11,6 +8,9 @@ using Microsoft.Testing.Platform.Requests;
 using Microsoft.Testing.Platform.Services;
 using Microsoft.Testing.Platform.TestHost;
 using Newtonsoft.Json;
+using System.Collections;
+using System.Diagnostics;
+using System.Reflection;
 using uTest.Module;
 using uTest.Protocol;
 using uTest.Runner.Unturned;

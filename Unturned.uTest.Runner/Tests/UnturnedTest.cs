@@ -1,8 +1,6 @@
+using Microsoft.Testing.Platform.Extensions.Messages;
 using System.Globalization;
 using System.Reflection;
-using System.Reflection.Emit;
-using Microsoft.Testing.Platform.Extensions.Messages;
-using uTest.Runner.Util;
 
 namespace uTest.Runner;
 
@@ -25,6 +23,8 @@ public class UnturnedTest
 
     public TestMethodIdentifierProperty? IdentifierInfo { get; init; }
     public TestFileLocationProperty? LocationInfo { get; init; }
+
+    public UnturnedTestParameter[]? TypeParameters { get; init; }
 
 
     /// <inheritdoc />
@@ -52,8 +52,7 @@ public sealed class UnturnedTestArgs
 public class UnturnedTestParameter
 {
     public required string Name { get; init; }
-    public required Type Type { get; init; }
-    public required bool IsByRef { get; init; }
+    public bool IsByRef { get; init; }
     public required int Position { get; init; }
 
     protected internal virtual bool TryGetValues(out Array? values, out string? from)

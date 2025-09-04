@@ -201,16 +201,19 @@ internal static class ManagedTypeFormatter
                 break;
         }
 
-        if (type is ITypeParameterSymbol typeParam && parameterProvider != null)
+        if (elementType is ITypeParameterSymbol typeParam && parameterProvider != null)
         {
             ITypeSymbol? typeParamProvider = parameterProvider as ITypeSymbol;
-            if (typeParam.TypeParameterKind == TypeParameterKind.Method && parameterProvider is IMethodSymbol methodParamProvider)
+            if (parameterProvider is IMethodSymbol methodParamProvider)
             {
-                int index = methodParamProvider.TypeParameters.FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x, type))?.Ordinal ?? -1;
-                if (index >= 0)
+                if (typeParam.TypeParameterKind == TypeParameterKind.Method)
                 {
-                    bldr.Append("!!").Append(index.ToString(CultureInfo.InvariantCulture));
-                    goto nameAppended;
+                    int index = methodParamProvider.TypeParameters.FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x, elementType))?.Ordinal ?? -1;
+                    if (index >= 0)
+                    {
+                        bldr.Append("!!").Append(index.ToString(CultureInfo.InvariantCulture));
+                        goto nameAppended;
+                    }
                 }
 
                 typeParamProvider = methodParamProvider.ContainingType;
@@ -218,7 +221,7 @@ internal static class ManagedTypeFormatter
 
             if (typeParam.TypeParameterKind != TypeParameterKind.Method && typeParamProvider is INamedTypeSymbol { IsGenericType: true } declaringTypeNamed)
             {
-                int index = declaringTypeNamed.TypeParameters.FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x, type))?.Ordinal ?? -1;
+                int index = declaringTypeNamed.TypeParameters.FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x, elementType))?.Ordinal ?? -1;
                 if (index >= 0)
                 {
                     bldr.Append('!').Append(index.ToString(CultureInfo.InvariantCulture));
@@ -227,30 +230,36 @@ internal static class ManagedTypeFormatter
             }
         }
         
-        if (!nested && type.ContainingNamespace != null)
+        if (elementType is not ITypeParameterSymbol && !nested && elementType.ContainingNamespace != null)
         {
-            bldr.Append(NamespaceEscaper.Escape(type.ContainingNamespace.ToDisplayString(UnturnedTestGenerator.FullTypeNameFormat)))
+            bldr.Append(NamespaceEscaper.Escape(elementType.ContainingNamespace.ToDisplayString(UnturnedTestGenerator.FullTypeNameFormat)))
                 .Append('.');
         }
 
-        if (elementType.ContainingType != null)
+        if (elementType is not ITypeParameterSymbol && elementType.ContainingType != null)
         {
             GetTypeMetadataName(elementType.ContainingType, bldr, nested: true, parameterProvider: parameterProvider);
             bldr.Append('+');
         }
 
-        bldr.Append(TypeIdEscaper.Escape(elementType.Name, elementType.GetArity()));
+        int arity = elementType.GetArity();
+        bldr.Append(TypeIdEscaper.Escape(elementType.Name, arity));
+        if (arity > 0)
+        {
+            bldr.Append('`').Append(arity.ToString(CultureInfo.InvariantCulture));
+        }
         nameAppended:
         if (nested)
             return;
 
-        if (elementType is INamedTypeSymbol { IsGenericType: true, IsUnboundGenericType: false } instance)
+        if (elementType is INamedTypeSymbol { IsGenericType: true, IsUnboundGenericType: false } instance
+            && (parameterProvider != null || instance.TypeArguments.Any(x => x is not ITypeParameterSymbol)))
         {
             bldr.Append('<');
 
             int ct = 0;
             // nested types
-            if (elementType.ContainingType != null)
+            if (elementType is not ITypeParameterSymbol && elementType.ContainingType != null)
             {
                 Stack<INamedTypeSymbol> stack = new Stack<INamedTypeSymbol>(4);
                 for (ITypeSymbol c = elementType.ContainingType; c != null; c = c.ContainingType)
@@ -263,22 +272,21 @@ internal static class ManagedTypeFormatter
                 {
                     INamedTypeSymbol nestedType = stack.Pop();
 
-                    ImmutableArray<ITypeParameterSymbol> nestedTypeArgs = nestedType.TypeParameters;
+                    ImmutableArray<ITypeSymbol> nestedTypeArgs = nestedType.TypeArguments;
 
-                    foreach (ITypeParameterSymbol s in nestedTypeArgs)
+                    foreach (ITypeSymbol s in nestedTypeArgs)
                     {
                         if (ct != 0)
                             bldr.Append(',');
-
                         GetTypeMetadataName(s, bldr, parameterProvider: parameterProvider);
                         ++ct;
                     }
                 }
             }
 
-            ImmutableArray<ITypeParameterSymbol> typeArgs = instance.TypeParameters;
+            ImmutableArray<ITypeSymbol> typeArgs = instance.TypeArguments;
 
-            foreach (ITypeParameterSymbol s in typeArgs)
+            foreach (ITypeSymbol s in typeArgs)
             {
                 if (ct != 0)
                     bldr.Append(',');

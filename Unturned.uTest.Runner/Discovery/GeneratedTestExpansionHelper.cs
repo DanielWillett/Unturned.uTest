@@ -1,8 +1,7 @@
-using System.Buffers;
+using Microsoft.Testing.Platform.Logging;
 using System.Collections;
 using System.Diagnostics;
 using System.Globalization;
-using Microsoft.Testing.Platform.Logging;
 using System.Reflection;
 using System.Text;
 using uTest.Runner.Util;
@@ -115,13 +114,21 @@ file class TestExpandProcessor
     
     public async Task<List<UnturnedTestInstance>> ExpandTestsAsync()
     {
+        Stopwatch sw = Stopwatch.StartNew();
         foreach (UnturnedTest test in _originalTests)
         {
             await ExpandTestAsync(test).ConfigureAwait(false);
         }
+        sw.Stop();
+        await _logger.LogInformationAsync($"Expanded {_originalTests.Count} tests to {_instances.Count} in {sw.Elapsed.Milliseconds} ms.");
 
         return _instances;
     }
+
+    private static readonly int DefaultArgHash = UnturnedTestInstance.CalculateArgumentHash(
+        Array.Empty<UnturnedTestArgument>(),
+        Array.Empty<UnturnedTestArgument>()
+    );
 
     public ValueTask ExpandTestAsync(UnturnedTest test)
     {
@@ -147,152 +154,29 @@ file class TestExpandProcessor
 
             _runners.Add(_testType, instance);
             return instance;
-        });
+        }, LazyThreadSafetyMode.None);
 
         // basic 0-arg test
-        if (_parameters.Length == 0)
+        if (_parameters.Length == 0 && _genericArguments.Length == 0)
         {
-            _instances.Add(new UnturnedTestInstance(test, Array.Empty<UnturnedTestArgument>(), test.Uid, test.DisplayName));
+            _instances.Add(new UnturnedTestInstance(
+                test,
+                Array.Empty<UnturnedTestArgument>(),
+                Array.Empty<UnturnedTestArgument>(),
+                test.Uid,
+                test.DisplayName,
+                index: 0,
+                argHash: DefaultArgHash)
+            );
             return default;
         }
 
-        return new ValueTask(ExpandComplexTest());
+        return new ValueTask(ExpandComplexTest(Array.Empty<UnturnedTestArgument>()));
     }
 
-    private async Task ExpandComplexTest()
+    private async Task ExpandComplexTest(UnturnedTestArgument[] typeArguments)
     {
         int startIndex = _instances.Count;
-
-        foreach (UnturnedTestArgs argList in _test.Args)
-        {
-            if (argList.Values != null)
-            {
-                if (argList.Values.Length != _parameters.Length)
-                {
-                    // skip test: arg values length != expected parameter length
-                    await _logger.LogErrorAsync(
-                        string.Format(
-                            Properties.Resources.LogErrorMismatchedArgsParameterCount,
-                            argList.Values.Length,
-                            _test.DisplayName,
-                            _parameters.Length
-                        )
-                    );
-                    continue;
-                }
-
-                UnturnedTestArgument[] args = new UnturnedTestArgument[_parameters.Length];
-                bool anyErrors = false;
-                for (int i = 0; i < _parameters.Length; ++i)
-                {
-                    object? value = argList.Values.GetValue(i);
-                    ParameterInfo param = _parameters[i];
-                    if (value == null)
-                    {
-                        if (!param.ParameterType.IsValueType)
-                        {
-                            //args[i] = default; (already set to default on array init)
-                            continue;
-                        }
-
-                        // skip test: null value type
-                        anyErrors = true;
-                        await _logger.LogErrorAsync(
-                            string.Format(
-                                Properties.Resources.LogErrorMismatchedParameterType,
-                                "null",
-                                param.Name,
-                                _test.DisplayName
-                            )
-                        );
-                        break;
-                    }
-
-                    if (!param.ParameterType.IsInstanceOfType(value))
-                    {
-                        try
-                        {
-                            value = Convert.ChangeType(value, param.ParameterType, CultureInfo.InvariantCulture);
-                        }
-                        catch (Exception ex)
-                        {
-                            // skip test: mismatched parameter type
-                            anyErrors = true;
-                            await _logger.LogErrorAsync(
-                                string.Format(
-                                    Properties.Resources.LogErrorMismatchedParameterType,
-                                    $"{{{Format(value)}}}",
-                                    param.Name,
-                                    _test.DisplayName
-                                ),
-                                ex
-                            );
-                            break;
-                        }
-                    }
-
-                    args[i] = new UnturnedTestArgument(value);
-                }
-
-                if (anyErrors || InstanceAlreadyExists(args, startIndex))
-                    continue;
-
-                CreateTestNames(args, out string uid, out string displayName);
-                _instances.Add(new UnturnedTestInstance(_test, args, uid, displayName));
-            }
-            else if (!string.IsNullOrWhiteSpace(argList.From))
-            {
-                MemberInfo? member = GeneratedTestExpansionHelper.GetMember(argList.From!, _testType, out _);
-
-                if (member == null)
-                {
-                    await _logger.LogErrorAsync(
-                        string.Format(
-                            Properties.Resources.LogErrorMissingFromMember,
-                            argList.From,
-                            _testType.FullName
-                        )
-                    );
-                    continue;
-                }
-
-                object? value = await InvokeFromMember(member).ConfigureAwait(false);
-                ParameterInfo[] parameters = _test.Method.GetParameters();
-                if (value is IEnumerable enumerable)
-                {
-                    foreach (object argListValue in enumerable)
-                    {
-                        if (!AnonymousTypeHelper.TryMapObjectToMethodParameters(
-                                argListValue, _test.Method, member, parameters, out UnturnedTestArgument[] args
-                            ))
-                        {
-                            continue;
-                        }
-
-                        if (InstanceAlreadyExists(args, startIndex))
-                            continue;
-
-                        CreateTestNames(args, out string uid, out string displayName);
-                        _instances.Add(new UnturnedTestInstance(_test, args, uid, displayName));
-                    }
-                }
-                else if (value != null)
-                {
-                    if (!AnonymousTypeHelper.TryMapObjectToMethodParameters(
-                            value, _test.Method, member, parameters, out UnturnedTestArgument[] args
-                        ))
-                    {
-                        continue;
-                    }
-
-                    if (InstanceAlreadyExists(args, startIndex))
-                        continue;
-
-                    CreateTestNames(args, out string uid, out string displayName);
-                    _instances.Add(new UnturnedTestInstance(_test, args, uid, displayName));
-                }
-            }
-        }
 
         // range and set parameters
         ParameterValuesInfo[] infos = new ParameterValuesInfo[_test.Parameters.Length];
@@ -390,57 +274,189 @@ file class TestExpandProcessor
             variationCount *= infos[i].UniqueCount;
         }
 
-        if (variationCount is <= 0 or > RangeHelper.MaxTestVariations)
+        if (variationCount is > 0 and <= RangeHelper.MaxTestVariations)
         {
-            if (hasAnySetsOrRanges || _instances.Count == startIndex)
+            int variationCountFixed = checked((int)variationCount);
+
+            if (_instances.Capacity < variationCountFixed)
+                _instances.Capacity = variationCountFixed;
+
+            bool reachedEnd = false;
+            do
             {
-                await _logger.LogErrorAsync(
-                    string.Format(
-                        Properties.Resources.LogErrorParametersMissingValues,
-                        _test.DisplayName,
-                        _testType.FullName,
-                        RangeHelper.MaxTestVariations
-                    )
-                );
-            }
-            return;
-        }
-
-        int variationCountFixed = checked ( (int)variationCount );
-
-        if (_instances.Capacity < variationCountFixed)
-            _instances.Capacity = variationCountFixed;
-
-        bool reachedEnd = false;
-        do
-        {
-            for (int p = infos.Length - 1; p >= 0; --p)
-            {
-                ref ParameterValuesInfo info = ref infos[p];
-                if ((uint)info.Index < info.UniqueCount - 1u)
+                for (int p = infos.Length - 1; p >= 0; --p)
                 {
-                    ++info.Index;
+                    ref ParameterValuesInfo info = ref infos[p];
+                    if ((uint)info.Index < info.UniqueCount - 1u)
+                    {
+                        ++info.Index;
+                        break;
+                    }
+
+                    info.Index = 0;
+                    if (p != 0)
+                        continue;
+
+                    reachedEnd = true;
                     break;
                 }
 
-                info.Index = 0;
-                if (p != 0)
+                UnturnedTestArgument[] args = new UnturnedTestArgument[infos.Length];
+                for (int p = 0; p < infos.Length; ++p)
+                {
+                    ref ParameterValuesInfo info = ref infos[p];
+                    args[p] = new UnturnedTestArgument(info.Values!.GetValue(info.Index));
+                }
+
+                int argHash = UnturnedTestInstance.CalculateArgumentHash(typeArguments, args);
+
+                CreateTestNames(args, out string uid, out string displayName);
+                _instances.Add(new UnturnedTestInstance(_test, typeArguments, args, uid, displayName, _instances.Count - startIndex, argHash));
+            } while (!reachedEnd);
+        }
+        else if (hasAnySetsOrRanges)
+        {
+            await _logger.LogErrorAsync(
+                string.Format(
+                    Properties.Resources.LogErrorParametersMissingValues,
+                    _test.DisplayName,
+                    _testType.FullName,
+                    RangeHelper.MaxTestVariations
+                )
+            );
+        }
+
+        // arg lists
+        foreach (UnturnedTestArgs argList in _test.Args)
+        {
+            if (argList.Values != null)
+            {
+                if (argList.Values.Length != _parameters.Length)
+                {
+                    // skip test: arg values length != expected parameter length
+                    await _logger.LogErrorAsync(
+                        string.Format(
+                            Properties.Resources.LogErrorMismatchedArgsParameterCount,
+                            argList.Values.Length,
+                            _test.DisplayName,
+                            _parameters.Length
+                        )
+                    );
+                    continue;
+                }
+
+                UnturnedTestArgument[] args = new UnturnedTestArgument[_parameters.Length];
+                bool anyErrors = false;
+                for (int i = 0; i < _parameters.Length; ++i)
+                {
+                    object? value = argList.Values.GetValue(i);
+                    ParameterInfo param = _parameters[i];
+                    if (value == null)
+                    {
+                        if (!param.ParameterType.IsValueType)
+                        {
+                            //args[i] = default; (already set to default on array init)
+                            continue;
+                        }
+
+                        // skip test: null value type
+                        anyErrors = true;
+                        await _logger.LogErrorAsync(
+                            string.Format(
+                                Properties.Resources.LogErrorMismatchedParameterType,
+                                "null",
+                                param.Name,
+                                _test.DisplayName
+                            )
+                        );
+                        break;
+                    }
+
+                    if (!param.ParameterType.IsInstanceOfType(value))
+                    {
+                        try
+                        {
+                            value = Convert.ChangeType(value, param.ParameterType, CultureInfo.InvariantCulture);
+                        }
+                        catch (Exception ex)
+                        {
+                            // skip test: mismatched parameter type
+                            anyErrors = true;
+                            await _logger.LogErrorAsync(
+                                string.Format(
+                                    Properties.Resources.LogErrorMismatchedParameterType,
+                                    $"{{{Format(value)}}}",
+                                    param.Name,
+                                    _test.DisplayName
+                                ),
+                                ex
+                            );
+                            break;
+                        }
+                    }
+
+                    args[i] = new UnturnedTestArgument(value);
+                }
+
+                if (anyErrors || InstanceAlreadyExists(typeArguments, args, startIndex, out int argHash))
                     continue;
 
-                reachedEnd = true;
-                break;
+                CreateTestNames(args, out string uid, out string displayName);
+                _instances.Add(new UnturnedTestInstance(_test, typeArguments, args, uid, displayName, _instances.Count - startIndex, argHash));
             }
-
-            UnturnedTestArgument[] args = new UnturnedTestArgument[infos.Length];
-            for (int p = 0; p < infos.Length; ++p)
+            else if (!string.IsNullOrWhiteSpace(argList.From))
             {
-                ref ParameterValuesInfo info = ref infos[p];
-                args[p] = new UnturnedTestArgument(info.Values!.GetValue(info.Index));
-            }
+                MemberInfo? member = GeneratedTestExpansionHelper.GetMember(argList.From!, _testType, out _);
 
-            CreateTestNames(args, out string uid, out string displayName);
-            _instances.Add(new UnturnedTestInstance(_test, args, uid, displayName));
-        } while (!reachedEnd);
+                if (member == null)
+                {
+                    await _logger.LogErrorAsync(
+                        string.Format(
+                            Properties.Resources.LogErrorMissingFromMember,
+                            argList.From,
+                            _testType.FullName
+                        )
+                    );
+                    continue;
+                }
+
+                object? value = await InvokeFromMember(member).ConfigureAwait(false);
+                ParameterInfo[] parameters = _test.Method.GetParameters();
+                if (value is IEnumerable enumerable)
+                {
+                    foreach (object argListValue in enumerable)
+                    {
+                        if (!AnonymousTypeHelper.TryMapObjectToMethodParameters(
+                                argListValue, _test.Method, member, parameters, out UnturnedTestArgument[] args
+                            ))
+                        {
+                            continue;
+                        }
+
+                        if (InstanceAlreadyExists(typeArguments, args, startIndex, out int argHash))
+                            continue;
+
+                        CreateTestNames(args, out string uid, out string displayName);
+                        _instances.Add(new UnturnedTestInstance(_test, typeArguments, args, uid, displayName, _instances.Count - startIndex, argHash));
+                    }
+                }
+                else if (value != null)
+                {
+                    if (!AnonymousTypeHelper.TryMapObjectToMethodParameters(
+                            value, _test.Method, member, parameters, out UnturnedTestArgument[] args
+                        ))
+                    {
+                        continue;
+                    }
+
+                    if (InstanceAlreadyExists(typeArguments, args, startIndex, out int argHash))
+                        continue;
+
+                    CreateTestNames(args, out string uid, out string displayName);
+                    _instances.Add(new UnturnedTestInstance(_test, typeArguments, args, uid, displayName, _instances.Count - startIndex, argHash));
+                }
+            }
+        }
     }
 
     private struct ParameterValuesInfo
@@ -562,12 +578,13 @@ file class TestExpandProcessor
         displayName = _stringBuilder.Append(')').ToString();
     }
 
-    private bool InstanceAlreadyExists(UnturnedTestArgument[] args, int startIndex)
+    private bool InstanceAlreadyExists(UnturnedTestArgument[] typeArguments, UnturnedTestArgument[] args, int startIndex, out int argHash)
     {
+        argHash = UnturnedTestInstance.CalculateArgumentHash(typeArguments, args);
         for (int i = startIndex; i < _instances.Count; ++i)
         {
             UnturnedTestInstance inst = _instances[i];
-            if (inst.Arguments.Length != args.Length)
+            if (inst.Arguments.Length != args.Length || inst.ArgHash != argHash)
                 continue;
 
             bool sequenceEquals = true;
@@ -591,26 +608,33 @@ file class TestExpandProcessor
 
     private static unsafe string Format(object? value)
     {
-        if (value == null)
-            return "<null>";
-        
-        if (value is string str)
-            return $"\"{str}\"";
-
-        if (value is char c)
+        switch (value)
         {
-            if (c == '\0')
-                return @"'\0'";
-            if (char.IsControl(c))
-                return $"(char){((int)c).ToString(null, CultureInfo.InvariantCulture)}";
-            char* span = stackalloc char[3];
-            span[0] = '\'';
-            span[1] = c;
-            span[2] = '\'';
-            return new string(span);
-        }
+            case null:
+                return "<null>";
 
-        return value is IFormattable f ? f.ToString(null, CultureInfo.InvariantCulture) : value.ToString();
+            case string str:
+                return $"\"{str}\"";
+            
+            case '\0':
+                return @"'\0'";
+            
+            case char c when char.IsControl(c):
+                return $"(char){((int)c).ToString(null, CultureInfo.InvariantCulture)}";
+            
+            case char c:
+                char* span = stackalloc char[3];
+                span[0] = '\'';
+                span[1] = c;
+                span[2] = '\'';
+                return new string(span);
+
+            case IFormattable f:
+                return f.ToString(null, CultureInfo.InvariantCulture);
+
+            default:
+                return value.ToString();
+        }
     }
 
     private Task<object?> InvokeFromMember(MemberInfo member)
