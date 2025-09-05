@@ -55,11 +55,18 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 EquatableList<TestTypeArgsAttributeInfo>? classTypeArgs = null;
                 EquatableList<TestTypeParameterInfo>? classTypeParameters = null;
 
+                FileLinePositionSpan loc = ctx.TargetNode?.GetLocation().GetLineSpan() ?? default;
+                int line = 1;
+                if (loc.IsValid)
+                {
+                    line = loc.StartLinePosition.Line;
+                }
+
                 if (ctx.TargetSymbol is INamedTypeSymbol namedType)
                 {
                     ImmutableArray<AttributeData> classAttributes = namedType.GetAttributes();
 
-                    managedType = ManagedTypeFormatter.GetManagedType(namedType);
+                    managedType = ManagedIdentifierRoslynFormatter.GetManagedType(namedType, false);
                     ImmutableArray<ISymbol> allMembers = namedType.GetMembers();
                     foreach (ISymbol symbol in allMembers)
                     {
@@ -72,7 +79,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             continue;
                         }
 
-                        string managedMethod = ManagedTypeFormatter.GetManagedMethod(method);
+                        string managedMethod = ManagedIdentifierRoslynFormatter.GetManagedMethod(method);
                         string name = managedType + "." + managedMethod;
 
                         string fileName = string.Empty;
@@ -148,7 +155,6 @@ public class UnturnedTestGenerator : IIncrementalGenerator
 
                                 methodTypeParameters.Add(new TestTypeParameterInfo(
                                     typeParam.Name,
-                                    typeParam.GetSampleTypeArgument(),
                                     TestParameterSetAttributeInfo.Create(setAttributeData))
                                 );
                             }
@@ -188,7 +194,6 @@ public class UnturnedTestGenerator : IIncrementalGenerator
 
                             classTypeParameters.Add(new TestTypeParameterInfo(
                                 typeParam.Name,
-                                typeParam.GetSampleTypeArgument(),
                                 TestParameterSetAttributeInfo.Create(setAttributeData))
                             );
                         }
@@ -217,6 +222,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     assemblyName,
                     @namespace,
                     managedType,
+                    line,
+                    loc.Path,
                     methods,
                     classTypeParameters,
                     classTypeArgs
@@ -258,17 +265,6 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 if (classInfo.TypeParameters is { Count: > 0 })
                 {
                     openGlobalTestName = globalTestName + "<" + new string(',', classInfo.TypeParameters.Count - 1) + ">";
-                    StringBuilder sb = new StringBuilder(globalTestName).Append('<');
-                    bool comma = false;
-                    foreach (TestTypeParameterInfo p in classInfo.TypeParameters)
-                    {
-                        if (comma) sb.Append(',');
-                        else comma = true;
-                        sb.Append(p.GloballyQualifiedSampleType);
-                    }
-
-                    sb.Append('>');
-                    globalTestName = sb.ToString();
                 }
                 else
                 {
@@ -331,6 +327,20 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 bldr.Build($"builder.MethodCount = {classInfo.Methods.Count};");
                 bldr.Build($"builder.TestType = typeof({openGlobalTestName});");
 
+                if (classInfo.TypeParameters is { Count: > 0 })
+                {
+                    bldr.String("builder.TypeParameters = ").In();
+                    AppendTypeParameterInfo(bldr, classInfo.TypeParameters, "};", $"#line {classInfo.DefinitionLine} \"{classInfo.FileName}\"");
+                    bldr.Out();
+                }
+
+                if (classInfo.TypeArgsAttributes is { Count: > 0 })
+                {
+                    bldr.String("builder.TypeArgs = ").In();
+                    AppendTypeArgsInfo(bldr, classInfo.TypeArgsAttributes, "};", $"#line {classInfo.DefinitionLine} \"{classInfo.FileName}\"");
+                    bldr.Out();
+                }
+
                 if (classInfo.Methods.Any(x => x.DelegateType == null))
                 {
                     bldr.Empty()
@@ -341,6 +351,10 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 bool isFirst = true;
                 foreach (TestMethodInfo method in classInfo.Methods)
                 {
+                    string file = method.FilePath;
+
+                    string linePrep = $"#line {method.LineNumberStart.ToString(CultureInfo.InvariantCulture)} \"{file}\"";
+
                     DelegateType? delegateType = method.DelegateType;
                     string? delegateName = method.DelegateType?.Name;
                     if (delegateType != null && delegateType.Predefined == PredefinedDelegateType.None)
@@ -354,8 +368,6 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         bldr.Empty();
                     else
                         isFirst = false;
-
-                    string file = method.FilePath;
 
                     string escManagedMethod = StringLiteralEscaper.Escape(method.ManagedMethod);
                     bldr.String("builder.Add(new global::uTest.Runner.UnturnedTest()")
@@ -499,7 +511,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             switch (mode)
                             {
                                 case 1: // basic set
-                                    ExtendSet(in parameter, bldr, method, file);
+                                    ExtendSet(in parameter, bldr, method, file, linePrep);
                                     break;
 
                                 case 2: // enum range
@@ -507,9 +519,9 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                     EquatableEnumValueContainer to = (EquatableEnumValueContainer)parameter.RangeParameter!.To;
 
                                     EquatableObjectList.ObjectArrayType destinationArrayType = new EquatableObjectList.ObjectArrayType(parameter.RangeParameter!.EnumTypeGloballyQualified!);
-                                    bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                    bldr.Preprocessor(linePrep)
                                         .Build($"From = {EquatableObjectList.AppendLiteral(from, destinationArrayType)},")
-                                        .Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Preprocessor(linePrep)
                                         .Build($"To = {EquatableObjectList.AppendLiteral(to, destinationArrayType)},");
 
                                     if (from.ValueName != null)
@@ -524,17 +536,17 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                     string comma = parameter.SetParameter is not null ? "," : string.Empty;
 
                                     destinationArrayType = new EquatableObjectList.ObjectArrayType(parameter.RangeParameter.Type);
-                                    bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                    bldr.Preprocessor(linePrep)
                                         .Build($"FromUnderlying = {EquatableObjectList.AppendLiteral(from.UnqualifiedValue, destinationArrayType)},")
-                                        .Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Preprocessor(linePrep)
                                         .Build($"ToUnderlying = {EquatableObjectList.AppendLiteral(to.UnqualifiedValue, destinationArrayType)}{comma}");
                                     break;
 
                                 case 3: // char range
                                     destinationArrayType = new EquatableObjectList.ObjectArrayType(SpecialType.System_Char);
-                                    bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                    bldr.Preprocessor(linePrep)
                                         .Build($"From = {EquatableObjectList.AppendLiteral(parameter.RangeParameter!.From, destinationArrayType)},")
-                                        .Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Preprocessor(linePrep)
                                         .Build($"To = {EquatableObjectList.AppendLiteral(parameter.RangeParameter!.To, destinationArrayType)},");
 
                                     if (parameter.RangeParameter!.Step != null)
@@ -549,15 +561,15 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                     
                                 case 4: // other range
                                     destinationArrayType = new EquatableObjectList.ObjectArrayType(destinationType);
-                                    bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                    bldr.Preprocessor(linePrep)
                                         .Build($"From = {EquatableObjectList.AppendLiteral(parameter.RangeParameter!.From, destinationArrayType)},")
-                                        .Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        .Preprocessor(linePrep)
                                         .Build($"To = {EquatableObjectList.AppendLiteral(parameter.RangeParameter!.To, destinationArrayType)},");
 
                                     if (parameter.RangeParameter!.Step != null)
                                     {
                                         comma = parameter.SetParameter is not null ? "," : string.Empty;
-                                        bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                        bldr.Preprocessor(linePrep)
                                             .Build($"Step = {EquatableObjectList.AppendLiteral(parameter.RangeParameter!.Step, destinationArrayType)}{comma}");
                                     }
                                     break;
@@ -569,8 +581,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 {
                                     bldr.Build($"SetParameterInfo = new global::uTest.Runner.UnturnedTestSetParameterInfo()")
                                         .String("{").In()
-                                        .Preprocessor($"#line {method.LineNumberStart} \"{file}\"");
-                                    ExtendSet(in parameter, bldr, method, file);
+                                        .Preprocessor(linePrep);
+                                    ExtendSet(in parameter, bldr, method, file, linePrep);
                                     bldr.Out()
                                         .String("}");
                                 }
@@ -582,6 +594,20 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         bldr.Out()
                             .String("},")
                             .Out();
+                    }
+
+                    if (method.TypeParameters is { Count: > 0 })
+                    {
+                        bldr.String("TypeParameters = ").In();
+                        AppendTypeParameterInfo(bldr, method.TypeParameters, "},", linePrep);
+                        bldr.Out();
+                    }
+                    
+                    if (method.TypeArgsAttributes is { Count: > 0 })
+                    {
+                        bldr.String("TypeArgs = ").In();
+                        AppendTypeArgsInfo(bldr, method.TypeArgsAttributes, "},", linePrep);
+                        bldr.Out();
                     }
                     
                     bldr.String("Args = ").In();
@@ -629,7 +655,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                     }
                                 }
 
-                                bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+                                bldr.Preprocessor(linePrep)
                                     .Build($"Values = {argsAttribute.Values.ToCodeString(default, parameterTypes)}");
                             }
 
@@ -668,7 +694,86 @@ public class UnturnedTestGenerator : IIncrementalGenerator
         );
     }
 
-    private static void ExtendSet(in TestParameterInfo parameter, SourceStringBuilder bldr, TestMethodInfo method, string file)
+    private static void AppendTypeArgsInfo(SourceStringBuilder bldr, EquatableList<TestTypeArgsAttributeInfo> typeArgs, string end, string? linePrep)
+    {
+        bldr.Build($"new global::uTest.Runner.UnturnedTestArgs[]")
+            .String("{")
+            .In();
+
+        for (int i = 0; i < typeArgs.Count; i++)
+        {
+            TestTypeArgsAttributeInfo typeParam = typeArgs[i];
+
+            bldr.Build($"new global::uTest.Runner.UnturnedTestArgs()")
+                .String("{").In();
+
+            if (linePrep != null)
+                bldr.Preprocessor(linePrep);
+            
+            bldr.Build($"Values = new global::System.Type[] {{ {string.Join(", ", typeParam.Types.Select(x => $"typeof({x.QualifiedTypeName})"))} }},");
+
+            if (linePrep != null)
+                bldr.Preprocessor("#line default");
+
+            bldr.Out()
+                .String(i == typeArgs.Count - 1 ? "}" : "},");
+        }
+
+        bldr.Out()
+            .String(end);
+    }
+
+    private static void AppendTypeParameterInfo(SourceStringBuilder bldr, EquatableList<TestTypeParameterInfo> typeParameters, string end, string? linePrep)
+    {
+        bldr.Build($"new global::uTest.Runner.UnturnedTestParameter[]")
+            .String("{")
+            .In();
+
+        for (int i = 0; i < typeParameters.Count; i++)
+        {
+            TestTypeParameterInfo typeParam = typeParameters[i];
+            string type;
+            string comma;
+            bool hasSet;
+            if (typeParam.SetParameter?.Values is not null)
+            {
+                type = "UnturnedTestSetParameter";
+                comma = ",";
+                hasSet = true;
+            }
+            else
+            {
+                type = "UnturnedTestParameter";
+                comma = string.Empty;
+                hasSet = false;
+            }
+
+            bldr.Build($"new global::uTest.Runner.{type}()")
+                .String("{").In()
+                .Build($"Name = \"{StringLiteralEscaper.Escape(typeParam.Name)}\",")
+                .Build($"Position = {i}{comma}");
+
+            if (hasSet)
+            {
+                if (linePrep != null)
+                    bldr.Preprocessor(linePrep);
+
+                bldr.Build($"Values = {typeParam.SetParameter!.Values!.ToCodeString(new EquatableObjectList.ObjectArrayType(SpecialType.System_TypedReference), null)}");
+
+                if (linePrep != null)
+                    bldr.Preprocessor("#line default");
+
+            }
+
+            bldr.Out()
+                .String(i == typeParameters.Count - 1 ? "}" : "},");
+        }
+
+        bldr.Out()
+            .String(end);
+    }
+
+    private static void ExtendSet(in TestParameterInfo parameter, SourceStringBuilder bldr, TestMethodInfo method, string file, string linePrep)
     {
         if (parameter.SetParameter!.From != null)
             bldr.Build($"From = \"{StringLiteralEscaper.Escape(parameter.SetParameter!.From)}\"");
@@ -684,7 +789,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             ? SpecialType.System_TypedReference
                             : parameter.SpecialParameterType
                     );
-            bldr.Preprocessor($"#line {method.LineNumberStart} \"{file}\"")
+            bldr.Preprocessor(linePrep)
                 .Build($"Values = {parameter.SetParameter.Values.ToCodeString(targetType, null)}");
         }
     }

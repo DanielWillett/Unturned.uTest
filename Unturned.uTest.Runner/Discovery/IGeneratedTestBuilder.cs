@@ -8,11 +8,29 @@ namespace uTest.Runner;
 #endif
 public interface IGeneratedTestBuilder
 {
+    /// <summary>
+    /// Number of methods that will be added. Should be set first.
+    /// </summary>
     int MethodCount { set; }
 
+    /// <summary>
+    /// The base test type.
+    /// </summary>
     Type TestType { set; }
-    UnturnedTestParameter[]? TypeParameters { set; }
 
+    /// <summary>
+    /// List of type parameters.
+    /// </summary>
+    UnturnedTestParameter[]? TypeParameters { set; }
+    
+    /// <summary>
+    /// List of valid <see cref="TypeArgsAttribute"/> attributes.
+    /// </summary>
+    public UnturnedTestArgs[]? TypeArgs { set; }
+
+    /// <summary>
+    /// Adds a new test.
+    /// </summary>
     void Add(UnturnedTest test);
 }
 
@@ -36,6 +54,7 @@ internal class GeneratedTestBuilder : IGeneratedTestBuilder
 
     /// <inheritdoc />
     public UnturnedTestParameter[]? TypeParameters { get; set; }
+    public UnturnedTestArgs[]? TypeArgs { get; set; }
 
     public void Add(UnturnedTest test)
     {

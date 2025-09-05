@@ -1,11 +1,23 @@
+using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace uTest.Runner.Util;
+namespace uTest;
 
-internal ref struct ManagedMethodTokenizer
+// included in Unturned.uTest.Runner and Unturned.uTest.Runner.SourceGenerator
+
+/// <summary>
+/// A tokenizer that can read the <c>ManagedType</c> and <c>ManagedMethod</c> formats specified in the document below.
+/// <para>
+/// <see href="https://github.com/microsoft/vstest/blob/main/docs/RFCs/0017-Managed-TestCase-Properties.md"/>
+/// </para>
+/// </summary>
+[DebuggerDisplay("{DebuggerDisplay}")]
+public ref struct ManagedIdentifierTokenizer
 {
     // this default comes from System.Reflection.Metadata's TypeNameParseOptions default value
     // https://github.com/dotnet/runtime/blob/main/src/libraries/System.Reflection.Metadata/src/System/Reflection/Metadata/TypeNameParseOptions.cs#L8
@@ -20,7 +32,7 @@ internal ref struct ManagedMethodTokenizer
     private int _contentLength;
     private bool _contentIsInBuffer;
     private char[]? _buffer;
-    private ManagedMethodTokenType _tokenType;
+    private ManagedIdentifierTokenType _tokenType;
 
     private int _readIndex;
     private int _methodArity;
@@ -33,253 +45,28 @@ internal ref struct ManagedMethodTokenizer
     private const char EndOfLine = '\0';
 
     /// <summary>
+    /// Display string used with <see cref="DebuggerDisplayAttribute"/>.
+    /// </summary>
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public readonly string DebuggerDisplay => _readIndex < 0 || _readIndex >= _text.Length ? _text.ToString() : (_text.Slice(0, _readIndex).ToString() + "|" + _text.Slice(_readIndex).ToString());
+
+    /// <summary>
     /// The maximum number of generic parameters that <see cref="IsSameTypeAs"/> will navigate before returning false.
     /// </summary>
     /// <remarks>This has no effect on <see cref="MoveNext"/>.</remarks>
     public int MaxGenericDepth { get; init; }
 
     /// <summary>
-    /// Normalizes a managed method or type name.
+    /// Creates a tokenizer that will process the given text <paramref name="text"/>.
     /// </summary>
-    /// <exception cref="FormatException"/>
-    public static string Normalize(ReadOnlySpan<char> text, bool isTypeOnly)
-    {
-        ManagedMethodTokenizer tokenizer = new ManagedMethodTokenizer(text, isTypeOnly);
-        StringBuilder bldr = new StringBuilder();
-        
-        ManagedMethodTokenType previousTokenType = ManagedMethodTokenType.Uninitialized;
-        while (tokenizer.MoveNext())
-        {
-            if (previousTokenType == ManagedMethodTokenType.OpenParameters
-                && tokenizer._tokenType != ManagedMethodTokenType.CloseParameters)
-            {
-                bldr.Append('(');
-            }
-            switch (tokenizer._tokenType)
-            {
-                case ManagedMethodTokenType.MethodName:
-                    if (previousTokenType == ManagedMethodTokenType.MethodImplementationTypeSegment)
-                        bldr.Append('.');
-                    ReadOnlySpan<char> val = tokenizer.Value;
-                    if (val.Length is 5 or 6)
-                    {
-                        if (val.Equals(".cctor".AsSpan(), StringComparison.Ordinal))
-                        {
-                            bldr.Append(".cctor");
-                            break;
-                        }
-                        if (val.Equals(".ctor".AsSpan(), StringComparison.Ordinal))
-                        {
-                            bldr.Append(".ctor");
-                            break;
-                        }
-                    }
-
-                    AppendOrEscapeAndAppend(bldr, tokenizer.Value);
-                    break;
-
-                case ManagedMethodTokenType.Arity:
-                case ManagedMethodTokenType.TypeArity:
-                    int arity = tokenizer.Arity;
-                    if (arity != 0)
-                        bldr.Append('`').Append(arity.ToString(CultureInfo.InvariantCulture));
-                    break;
-
-                case ManagedMethodTokenType.TypeSegment:
-                    if (previousTokenType == ManagedMethodTokenType.NestedTypeSegment)
-                        bldr.Append('+');
-                    else if (previousTokenType is not (ManagedMethodTokenType.OpenParameters or ManagedMethodTokenType.NextParameter or ManagedMethodTokenType.OpenTypeParameters or ManagedMethodTokenType.Uninitialized))
-                        bldr.Append('.');
-                    AppendOrEscapeAndAppend(bldr, tokenizer.Value);
-                    break;
-
-                case ManagedMethodTokenType.NestedTypeSegment:
-                    bldr.Append('+');
-                    AppendOrEscapeAndAppend(bldr, tokenizer.Value);
-                    break;
-
-                case ManagedMethodTokenType.TypeGenericParameterReference:
-                    bldr.Append('!').Append(tokenizer.GenericReferenceIndex.ToString(CultureInfo.InvariantCulture));
-                    break;
-
-                case ManagedMethodTokenType.MethodGenericParameterReference:
-                    bldr.Append("!!").Append(tokenizer.GenericReferenceIndex.ToString(CultureInfo.InvariantCulture));
-                    break;
-
-                case ManagedMethodTokenType.OpenTypeParameters:
-                    bldr.Append('<');
-                    break;
-
-                case ManagedMethodTokenType.CloseTypeParameters:
-                    bldr.Append('>');
-                    break;
-
-                case ManagedMethodTokenType.OpenParameters:
-                    // done next step if not CloseParameters
-                    break;
-                
-                case ManagedMethodTokenType.CloseParameters:
-                    if (previousTokenType != ManagedMethodTokenType.OpenParameters)
-                        bldr.Append(')');
-                    break;
-
-                case ManagedMethodTokenType.NextParameter:
-                    bldr.Append(',');
-                    break;
-
-                case ManagedMethodTokenType.MethodImplementationTypeSegment:
-                    if (previousTokenType == ManagedMethodTokenType.MethodImplementationTypeSegment)
-                        bldr.Append('.');
-                    AppendOrEscapeAndAppend(bldr, tokenizer.Value, ignoreGenerics: true);
-                    break;
-
-                case ManagedMethodTokenType.Array:
-                    tokenizer.AppendArraySpecifier(bldr);
-                    break;
-
-                case ManagedMethodTokenType.Pointer:
-                    bldr.Append('*');
-                    break;
-
-                case ManagedMethodTokenType.Reference:
-                    bldr.Append('&');
-                    break;
-            }
-
-            previousTokenType = tokenizer._tokenType;
-        }
-
-        return bldr.ToString();
-    }
-
-    private readonly void AppendArraySpecifier(StringBuilder bldr)
-    {
-        switch (_arrayRank)
-        {
-            case -1:
-                bldr.Append("[]");
-                break;
-            case 0: break;
-            case 1:
-                bldr.Append("[*]");
-                break;
-            default:
-                bldr.Append('[').Append(',', _arrayRank - 1).Append(']');
-                break;
-        }
-    }
-
-    private static unsafe void AppendOrEscapeAndAppend(StringBuilder bldr, ReadOnlySpan<char> tokenizerValue, bool ignoreGenerics = false)
-    {
-        if (IdentifierNeedsEscaping(tokenizerValue, ignoreGenerics))
-        {
-            bldr.Append('\'');
-            ReadOnlySpan<char> rewriteValues = [ '\'', '\\' ];
-            int nextEscIndex = tokenizerValue.IndexOfAny(rewriteValues);
-
-            fixed (char* ptr = tokenizerValue)
-            {
-                int previousEscIndex = 0;
-                if (nextEscIndex >= 0)
-                {
-                    while (true)
-                    {
-                        int length = nextEscIndex - previousEscIndex;
-                        if (length != 0)
-                            bldr.Append(ptr + previousEscIndex, length);
-
-                        if (nextEscIndex >= tokenizerValue.Length)
-                            break;
-
-                        bldr.Append(ptr[nextEscIndex] == '\'' ? @"\'" : @"\\");
-
-                        previousEscIndex = nextEscIndex + 1;
-                        if (previousEscIndex >= tokenizerValue.Length)
-                            break;
-
-                        nextEscIndex = tokenizerValue.Slice(previousEscIndex).IndexOfAny(rewriteValues);
-                        if (nextEscIndex == -1)
-                            nextEscIndex = tokenizerValue.Length;
-                        else
-                            nextEscIndex += previousEscIndex;
-                    }
-                }
-                else
-                {
-                    bldr.Append(ptr, tokenizerValue.Length);
-                }
-            }
-            bldr.Append('\'');
-        }
-        else
-        {
-            fixed (char* ptr = tokenizerValue)
-                bldr.Append(ptr, tokenizerValue.Length);
-        }
-    }
-
-    private static bool IdentifierNeedsEscaping(ReadOnlySpan<char> identifier, bool ignoreGenerics)
-    {
-        if (identifier.IsEmpty)
-            return true;
-
-        if (char.GetUnicodeCategory(identifier[0]) == UnicodeCategory.DecimalDigitNumber)
-        {
-            return true;
-        }
-
-        int genericDepth = 0;
-        for (int i = 0; i < identifier.Length; ++i)
-        {
-            char c = identifier[i];
-            if (ignoreGenerics)
-            {
-                switch (c)
-                {
-                    case '<':
-                        ++genericDepth;
-                        continue;
-                    case '>':
-                        if (genericDepth > 0)
-                            --genericDepth;
-                        continue;
-                    case '.':
-                    case ',':
-                        if (genericDepth > 0)
-                            continue;
-                        return false;
-                }
-            }
-
-            UnicodeCategory category = char.GetUnicodeCategory(c);
-            if (category is UnicodeCategory.UppercaseLetter
-                or UnicodeCategory.LowercaseLetter
-                or UnicodeCategory.TitlecaseLetter
-                or UnicodeCategory.ModifierLetter
-                or UnicodeCategory.OtherLetter
-                or UnicodeCategory.LetterNumber
-                or UnicodeCategory.DecimalDigitNumber
-                or UnicodeCategory.NonSpacingMark
-                or UnicodeCategory.SpacingCombiningMark
-                or UnicodeCategory.ConnectorPunctuation
-                or UnicodeCategory.Format
-               )
-            {
-                continue;
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-
-    public ManagedMethodTokenizer(ReadOnlySpan<char> text, bool isTypeOnly)
+    /// <param name="text">The text for the tokenizer to process.</param>
+    /// <param name="kind">The kind of tokenizer to read, ManagedType or ManagedMethod.</param>
+    public ManagedIdentifierTokenizer(ReadOnlySpan<char> text, ManagedIdentifierKind kind)
     {
         MaxGenericDepth = DefaultMaxGenericDepth;
 
         _text = text;
-        _isTypeOnly = isTypeOnly;
+        _isTypeOnly = kind == ManagedIdentifierKind.Type;
         if (_isTypeOnly)
         {
             Reset();
@@ -292,6 +79,9 @@ internal ref struct ManagedMethodTokenizer
         }
     }
 
+    /// <summary>
+    /// The raw value of the current token, usually not including whitespace and certain aspects of tokens, like the '`' in arity or exclamation points in generic type parameter references.
+    /// </summary>
     public readonly ReadOnlySpan<char> Value
     {
         get
@@ -303,16 +93,20 @@ internal ref struct ManagedMethodTokenizer
         }
     }
 
+    /// <summary>
+    /// The arity of a the previous method or type.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The current token is not an arity token.</exception>
     public readonly int Arity
     {
         get
         {
             switch (_tokenType)
             {
-                case ManagedMethodTokenType.Arity:
+                case ManagedIdentifierTokenType.Arity:
                     return _methodArity;
 
-                case ManagedMethodTokenType.TypeArity:
+                case ManagedIdentifierTokenType.TypeArity:
 #if NETSTANDARD2_1_OR_GREATER
                     return int.Parse(Value, NumberStyles.None, CultureInfo.InvariantCulture);
 #else
@@ -325,6 +119,10 @@ internal ref struct ManagedMethodTokenizer
         }
     }
 
+    /// <summary>
+    /// The index of the current method parameter, or -1 if the tokenizer isn't in the parameter list.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Reading a type.</exception>
     public readonly int ParameterIndex
     {
         get
@@ -336,23 +134,27 @@ internal ref struct ManagedMethodTokenizer
         }
     }
 
+    /// <summary>
+    /// The index of a generic parameter reference, represented as '!n' for type parameters defined in a type and '!!n' for type parameters defined in a method.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The current token is not a generic parameter reference.</exception>
     public readonly int GenericReferenceIndex
     {
         get
         {
-            if (_tokenType is not ManagedMethodTokenType.TypeGenericParameterReference and not ManagedMethodTokenType.MethodGenericParameterReference)
+            if (_tokenType is not ManagedIdentifierTokenType.TypeGenericParameterReference and not ManagedIdentifierTokenType.MethodGenericParameterReference)
                 throw new InvalidOperationException("Not generic parameter reference token.");
 
             switch (_tokenType)
             {
-                case ManagedMethodTokenType.TypeGenericParameterReference:
+                case ManagedIdentifierTokenType.TypeGenericParameterReference:
 #if NETSTANDARD2_1_OR_GREATER
                     return int.Parse(Value, NumberStyles.None, CultureInfo.InvariantCulture);
 #else
                     return int.Parse(Value.ToString(), NumberStyles.None, CultureInfo.InvariantCulture);
 #endif
 
-                case ManagedMethodTokenType.MethodGenericParameterReference:
+                case ManagedIdentifierTokenType.MethodGenericParameterReference:
                     return _typeParamRefIndex;
 
                 default:
@@ -361,27 +163,41 @@ internal ref struct ManagedMethodTokenizer
         }
     }
 
-    public readonly ManagedMethodTokenType TokenType
+    /// <summary>
+    /// The type of the current token.
+    /// </summary>
+    public readonly ManagedIdentifierTokenType TokenType
     {
         get
         {
-            if (_isTypeOnly && _tokenType == ManagedMethodTokenType.OpenParameters)
-                return ManagedMethodTokenType.Uninitialized;
+            if (_isTypeOnly && _tokenType == ManagedIdentifierTokenType.OpenParameters)
+                return ManagedIdentifierTokenType.Uninitialized;
 
             return _tokenType;
         }
     }
 
+    /// <summary>
+    /// The number of dimensions this array has.
+    /// </summary>
     public int ArrayRank => _arrayRank < 0 ? 1 : _arrayRank;
-    public bool IsSzArray => _tokenType == ManagedMethodTokenType.Array && _arrayRank < 0;
 
+    /// <summary>
+    /// If the current array is a 'vector' array, or a non-multidimensional array starting at index zero.
+    /// </summary>
+    public bool IsSzArray => _tokenType == ManagedIdentifierTokenType.Array && _arrayRank < 0;
+
+    /// <summary>
+    /// Recursively checks if the given <paramref name="type"/> is the same as the type this tokenizer is currently on.
+    /// </summary>
+    /// <remarks>This method will advance the tokenizer until it reaches the next type.</remarks>
     public bool IsSameTypeAs(Type type, StringBuilder? tempStringBuilder = null)
     {
         ReadOnlySpan<char> escapedCharacters = [ '&', '*', '+', ',', '[', '\\', ']' ];
 
-        if (_tokenType is ManagedMethodTokenType.NextParameter or ManagedMethodTokenType.OpenParameters or ManagedMethodTokenType.OpenTypeParameters)
+        if (_tokenType is ManagedIdentifierTokenType.NextParameter or ManagedIdentifierTokenType.OpenParameters or ManagedIdentifierTokenType.OpenTypeParameters)
         {
-            if (!MoveNext() || _tokenType is not (ManagedMethodTokenType.TypeSegment or ManagedMethodTokenType.TypeGenericParameterReference or ManagedMethodTokenType.MethodGenericParameterReference))
+            if (!MoveNext() || _tokenType is not (ManagedIdentifierTokenType.TypeSegment or ManagedIdentifierTokenType.TypeGenericParameterReference or ManagedIdentifierTokenType.MethodGenericParameterReference))
                 return false;
         }
 
@@ -399,7 +215,7 @@ internal ref struct ManagedMethodTokenizer
 
             if (method == null)
             {
-                if (_tokenType != ManagedMethodTokenType.TypeGenericParameterReference
+                if (_tokenType != ManagedIdentifierTokenType.TypeGenericParameterReference
                     || GenericReferenceIndex != type.GenericParameterPosition)
                 {
                     return false;
@@ -407,7 +223,7 @@ internal ref struct ManagedMethodTokenizer
             }
             else
             {
-                if (_tokenType != ManagedMethodTokenType.MethodGenericParameterReference
+                if (_tokenType != ManagedIdentifierTokenType.MethodGenericParameterReference
                     || _typeParamRefIndex != type.GenericParameterPosition)
                 {
                     return false;
@@ -433,11 +249,11 @@ internal ref struct ManagedMethodTokenizer
         {
             switch (_tokenType)
             {
-                case ManagedMethodTokenType.TypeSegment:
-                case ManagedMethodTokenType.NestedTypeSegment:
+                case ManagedIdentifierTokenType.TypeSegment:
+                case ManagedIdentifierTokenType.NestedTypeSegment:
                     ReadOnlySpan<char> val = Value;
                     if (tempStringBuilder.Length != 0)
-                        tempStringBuilder.Append(_tokenType == ManagedMethodTokenType.NestedTypeSegment ? '+' : '.');
+                        tempStringBuilder.Append(_tokenType == ManagedIdentifierTokenType.NestedTypeSegment ? '+' : '.');
                     if (val.IndexOfAny(escapedCharacters) >= 0)
                     {
                         _fullyQualifiedTypeNameEscaper ??= new TextEscaper(escapedCharacters.ToArray());
@@ -447,19 +263,19 @@ internal ref struct ManagedMethodTokenizer
                         AppendSpan(tempStringBuilder, val);
                     continue;
 
-                case ManagedMethodTokenType.TypeArity:
+                case ManagedIdentifierTokenType.TypeArity:
                     tempStringBuilder.Append('`').Append(Arity.ToString(CultureInfo.InvariantCulture));
                     continue;
 
-                case ManagedMethodTokenType.Array:
+                case ManagedIdentifierTokenType.Array:
                     AppendArraySpecifier(tempStringBuilder);
                     continue;
 
-                case ManagedMethodTokenType.Pointer:
+                case ManagedIdentifierTokenType.Pointer:
                     tempStringBuilder.Append('*');
                     continue;
 
-                case ManagedMethodTokenType.Reference:
+                case ManagedIdentifierTokenType.Reference:
                     tempStringBuilder.Append('&');
                     continue;
 
@@ -469,7 +285,7 @@ internal ref struct ManagedMethodTokenizer
                     if (!string.Equals(fullName, typeFullName))
                         return false;
 
-                    if (_tokenType != ManagedMethodTokenType.OpenTypeParameters)
+                    if (_tokenType != ManagedIdentifierTokenType.OpenTypeParameters)
                         return !isGeneric;
 
                     if (!isGeneric)
@@ -483,7 +299,7 @@ internal ref struct ManagedMethodTokenizer
                         
                     Type[] genericParameters = type.GetGenericArguments();
                     int paramIndex = 0;
-                    if (!MoveNext() || _tokenType == ManagedMethodTokenType.CloseTypeParameters)
+                    if (!MoveNext() || _tokenType == ManagedIdentifierTokenType.CloseTypeParameters)
                         return false;
 
                     while (true)
@@ -495,14 +311,14 @@ internal ref struct ManagedMethodTokenizer
                             return false;
                         }
 
-                        if (_tokenType == ManagedMethodTokenType.NextParameter && !MoveNext())
+                        if (_tokenType == ManagedIdentifierTokenType.NextParameter && !MoveNext())
                         {
                             return false;
                         }
 
                         ++paramIndex;
 
-                        if (startDepth == _typeParamDepth + 1 && _tokenType == ManagedMethodTokenType.CloseTypeParameters)
+                        if (startDepth == _typeParamDepth + 1 && _tokenType == ManagedIdentifierTokenType.CloseTypeParameters)
                         {
                             MoveNext();
                             break;
@@ -528,20 +344,41 @@ internal ref struct ManagedMethodTokenizer
         }
     }
 
+    internal readonly void AppendArraySpecifier(StringBuilder bldr)
+    {
+        switch (_arrayRank)
+        {
+            case -1:
+                bldr.Append("[]");
+                break;
+            case 0: break;
+            case 1:
+                bldr.Append("[*]");
+                break;
+            default:
+                bldr.Append('[').Append(',', _arrayRank - 1).Append(']');
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Advance to the next token, returning <see langword="false"/> if the end of the identifier is reached.
+    /// </summary>
+    /// <exception cref="FormatException">The identifier is malformed in some way.</exception>
     [SkipLocalsInit]
     public bool MoveNext()
     {
-        if (_tokenType == ManagedMethodTokenType.Uninitialized)
+        if (_tokenType == ManagedIdentifierTokenType.Uninitialized)
         {
             _readIndex = 0;
             SkipWhitespace();
-            _tokenType = ManagedMethodTokenType.MethodImplementationTypeSegment;
+            _tokenType = ManagedIdentifierTokenType.MethodImplementationTypeSegment;
         }
 
         if (_text.Length <= _readIndex)
         {
             // skips switch statement
-            _tokenType = ManagedMethodTokenType.Uninitialized;
+            _tokenType = ManagedIdentifierTokenType.Uninitialized;
             if (_text.Length == 0)
             {
                 throw new FormatException(_isTypeOnly
@@ -557,7 +394,7 @@ internal ref struct ManagedMethodTokenizer
         switch (_tokenType)
         {
             // case ManagedMethodTokenType.Uninitialized:
-            case ManagedMethodTokenType.MethodImplementationTypeSegment:
+            case ManagedIdentifierTokenType.MethodImplementationTypeSegment:
                 bool hasInitialDot = false;
                 while (true) // repeats when reading an empty section starting with a dot (.cctor, .ctor)
                 {
@@ -578,7 +415,7 @@ internal ref struct ManagedMethodTokenizer
 
                             _readIndex = endIndex;
                             SkipWhitespace();
-                            _tokenType = ManagedMethodTokenType.MethodName;
+                            _tokenType = ManagedIdentifierTokenType.MethodName;
                             return true;
 
                         case '.':
@@ -594,7 +431,7 @@ internal ref struct ManagedMethodTokenizer
                             }
                             _readIndex = endIndex + 1;
                             SkipWhitespace();
-                            _tokenType = ManagedMethodTokenType.MethodImplementationTypeSegment;
+                            _tokenType = ManagedIdentifierTokenType.MethodImplementationTypeSegment;
                             return true;
 
                         default:
@@ -602,23 +439,23 @@ internal ref struct ManagedMethodTokenizer
                     }
                 }
 
-            case ManagedMethodTokenType.MethodName:
-            case ManagedMethodTokenType.Arity:
+            case ManagedIdentifierTokenType.MethodName:
+            case ManagedIdentifierTokenType.Arity:
                 switch (_text[_readIndex])
                 {
                     case '(':
                         SetContent(_readIndex, 1);
                         ++_readIndex;
-                        _tokenType = ManagedMethodTokenType.OpenParameters;
+                        _tokenType = ManagedIdentifierTokenType.OpenParameters;
                         if (!_isTypeOnly)
                             _parameterIndex = 0;
                         SkipWhitespace();
                         return true;
 
-                    case '`' when _text.Length > _readIndex + 1 && _tokenType != ManagedMethodTokenType.Arity:
+                    case '`' when _text.Length > _readIndex + 1 && _tokenType != ManagedIdentifierTokenType.Arity:
                         _readIndex = ReadArity();
                         SkipWhitespace();
-                        _tokenType = ManagedMethodTokenType.Arity;
+                        _tokenType = ManagedIdentifierTokenType.Arity;
 #if NETSTANDARD2_1_OR_GREATER
                         _methodArity = int.Parse(Value, NumberStyles.None, CultureInfo.InvariantCulture);
 #else
@@ -629,28 +466,28 @@ internal ref struct ManagedMethodTokenizer
 
                 break;
 
-            case ManagedMethodTokenType.OpenParameters:
-            case ManagedMethodTokenType.OpenTypeParameters:
-            case ManagedMethodTokenType.TypeSegment:
-            case ManagedMethodTokenType.TypeArity:
-            case ManagedMethodTokenType.NestedTypeSegment:
-            case ManagedMethodTokenType.CloseTypeParameters:
-            case ManagedMethodTokenType.NextParameter:
-            case ManagedMethodTokenType.Array:
-            case ManagedMethodTokenType.Pointer:
-            case ManagedMethodTokenType.Reference:
-            case ManagedMethodTokenType.TypeGenericParameterReference:
-            case ManagedMethodTokenType.MethodGenericParameterReference:
-                ManagedMethodTokenType tokenType = ManagedMethodTokenType.TypeSegment;
+            case ManagedIdentifierTokenType.OpenParameters:
+            case ManagedIdentifierTokenType.OpenTypeParameters:
+            case ManagedIdentifierTokenType.TypeSegment:
+            case ManagedIdentifierTokenType.TypeArity:
+            case ManagedIdentifierTokenType.NestedTypeSegment:
+            case ManagedIdentifierTokenType.CloseTypeParameters:
+            case ManagedIdentifierTokenType.NextParameter:
+            case ManagedIdentifierTokenType.Array:
+            case ManagedIdentifierTokenType.Pointer:
+            case ManagedIdentifierTokenType.Reference:
+            case ManagedIdentifierTokenType.TypeGenericParameterReference:
+            case ManagedIdentifierTokenType.MethodGenericParameterReference:
+                ManagedIdentifierTokenType tokenType = ManagedIdentifierTokenType.TypeSegment;
                 switch (_text[_readIndex])
                 {
                     case '[':
-                        if (_tokenType == ManagedMethodTokenType.Reference)
+                        if (_tokenType == ManagedIdentifierTokenType.Reference)
                             throw new FormatException($"Array of references at {_readIndex + 1} is not supported.");
-                        if (_tokenType == ManagedMethodTokenType.OpenParameters)
+                        if (_tokenType == ManagedIdentifierTokenType.OpenParameters)
                             throw new FormatException($"Array at {_readIndex + 1} missing element type.");
                         _readIndex = ReadArraySpecifier();
-                        _tokenType = ManagedMethodTokenType.Array;
+                        _tokenType = ManagedIdentifierTokenType.Array;
                         SkipWhitespace();
                         return true;
 
@@ -658,22 +495,22 @@ internal ref struct ManagedMethodTokenizer
                         throw new FormatException($"Malformed array specifier at {_readIndex + 1}.");
 
                     case '*':
-                        if (_tokenType == ManagedMethodTokenType.Reference)
+                        if (_tokenType == ManagedIdentifierTokenType.Reference)
                             throw new FormatException($"Pointer to a reference at {_readIndex + 1} is not supported.");
-                        if (_tokenType == ManagedMethodTokenType.OpenParameters)
+                        if (_tokenType == ManagedIdentifierTokenType.OpenParameters)
                             throw new FormatException($"Pointer at {_readIndex + 1} missing element type.");
                         SetContent(_readIndex, 1);
                         ++_readIndex;
-                        _tokenType = ManagedMethodTokenType.Pointer;
+                        _tokenType = ManagedIdentifierTokenType.Pointer;
                         SkipWhitespace();
                         return true;
 
                     case '&':
-                        if (_tokenType == ManagedMethodTokenType.OpenParameters)
+                        if (_tokenType == ManagedIdentifierTokenType.OpenParameters)
                             throw new FormatException($"Reference at {_readIndex + 1} missing element type.");
                         SetContent(_readIndex, 1);
                         ++_readIndex;
-                        _tokenType = ManagedMethodTokenType.Reference;
+                        _tokenType = ManagedIdentifierTokenType.Reference;
                         SkipWhitespace();
                         return true;
 
@@ -681,9 +518,9 @@ internal ref struct ManagedMethodTokenizer
                         throw new FormatException($"Unexpected character at {_readIndex + 1}: '('.");
 
                     case ')' when !_isTypeOnly:
-                        if (_tokenType == ManagedMethodTokenType.NextParameter)
+                        if (_tokenType == ManagedIdentifierTokenType.NextParameter)
                             throw new FormatException($"Empty/missing type name at {_readIndex} must be quoted.");
-                        _tokenType = ManagedMethodTokenType.CloseParameters;
+                        _tokenType = ManagedIdentifierTokenType.CloseParameters;
                         _parameterIndex = -1;
                         SetContent(_readIndex, 1);
                         ++_readIndex;
@@ -691,13 +528,15 @@ internal ref struct ManagedMethodTokenizer
                         return true;
 
                     case '<':
-                        if (_tokenType is not (ManagedMethodTokenType.TypeSegment
-                            or ManagedMethodTokenType.TypeArity))
+                        // note: we keep nested type segment for the following scenerio:
+                        //   System.Collections.Generic.List`1+Enumerator<System.String>
+                        if (_tokenType is not (ManagedIdentifierTokenType.NestedTypeSegment
+                            or ManagedIdentifierTokenType.TypeArity))
                         {
                             throw new FormatException("Unexpected generic type specifier.");
                         }
 
-                        _tokenType = ManagedMethodTokenType.OpenTypeParameters;
+                        _tokenType = ManagedIdentifierTokenType.OpenTypeParameters;
                         ++_typeParamDepth;
                         SetContent(_readIndex, 1);
                         ++_readIndex;
@@ -705,11 +544,11 @@ internal ref struct ManagedMethodTokenizer
                         return true;
 
                     case '>':
-                        if (_tokenType == ManagedMethodTokenType.OpenTypeParameters)
+                        if (_tokenType == ManagedIdentifierTokenType.OpenTypeParameters)
                             throw new FormatException("Types can not supply an empty type argument list.");
-                        if (_tokenType == ManagedMethodTokenType.NextParameter)
+                        if (_tokenType == ManagedIdentifierTokenType.NextParameter)
                             throw new FormatException($"Empty/missing type name at {_readIndex} must be quoted.");
-                        _tokenType = ManagedMethodTokenType.CloseTypeParameters;
+                        _tokenType = ManagedIdentifierTokenType.CloseTypeParameters;
                         --_typeParamDepth;
                         if (_typeParamDepth < 0)
                             throw new FormatException("Unmatched type parameters.");
@@ -720,20 +559,20 @@ internal ref struct ManagedMethodTokenizer
 
                     case ',':
 
-                        if (_tokenType is not (ManagedMethodTokenType.TypeSegment
-                            or ManagedMethodTokenType.NestedTypeSegment
-                            or ManagedMethodTokenType.CloseTypeParameters
-                            or ManagedMethodTokenType.TypeGenericParameterReference
-                            or ManagedMethodTokenType.MethodGenericParameterReference
-                            or ManagedMethodTokenType.Arity
-                            or ManagedMethodTokenType.Array
-                            or ManagedMethodTokenType.Pointer
-                            or ManagedMethodTokenType.Reference))
+                        if (_tokenType is not (ManagedIdentifierTokenType.TypeSegment
+                            or ManagedIdentifierTokenType.NestedTypeSegment
+                            or ManagedIdentifierTokenType.CloseTypeParameters
+                            or ManagedIdentifierTokenType.TypeGenericParameterReference
+                            or ManagedIdentifierTokenType.MethodGenericParameterReference
+                            or ManagedIdentifierTokenType.Arity
+                            or ManagedIdentifierTokenType.Array
+                            or ManagedIdentifierTokenType.Pointer
+                            or ManagedIdentifierTokenType.Reference))
                         {
                             throw new FormatException("Unexpected parameter separator.");
                         }
 
-                        _tokenType = ManagedMethodTokenType.NextParameter;
+                        _tokenType = ManagedIdentifierTokenType.NextParameter;
                         if (_typeParamDepth == 0)
                             ++_parameterIndex;
                         SetContent(_readIndex, 1);
@@ -741,10 +580,10 @@ internal ref struct ManagedMethodTokenizer
                         SkipWhitespace();
                         return true;
 
-                    case '`' when _text.Length > _readIndex + 1 && _tokenType != ManagedMethodTokenType.TypeArity:
+                    case '`' when _text.Length > _readIndex + 1 && _tokenType != ManagedIdentifierTokenType.TypeArity:
                         _readIndex = ReadArity();
                         SkipWhitespace();
-                        _tokenType = ManagedMethodTokenType.TypeArity;
+                        _tokenType = ManagedIdentifierTokenType.TypeArity;
                         return true;
 
                     case '!' when !_isTypeOnly:
@@ -757,8 +596,8 @@ internal ref struct ManagedMethodTokenizer
                             if (digitCt is > 0 and <= 5 && GetChar(digitCt + exclCt + _readIndex) is EndOfLine or ',' or '[' or '*' or '&' or '>' or ')' )
                             {
                                 _tokenType = exclCt == 1
-                                    ? ManagedMethodTokenType.TypeGenericParameterReference
-                                    : ManagedMethodTokenType.MethodGenericParameterReference;
+                                    ? ManagedIdentifierTokenType.TypeGenericParameterReference
+                                    : ManagedIdentifierTokenType.MethodGenericParameterReference;
                                 SetContent(_readIndex + exclCt, digitCt);
                                 _readIndex += digitCt + exclCt;
                                 if (exclCt == 2)
@@ -784,7 +623,7 @@ internal ref struct ManagedMethodTokenizer
                         break;
 
                     case '+':
-                        tokenType = ManagedMethodTokenType.NestedTypeSegment;
+                        tokenType = ManagedIdentifierTokenType.NestedTypeSegment;
                         goto case '.';
 
                     case '.':
@@ -855,9 +694,17 @@ internal ref struct ManagedMethodTokenizer
             if (char.IsWhiteSpace(c))
                 continue;
             if (c == '*')
+            {
                 ++stars;
+                if (stars > 1)
+                    break;
+            }
             else if (c == ',')
+            {
                 ++commas;
+                if (commas >= ManagedIdentifier.MaxArrayRank)
+                    break;
+            }
             else
                 throw new FormatException($"Unexpected character in array specifier at {startIndex + i + 1}: '{c}'.");
         }
@@ -882,7 +729,10 @@ internal ref struct ManagedMethodTokenizer
         }
         else
         {
-            _arrayRank = commas + 1;
+            int arrayRank = commas + 1;
+            if (arrayRank > ManagedIdentifier.MaxArrayRank)
+                throw new FormatException($"Array specifier at {_readIndex + 1} has too many dimensions.");
+            _arrayRank = arrayRank;
         }
 
         return startIndex + endIndex + 1;
@@ -1136,6 +986,9 @@ internal ref struct ManagedMethodTokenizer
         _contentLength = writeIndex + finalAmt;
     }
 
+    /// <summary>
+    /// Resets the tokenizer to the beginning of the string.
+    /// </summary>
     public void Reset()
     {
         _contentIsInBuffer = false;
@@ -1146,24 +999,30 @@ internal ref struct ManagedMethodTokenizer
         _typeParamRefIndex = 0;
         if (_isTypeOnly)
         {
-            _tokenType = ManagedMethodTokenType.OpenParameters;
+            _tokenType = ManagedIdentifierTokenType.OpenParameters;
             _readIndex = 0;
             SkipWhitespace();
         }
         else
         {
-            _tokenType = ManagedMethodTokenType.Uninitialized;
+            _tokenType = ManagedIdentifierTokenType.Uninitialized;
             _readIndex = -1;
         }
 
         _parameterIndex = -1;
     }
+
+    /// <inheritdoc />
+    public override string ToString() => _text.ToString();
 }
 
-internal enum ManagedMethodTokenType
+/// <summary>
+/// A token represented by <see cref="ManagedIdentifierTokenizer"/>.
+/// </summary>
+public enum ManagedIdentifierTokenType
 {
     /// <summary>
-    /// The tokenizer hasn't started yet. Call <see cref="ManagedMethodTokenizer.MoveNext"/> to start it.
+    /// The tokenizer hasn't started yet. Call <see cref="ManagedIdentifierTokenizer.MoveNext"/> to start it.
     /// </summary>
     Uninitialized = 0,
 

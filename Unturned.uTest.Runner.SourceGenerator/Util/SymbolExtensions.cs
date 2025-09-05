@@ -8,29 +8,6 @@ namespace uTest.Util;
 
 internal static class SymbolExtensions
 {
-    // note: doesnt cover all cases, like new() or multiple interfaces
-    public static string GetSampleTypeArgument(this ITypeParameterSymbol parameter)
-    {
-        if (parameter.BaseType == null && parameter.ConstraintTypes.IsDefaultOrEmpty)
-        {
-            if (parameter is { HasValueTypeConstraint: false, HasUnmanagedTypeConstraint: false })
-            {
-                return "object";
-            }
-
-            return "int";
-        }
-
-        if (parameter.BaseType == null && parameter.ConstraintTypes.Length == 1)
-        {
-            return parameter.ConstraintTypes[0].ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat);
-        }
-
-        return parameter.BaseType?.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat)
-               ?? parameter.ConstraintTypes.FirstOrDefault()?.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat)
-               ?? "object";
-    }
-
     public static string? GetTypeKeyword(this SpecialType type)
     {
         return type switch

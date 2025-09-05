@@ -1,11 +1,14 @@
+using System.Collections;
+
 namespace uTest.Sandbox;
 
 [Test]
 [TypeArgs(typeof(long))]
-public class Tests<[Set(typeof(string), typeof(Version))] T> : ITestClass
+public class Tests<[Set(typeof(string), typeof(Version))] T> : ITestClass, IEnumerable<T>
 {
     [Test]
     [TestArgs(1, 2)]
+    [TypeArgs(typeof(string))]
     public unsafe void TestGeneric<[Set(typeof(long), typeof(int))] T2>(List<T> t1, T2[] t2, T* ptr)
     {
         Test.Pass();
@@ -67,4 +70,12 @@ public class Tests<[Set(typeof(string), typeof(Version))] T> : ITestClass
     {
         Thread.Sleep(5000);
     }
+
+    /// <inheritdoc />
+    [Test]
+    IEnumerator<T> IEnumerable<T>.GetEnumerator() => throw null!;
+
+    /// <inheritdoc />
+    [Test]
+    IEnumerator IEnumerable.GetEnumerator() => throw null!;
 }

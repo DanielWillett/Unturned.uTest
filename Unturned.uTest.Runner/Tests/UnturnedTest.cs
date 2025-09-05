@@ -25,6 +25,7 @@ public class UnturnedTest
     public TestFileLocationProperty? LocationInfo { get; init; }
 
     public UnturnedTestParameter[]? TypeParameters { get; init; }
+    public UnturnedTestArgs[]? TypeArgs { get; init; }
 
 
     /// <inheritdoc />

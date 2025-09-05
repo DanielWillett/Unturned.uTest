@@ -3,7 +3,6 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
 using uTest.Util;
 
 namespace uTest;
@@ -14,6 +13,8 @@ internal record struct TestClassInfo(
     string AssemblyFullName,
     string Namespace,
     string ManagedType,
+    int DefinitionLine,
+    string FileName,
     EquatableList<TestMethodInfo> Methods,
     EquatableList<TestTypeParameterInfo>? TypeParameters,
     EquatableList<TestTypeArgsAttributeInfo>? TypeArgsAttributes);
@@ -51,7 +52,6 @@ internal record struct TestParameterInfo(
 );
 internal record struct TestTypeParameterInfo(
     string Name,
-    string GloballyQualifiedSampleType,
     TestParameterSetAttributeInfo? SetParameter);
 
 internal record struct TestTypeArgsAttributeInfo(EquatableList<EquatableTypeContainer> Types)
@@ -254,14 +254,7 @@ internal sealed class DelegateType : IEquatable<DelegateType>
         NeedsUnsafe = methodSymbol.ReturnType is IPointerTypeSymbol or IFunctionPointerTypeSymbol
                       || methodSymbol.Parameters.Any(x => x.Type is IPointerTypeSymbol or IFunctionPointerTypeSymbol);
 
-        if (methodSymbol.ReturnType is ITypeParameterSymbol t)
-        {
-            ReturnType = t.GetSampleTypeArgument();
-        }
-        else
-        {
-            ReturnType = methodSymbol.ReturnType.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat);
-        }
+        ReturnType = methodSymbol.ReturnType.ToDisplayString(UnturnedTestGenerator.FullTypeNameWithGlobalFormat);
 
         ReturnRefKind = methodSymbol.ReturnsByRef
             ? RefKind.Ref : methodSymbol.ReturnsByRefReadonly
@@ -282,21 +275,6 @@ internal sealed class DelegateType : IEquatable<DelegateType>
     public string GetMethodByExpressionString(in TestClassInfo classInfo, TestMethodInfo method, string typeName, string? name)
     {
         string methodName = method.MethodName;
-        if (method.TypeParameters is { Count: > 0 })
-        {
-            StringBuilder bldr = new StringBuilder(methodName).Append('<');
-            bool comma = false;
-            foreach (TestTypeParameterInfo p in method.TypeParameters)
-            {
-                if (comma) bldr.Append(',');
-                else comma = true;
-                bldr.Append(p.GloballyQualifiedSampleType);
-            }
-
-            bldr.Append('>');
-            methodName = bldr.ToString();
-        }
-
         switch (Predefined)
         {
             case PredefinedDelegateType.Action0:
@@ -435,34 +413,6 @@ public sealed class DelegateParameter : IEquatable<DelegateParameter>
     public DelegateParameter(IParameterSymbol parameter)
     {
         UnscopedRef = parameter.HasAttribute("global::System.Diagnostics.CodeAnalysis.UnscopedRefAttribute");
-
-        if (parameter is ITypeParameterSymbol t)
-        {
-            string replacementType = t.GetSampleTypeArgument();
-            ImmutableArray<SymbolDisplayPart> parts = parameter.ToDisplayParts(UnturnedTestGenerator.MethodDeclarationFormat);
-            int startIndex = -1;
-            int endIndex = 0;
-            for (; endIndex < parts.Length; ++endIndex)
-            {
-                if (startIndex == -1 && SymbolEqualityComparer.Default.Equals(parts[endIndex].Symbol, parameter.Type))
-                    startIndex = endIndex;
-                else if (startIndex != -1 && !SymbolEqualityComparer.Default.Equals(parts[endIndex].Symbol, parameter.Type))
-                    break;
-            }
-            
-            if (startIndex != -1)
-            {
-                int amt = endIndex - startIndex;
-                SymbolDisplayPart[] newArray = new SymbolDisplayPart[parts.Length - amt + 1];
-                parts.CopyTo(0, newArray, 0, startIndex);
-                parts.CopyTo(endIndex, newArray, startIndex + 1, parts.Length - endIndex);
-                newArray[startIndex] = new SymbolDisplayPart(SymbolDisplayPartKind.ClassName, null, replacementType);
-
-                Definition = string.Join(string.Empty, newArray);
-                return;
-            }
-        }
-
         Definition = parameter.ToDisplayString(UnturnedTestGenerator.MethodDeclarationFormat);
     }
 
