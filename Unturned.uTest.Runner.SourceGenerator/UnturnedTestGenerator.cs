@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -80,7 +81,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         }
 
                         string managedMethod = ManagedIdentifierRoslynFormatter.GetManagedMethod(method);
-                        string name = managedType + "." + managedMethod;
+                        string uid = UnturnedTestUid.Create(managedType, managedMethod).Uid;
 
                         string fileName = string.Empty;
                         int lineStart = -1, lineEnd = -1;
@@ -95,7 +96,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         ImmutableArray<IParameterSymbol> parameters = method.Parameters;
                         EquatableList<TestParameterInfo>? parameterInfo = null;
                         
-                        if (parameters.Length > 0)
+                        if (!parameters.IsDefaultOrEmpty)
                         {
                             parameterInfo = new EquatableList<TestParameterInfo>(parameters.Length);
                             foreach (IParameterSymbol parameter in parameters)
@@ -147,16 +148,19 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             }
 
                             ImmutableArray<ITypeParameterSymbol> tps = method.TypeParameters;
-                            methodTypeParameters = new EquatableList<TestTypeParameterInfo>(tps.Length);
-                            foreach (ITypeParameterSymbol typeParam in tps)
+                            if (!tps.IsDefaultOrEmpty)
                             {
-                                AttributeData? setAttributeData = typeParam.GetAttributes()
-                                    .FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, setAttribute));
+                                methodTypeParameters = new EquatableList<TestTypeParameterInfo>(tps.Length);
+                                foreach (ITypeParameterSymbol typeParam in tps)
+                                {
+                                    AttributeData? setAttributeData = typeParam.GetAttributes()
+                                        .FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, setAttribute));
 
-                                methodTypeParameters.Add(new TestTypeParameterInfo(
-                                    typeParam.Name,
-                                    TestParameterSetAttributeInfo.Create(setAttributeData))
-                                );
+                                    methodTypeParameters.Add(new TestTypeParameterInfo(
+                                        typeParam.Name,
+                                        TestParameterSetAttributeInfo.Create(setAttributeData))
+                                    );
+                                }
                             }
                         }
 
@@ -164,7 +168,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             new TestMethodInfo(
                                 ManagedMethod: managedMethod,
                                 DisplayName: method.ToDisplayString(MethodDisplayNameFormat),
-                                Uid: name,
+                                Uid: uid,
                                 Arity: method.Arity,
                                 LineNumberStart: lineStart,
                                 LineNumberEnd: lineEnd,
@@ -186,16 +190,19 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     if (namedType.IsGenericType)
                     {
                         ImmutableArray<ITypeParameterSymbol> tps = namedType.TypeParameters;
-                        classTypeParameters = new EquatableList<TestTypeParameterInfo>(tps.Length);
-                        foreach (ITypeParameterSymbol typeParam in tps)
+                        if (!tps.IsDefaultOrEmpty)
                         {
-                            AttributeData? setAttributeData = typeParam.GetAttributes()
-                                .FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, setAttribute));
+                            classTypeParameters = new EquatableList<TestTypeParameterInfo>(tps.Length);
+                            foreach (ITypeParameterSymbol typeParam in tps)
+                            {
+                                AttributeData? setAttributeData = typeParam.GetAttributes()
+                                    .FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x.AttributeClass, setAttribute));
 
-                            classTypeParameters.Add(new TestTypeParameterInfo(
-                                typeParam.Name,
-                                TestParameterSetAttributeInfo.Create(setAttributeData))
-                            );
+                                classTypeParameters.Add(new TestTypeParameterInfo(
+                                    typeParam.Name,
+                                    TestParameterSetAttributeInfo.Create(setAttributeData))
+                                );
+                            }
                         }
 
                         foreach (AttributeData argsAttribute in classAttributes)
@@ -344,7 +351,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 if (classInfo.Methods.Any(x => x.DelegateType == null))
                 {
                     bldr.Empty()
-                        .Build($"global::System.Reflection.MethodInfo[] methods = typeof({openGlobalTestName}).GetMethods(global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.DeclaredOnly);")
+                        .Build($"global::System.Reflection.MethodInfo[] methods = typeof({openGlobalTestName}).GetMethods(global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly);")
                         .Empty();
                 }
 
@@ -580,8 +587,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 if (parameter.SetParameter is not null)
                                 {
                                     bldr.Build($"SetParameterInfo = new global::uTest.Runner.UnturnedTestSetParameterInfo()")
-                                        .String("{").In()
-                                        .Preprocessor(linePrep);
+                                        .String("{").In();
                                     ExtendSet(in parameter, bldr, method, file, linePrep);
                                     bldr.Out()
                                         .String("}");
@@ -776,7 +782,10 @@ public class UnturnedTestGenerator : IIncrementalGenerator
     private static void ExtendSet(in TestParameterInfo parameter, SourceStringBuilder bldr, TestMethodInfo method, string file, string linePrep)
     {
         if (parameter.SetParameter!.From != null)
-            bldr.Build($"From = \"{StringLiteralEscaper.Escape(parameter.SetParameter!.From)}\"");
+        {
+            bldr.Preprocessor(linePrep)
+                .Build($"From = \"{StringLiteralEscaper.Escape(parameter.SetParameter!.From)}\"");
+        }
         else if (parameter.SetParameter!.Values != null)
         {
             EquatableObjectList.ObjectArrayType targetType;

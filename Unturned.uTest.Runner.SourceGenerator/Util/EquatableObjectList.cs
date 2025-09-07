@@ -17,7 +17,7 @@ internal sealed class EquatableObjectList : IEquatable<EquatableObjectList?>
     public EquatableObjectList(in TypedConstant value, bool distinct = false)
     {
         ImmutableArray<TypedConstant> objArgs = value.Values;
-        if (objArgs.Length == 0)
+        if (objArgs.IsDefaultOrEmpty)
         {
             _objects = Array.Empty<object>();
             return;

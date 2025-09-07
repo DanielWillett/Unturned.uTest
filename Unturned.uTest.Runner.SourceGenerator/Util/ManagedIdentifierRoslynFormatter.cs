@@ -49,15 +49,13 @@ internal static class ManagedIdentifierRoslynFormatter
         return builder.ToString();
     }
 
-    private static readonly char[] NamespaceSplitChars = [ '.' ];
-
     private static void AppendMethod(ref ManagedIdentifierBuilder builder, IMethodSymbol method)
     {
         ImmutableArray<IMethodSymbol> implMethods = method.ExplicitInterfaceImplementations;
         string methodName;
-        if (implMethods.Length > 0)
+        if (!implMethods.IsDefaultOrEmpty)
         {
-            // from roslyn source - naming an explicit interface method
+            // adapted from roslyn source - naming an explicit interface method
             // https://github.com/dotnet/roslyn/blob/main/src/Compilers/CSharp/Portable/Symbols/Source/ExplicitInterfaceHelpers.cs
             IMethodSymbol explicitImplementationTarget = implMethods[0];
             INamedTypeSymbol interfaceType = explicitImplementationTarget.ContainingType;
@@ -65,9 +63,14 @@ internal static class ManagedIdentifierRoslynFormatter
             string interfaceName = interfaceType.ToDisplayString(ExplicitInterfaceImplementationFormat);
             interfaceName = interfaceName.Replace(" ", string.Empty);
 
-            foreach (string section in interfaceName.Split(NamespaceSplitChars, StringSplitOptions.RemoveEmptyEntries))
+            ReadOnlySpan<char> intxNameSpan = interfaceName;
+
+            int ct = ManagedIdentifier.Count(intxNameSpan, '.') + 1;
+            Span<Range> sections = stackalloc Range[ct];
+            ct = ManagedIdentifier.SplitExplicitlyImplementedMethodName(intxNameSpan, sections);
+            for (int i = 0; i < ct; ++i)
             {
-                builder.AddExplicitImplementationInterfaceName(section);
+                builder.AddExplicitImplementationInterfaceName(intxNameSpan[sections[i]]);
             }
 
             methodName = method.Name;
@@ -83,7 +86,7 @@ internal static class ManagedIdentifierRoslynFormatter
         builder.AddMethodName(methodName, method.Arity);
 
         ImmutableArray<IParameterSymbol> parameters = method.Parameters;
-        if (parameters.Length == 0)
+        if (parameters.IsDefaultOrEmpty)
             return;
 
         builder.BeginParameters();
@@ -157,8 +160,11 @@ internal static class ManagedIdentifierRoslynFormatter
             }
 
             ImmutableArray<ITypeSymbol> args = namedType.TypeArguments;
-            for (int i = args.Length - 1; i >= 0; --i)
-                genericTypes.Push(args[i]);
+            if (!args.IsDefaultOrEmpty)
+            {
+                for (int i = args.Length - 1; i >= 0; --i)
+                    genericTypes.Push(args[i]);
+            }
         }
 
         bool isFirst = true;
@@ -207,7 +213,7 @@ internal static class ManagedIdentifierRoslynFormatter
     private struct ElementTypeState
     {
         public ITypeSymbol? FirstElement;
-        public Queue<ITypeSymbol>? Queue;
+        public Stack<ITypeSymbol>? Stack;
     }
 
     private static ITypeSymbol ReduceElementType(ITypeSymbol type, out ElementTypeState types)
@@ -228,18 +234,22 @@ internal static class ManagedIdentifierRoslynFormatter
                     break;
 
                 default:
-                    if (types.Queue != null)
+                    if (types.Stack != null)
                         types.FirstElement = null;
                     return elementType;
             }
 
             if (types.FirstElement == null)
                 types.FirstElement = elementType;
+            else if (types.Stack == null)
+            {
+                types.Stack = StackPool<ITypeSymbol>.Rent();
+                types.Stack.Push(types.FirstElement);
+                types.Stack.Push(elementType);
+            }
             else
             {
-                types.Queue = new Queue<ITypeSymbol>(2);
-                types.Queue.Enqueue(types.FirstElement);
-                types.Queue.Enqueue(elementType);
+                types.Stack.Push(elementType);
             }
 
             elementType = nextElementType;
@@ -248,12 +258,14 @@ internal static class ManagedIdentifierRoslynFormatter
 
     private static void AppendElementType(ref ManagedIdentifierBuilder builder, bool isByRef, in ElementTypeState elementTypeState)
     {
-        if (elementTypeState.Queue != null)
+        if (elementTypeState.Stack != null)
         {
-            while (elementTypeState.Queue.Dequeue() is { } type)
+            while (elementTypeState.Stack.Count > 0)
             {
-                AddElementType(ref builder, type);
+                AddElementType(ref builder, elementTypeState.Stack.Pop());
             }
+
+            StackPool<ITypeSymbol>.Return(elementTypeState.Stack);
         }
         else if (elementTypeState.FirstElement != null)
         {

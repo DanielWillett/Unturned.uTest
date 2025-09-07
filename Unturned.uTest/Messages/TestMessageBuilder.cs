@@ -223,7 +223,7 @@ public struct TestMessageBuilder
             return;
         }
 
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
         AppendFormattedDelegate<T>? tryFormat = SpanFormat<T>.TryFormat;
         if (tryFormat != null)
         {
@@ -276,7 +276,7 @@ public struct TestMessageBuilder
             AppendFormatted(formatted, alignment);
     }
 
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
     private static class SpanFormat<T>
     {
         public static AppendFormattedDelegate<T>? TryFormat;

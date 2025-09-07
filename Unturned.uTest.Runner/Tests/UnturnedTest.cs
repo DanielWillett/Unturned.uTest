@@ -10,8 +10,10 @@ namespace uTest.Runner;
 #if RELEASE
 [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
 #endif
-public class UnturnedTest
+public class UnturnedTest : ITypeParamsProvider
 {
+    internal UnturnedTestOwnerInfo? Owner;
+
     public required string ManagedType { get; init; }
     public required string ManagedMethod { get; init; }
     public required string DisplayName { get; init; }
@@ -32,6 +34,27 @@ public class UnturnedTest
     public override string ToString() => Uid;
 }
 
+internal interface ITypeParamsProvider
+{
+    UnturnedTestParameter[]? TypeParameters { get; }
+    UnturnedTestArgs[]? TypeArgs { get; }
+    string DisplayName { get; }
+}
+
+internal class UnturnedTestOwnerInfo : ITypeParamsProvider
+{
+    internal Type Type;
+    public UnturnedTestParameter[]? TypeParameters { get; set; }
+    public UnturnedTestArgs[]? TypeArgs { get; set; }
+
+    string ITypeParamsProvider.DisplayName => ManagedIdentifier.GetManagedType(Type);
+
+    public UnturnedTestOwnerInfo(Type type)
+    {
+        Type = type;
+    }
+}
+
 /// <summary>
 /// Internal API used by source-generator.
 /// </summary>
@@ -40,6 +63,8 @@ public class UnturnedTest
 #endif
 public sealed class UnturnedTestArgs
 {
+    internal bool IsValid;
+
     public string? From { get; init; }
     public Array? Values { get; init; }
 }

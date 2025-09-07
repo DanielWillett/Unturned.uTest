@@ -4,37 +4,37 @@ namespace uTest.Sandbox;
 
 [Test]
 [TypeArgs(typeof(long))]
-public class Tests<[Set(typeof(string), typeof(Version))] T> : ITestClass, IEnumerable<T>
+public class Tests : ITestClass
 {
     [Test]
-    [TestArgs(1, 2)]
+    [TestArgs(null)]
     [TypeArgs(typeof(string))]
-    public unsafe void TestGeneric<[Set(typeof(long), typeof(int))] T2>(List<T> t1, T2[] t2, T* ptr)
+    public void TestGeneric<[Set(typeof(long), typeof(int))] T2>(T2[] t2)
     {
         Test.Pass();
     }
 
-    [Test]
-    public void ParameterizedTestFromRange(
-        //[Range(ConsoleColor.Black, ConsoleColor.Yellow)]
-        ConsoleColor testInt,
+    //[Test]
+    //public void ParameterizedTestFromRange(
+    //    [Range(ConsoleColor.Black, ConsoleColor.Yellow)]
+    //    ConsoleColor testInt,
+    //
+    //    [Range(0, 15, step: 5)] [Set(21, 18)]
+    //    int spacing
+    //)
+    //{
+    //    Test.Fail();
+    //}
 
-        //[Range(0, 15, step: 5)] [Set(21, 18)]
-        int spacing
-    )
-    {
-        Test.Fail();
-    }
-
-    [Test]
-    [TestArgs(-1)]
-    public void ParameterizedTestFromSet(
-        //[Range(0, 16383)]
-        int str
-    )
-    {
-        Test.Fail();
-    }
+    //[Test]
+    //[TestArgs(-1)]
+    //public void ParameterizedTestFromSet(
+    //    [Range(0, 16383)]
+    //    int str
+    //)
+    //{
+    //    Test.Fail();
+    //}
 
     private static readonly Array ParseNumberArgs = new[]
     {
@@ -70,12 +70,4 @@ public class Tests<[Set(typeof(string), typeof(Version))] T> : ITestClass, IEnum
     {
         Thread.Sleep(5000);
     }
-
-    /// <inheritdoc />
-    [Test]
-    IEnumerator<T> IEnumerable<T>.GetEnumerator() => throw null!;
-
-    /// <inheritdoc />
-    [Test]
-    IEnumerator IEnumerable.GetEnumerator() => throw null!;
 }

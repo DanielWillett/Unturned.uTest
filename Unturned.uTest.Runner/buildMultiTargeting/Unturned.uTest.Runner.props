@@ -37,6 +37,9 @@
     <!-- Update build file as well -->
     <MTPVersion>2.0.0-preview.25415.9</MTPVersion>
 
+    <!-- Treats the 'generator failed to generate source' warnings as errors. -->
+    <WarningsAsErrors>CS8785</WarningsAsErrors>
+
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsUnturnedTestProject)' == 'True'">

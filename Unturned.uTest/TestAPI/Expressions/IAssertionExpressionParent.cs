@@ -125,7 +125,7 @@ public interface IAssertionExpressionChild<TIn> : IAssertionExpression
 #if RELEASE
     [EditorBrowsable(EditorBrowsableState.Never)]
 #endif
-    IAssertionExpressionParent<TIn?>? Parent { get; set; }
+    IAssertionExpressionParent<TIn>? Parent { get; set; }
 }
 
 internal interface IEqualityComparerAssertionExpression<TElementType> : ITerminalAssertionExpression<IEnumerable<TElementType>, bool>

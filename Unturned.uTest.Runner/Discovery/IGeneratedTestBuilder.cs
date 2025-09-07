@@ -38,9 +38,12 @@ internal class GeneratedTestBuilder : IGeneratedTestBuilder
 {
     internal List<UnturnedTest> Tests;
 
-    public GeneratedTestBuilder(List<UnturnedTest> tests)
+    internal UnturnedTestOwnerInfo OwnerInfo;
+
+    public GeneratedTestBuilder(List<UnturnedTest> tests, Type type)
     {
         Tests = tests;
+        OwnerInfo = new UnturnedTestOwnerInfo(type);
     }
 
     /// <inheritdoc />
@@ -50,17 +53,35 @@ internal class GeneratedTestBuilder : IGeneratedTestBuilder
     }
 
     /// <inheritdoc />
-    public Type? TestType { get; set; }
+    public Type? TestType
+    {
+        get => OwnerInfo.Type;
+        set
+        {
+            if (value != null)
+                OwnerInfo.Type = value;
+        }
+    }
 
     /// <inheritdoc />
-    public UnturnedTestParameter[]? TypeParameters { get; set; }
-    public UnturnedTestArgs[]? TypeArgs { get; set; }
+    public UnturnedTestParameter[]? TypeParameters
+    {
+        get => OwnerInfo.TypeParameters;
+        set => OwnerInfo.TypeParameters = value;
+    }
+
+    public UnturnedTestArgs[]? TypeArgs
+    {
+        get => OwnerInfo.TypeArgs;
+        set => OwnerInfo.TypeArgs = value;
+    }
 
     public void Add(UnturnedTest test)
     {
         if (test == null)
             throw new ArgumentNullException(nameof(test));
 
+        test.Owner = OwnerInfo;
         Tests.Add(test);
     }
 

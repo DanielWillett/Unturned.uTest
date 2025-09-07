@@ -8,7 +8,7 @@ internal static class RangeHelper
     /// <summary>
     /// Maximum number of variations a test can have.
     /// </summary>
-    public const int MaxTestVariations = 16384;
+    public const int MaxTestVariations = 65535;
 
     /// <summary>
     /// Gets all values present in a range.

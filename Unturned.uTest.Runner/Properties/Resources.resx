@@ -126,8 +126,14 @@
   <data name="LogErrorCreatingRunner" xml:space="preserve">
     <value>Failed to create an instance of test class "{0}".</value>
   </data>
+  <data name="LogErrorGenericConstraints" xml:space="preserve">
+    <value>Type(s) {0} do not meet the generic constraints for test {2}.</value>
+  </data>
   <data name="LogErrorMismatchedArgsParameterCount" xml:space="preserve">
     <value>TestArgsAttribute was given {0} parameter(s) but test {1} should have exactly {2}.</value>
+  </data>
+  <data name="LogErrorMismatchedArgsTypeParameterCount" xml:space="preserve">
+    <value>TypeArgsAttribute was given {0} type parameter(s) but class or method {1} should have exactly {2}.</value>
   </data>
   <data name="LogErrorMismatchedParameterType" xml:space="preserve">
     <value>Value {0} can not be converted to type {1} for parameter "{2}" in test {3}.</value>

@@ -10,22 +10,22 @@ internal static class AnonymousTypeHelper
     private static readonly ConcurrentDictionary<Type, PropertyInfo[]> MappingCache =
         new ConcurrentDictionary<Type, PropertyInfo[]>();
 
-    public static bool TryMapObjectToMethodParameters(object obj, MethodInfo method, MemberInfo? fromMember, out UnturnedTestArgument[] args)
+    public static bool TryMapObjectToMethodParameters(object obj, MethodInfo method, MemberInfo? fromMember, out object[] args)
     {
         return TryMapObjectToMethodParameters(
             obj, method, fromMember, (method ?? throw new ArgumentNullException(nameof(method))).GetParameters(), out args
         );
     }
 
-    public static bool TryMapObjectToMethodParameters(object obj, MethodInfo method, MemberInfo? fromMember, ParameterInfo[] parameters, out UnturnedTestArgument[] args)
+    public static bool TryMapObjectToMethodParameters(object obj, MethodInfo method, MemberInfo? fromMember, ParameterInfo[] parameters, out object[] args)
     {
-        args = Array.Empty<UnturnedTestArgument>();
+        args = Array.Empty<object>();
         if (obj == null)
         {
             if (parameters is not [ { ParameterType.IsValueType: false } ])
                 return false;
 
-            args = new UnturnedTestArgument[1];
+            args = new object[1];
             return true;
         }
 
@@ -43,7 +43,7 @@ internal static class AnonymousTypeHelper
                 return false;
             }
 
-            args = new UnturnedTestArgument[parameters.Length];
+            args = new object[parameters.Length];
             bool anyMissingMatch = false;
 
             // try mapping by element names first
@@ -85,7 +85,7 @@ internal static class AnonymousTypeHelper
                         return false;
                     }
 
-                    args[i] = new UnturnedTestArgument(value);
+                    args[i] = value;
                 }
 
                 if (!anyMissingMatch)
@@ -103,7 +103,7 @@ internal static class AnonymousTypeHelper
                     return false;
                 }
 
-                args[i] = new UnturnedTestArgument(value);
+                args[i] = value;
             }
 
             return true;
@@ -116,7 +116,7 @@ internal static class AnonymousTypeHelper
             object value = obj;
             if (TryMapValueToParameter(ref value, param))
             {
-                args = [ new UnturnedTestArgument(value) ];
+                args = [ value ];
                 return true;
             }
         }
@@ -124,7 +124,7 @@ internal static class AnonymousTypeHelper
         // anonymous types
         PropertyInfo[] properties = MappingCache.GetOrAdd(type, type => type.GetProperties(BindingFlags.Public | BindingFlags.Instance));
         LightweightBitArray bitArray = new LightweightBitArray(properties.Length, true);
-        UnturnedTestArgument[] arguments = new UnturnedTestArgument[parameters.Length];
+        object[] arguments = new object[parameters.Length];
         for (int i = 0; i < parameters.Length; ++i)
         {
             ParameterInfo param = parameters[i];
@@ -155,7 +155,7 @@ internal static class AnonymousTypeHelper
                 return false;
             }
 
-            arguments[i] = new UnturnedTestArgument(value);
+            arguments[i] = value;
         }
 
         args = arguments;

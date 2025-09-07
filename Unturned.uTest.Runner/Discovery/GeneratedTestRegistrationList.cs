@@ -1,5 +1,5 @@
-using Microsoft.Testing.Platform.Logging;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using IMTPLogger = Microsoft.Testing.Platform.Logging.ILogger;
 
 namespace uTest.Runner;
@@ -22,7 +22,7 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
 
         List<Exception>? exceptions = null;
 
-        GeneratedTestBuilder builder = new GeneratedTestBuilder(new List<UnturnedTest>());
+        List<UnturnedTest> testList = new List<UnturnedTest>();
 
         for (int i = 0; i < arr.Length; ++i)
         {
@@ -47,6 +47,8 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
                 if (ctor == null)
                     continue;
 
+                GeneratedTestBuilder builder = new GeneratedTestBuilder(testList, attr.TestType);
+
                 provider = (IGeneratedTestProvider)ctor.Invoke(Array.Empty<object>());
                 provider.Build(builder);
             }
@@ -68,12 +70,12 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
         if (exceptions != null)
         {
             if (exceptions.Count == 1)
-                throw exceptions[0];
+                ExceptionDispatchInfo.Capture(exceptions[0]).Throw();
             
             throw new AggregateException(exceptions);
         }
 
-        return Task.FromResult(builder.Tests);
+        return Task.FromResult(testList);
     }
 
     public Task<List<UnturnedTestInstance>> ExpandTestsAsync(IMTPLogger logger, List<UnturnedTest> originalTests, CancellationToken token = default)

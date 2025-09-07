@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 
-namespace uTest.Util;
+namespace uTest;
 
 internal static class StackPool<T>
 {
@@ -17,6 +17,7 @@ internal static class StackPool<T>
 
     internal static void Return(Stack<T> stack)
     {
+        stack.Clear();
         Pool.Add(stack);
     }
 }

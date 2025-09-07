@@ -14,22 +14,50 @@ namespace uTest_Test;
 public class GetMethodInfoByManagedMethodTests
 {
     [NUnit.Framework.Test]
+    [TestCase("System.Collections.Generic.IEnumerable<System.String>", new string[] { "System", "Collections", "Generic", "IEnumerable<System.String>" })]
+    [TestCase("System", new string[] { "System" })]
+    [TestCase(".System.", new string[] { "", "System", "" })]
+    [TestCase("System.", new string[] { "System", "" })]
+    [TestCase(".System", new string[] { "", "System" })]
+    [TestCase("", new string[0])]
+    public void SplitExplicitlyImplementedMethodName(string split, string[] values)
+    {
+        int ct = ManagedIdentifier.Count(split, '.') + 1;
+
+        Span<Range> ranges = stackalloc Range[ct];
+        ct = ManagedIdentifier.SplitExplicitlyImplementedMethodName(split, ranges);
+
+        Assert.That(ct, Is.EqualTo(values.Length));
+
+        for (int i = 0; i < ct; ++i)
+        {
+            Assert.That(split.AsSpan()[ranges[i]].ToString(), Is.EqualTo(values[i]));
+        }
+    }
+
+    [NUnit.Framework.Test]
     public void BasicMethod()
     {
-        MethodInfo? method
-            = ManagedIdentifier.FindMethod(typeof(BasicMethod_Class), "Method1");
+        const string managedMethod = "Method1";
+
+        MethodBase? method
+            = ManagedIdentifier.FindMethod(typeof(BasicMethod_Class), managedMethod);
 
         Assert.That(
             method,
             Is.EqualTo(SourceGenerationServices.GetMethodByExpression<BasicMethod_Class, Action>(x => x.Method1))
         );
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void BasicMethodWithEmptyParamsSpecifier()
     {
-        MethodInfo? method
-            = ManagedIdentifier.FindMethod(typeof(BasicMethod_Class), "Method1()");
+        const string managedMethod = "Method1()";
+
+        MethodBase? method
+            = ManagedIdentifier.FindMethod(typeof(BasicMethod_Class), managedMethod);
 
         Assert.That(
             method,
@@ -40,103 +68,133 @@ public class GetMethodInfoByManagedMethodTests
     [NUnit.Framework.Test]
     public void BasicMethodWith1Param()
     {
-        MethodInfo? method
-            = ManagedIdentifier.FindMethod(typeof(BasicMethod_Class), "Method1(System.Int32)");
+        const string managedMethod = "Method1(System.Int32)";
+
+        MethodBase? method
+            = ManagedIdentifier.FindMethod(typeof(BasicMethod_Class), managedMethod);
 
         Assert.That(
             method,
             Is.EqualTo(SourceGenerationServices.GetMethodByExpression<BasicMethod_Class, Action<int>>(x => x.Method1))
         );
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void BasicMethodWith2Params()
     {
-        MethodInfo? method
-            = ManagedIdentifier.FindMethod(typeof(BasicMethod_Class), "Method1(System.Int32,System.String)");
+        const string managedMethod = "Method1(System.Int32,System.String)";
+
+        MethodBase? method
+            = ManagedIdentifier.FindMethod(typeof(BasicMethod_Class), managedMethod);
 
         Assert.That(
             method,
             Is.EqualTo(SourceGenerationServices.GetMethodByExpression<BasicMethod_Class, Action<int, string>>(x => x.Method1))
         );
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void BasicMethodWithElementTypes()
     {
-        MethodInfo? method
-            = ManagedIdentifier.FindMethod(typeof(BasicMethod_Class), "Method1(System.Int32[],System.String&,System.Void*[,],System.String[]&)");
-        
+        const string managedMethod = "Method1(System.Int32[],System.String&,System.Void*[,],System.String[]&)";
+
+        MethodBase? method
+            = ManagedIdentifier.FindMethod(typeof(BasicMethod_Class), managedMethod);
+         
         MethodInfo? byReflection =
             typeof(BasicMethod_Class).GetMethod("Method1", BindingFlags.Public | BindingFlags.Instance, null, [ typeof(int[]), typeof(string).MakeByRefType(), typeof(void*).MakeArrayType(2), typeof(string[]).MakeByRefType() ], null);
 
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void BasicMethodWithGenericParameter1()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method2(System.Collections.Generic.List`1<System.String>)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(BasicMethod_Class),
-            "Method2(System.Collections.Generic.List`1<System.String>)"
+            managedMethod
         );
 
         Assert.That(
             method,
             Is.EqualTo(SourceGenerationServices.GetMethodByExpression<BasicMethod_Class, Action<List<string>>>(x => x.Method2))
         );
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void BasicMethodWithGenericParameter2()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method2(System.Collections.Generic.Dictionary`2<System.String,System.Int32>)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(BasicMethod_Class),
-            "Method2(System.Collections.Generic.Dictionary`2<System.String, System.Int32>)"
+            managedMethod
         );
 
         Assert.That(
             method,
             Is.EqualTo(SourceGenerationServices.GetMethodByExpression<BasicMethod_Class, Action<Dictionary<string, int>>>(x => x.Method2))
         );
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void BasicMethodWithGenericParameter3()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method2(System.Collections.Generic.List`1<System.Collections.Generic.List`1<System.Collections.Generic.List`1<System.String>>>)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(BasicMethod_Class),
-            "Method2(System.Collections.Generic.List`1<System.Collections.Generic.List`1<System.Collections.Generic.List`1<System.String>>>)"
+            managedMethod
         );
 
         Assert.That(
             method,
             Is.EqualTo(SourceGenerationServices.GetMethodByExpression<BasicMethod_Class, Action<List<List<List<string>>>>>(x => x.Method2))
         );
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void BasicMethodWithGenericParameter4()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method2(System.Collections.Generic.Dictionary`2<System.Collections.Generic.List`1<System.Collections.Generic.List`1<System.String>>,System.Collections.Generic.List`1<System.Int32>>)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(BasicMethod_Class),
-            "Method2(System.Collections.Generic.Dictionary`2<System.Collections.Generic.List`1<System.Collections.Generic.List`1<System.String>>,System.Collections.Generic.List`1<System.Int32>>)"
+            managedMethod
         );
 
         Assert.That(
             method,
             Is.EqualTo(SourceGenerationServices.GetMethodByExpression<BasicMethod_Class, Action<Dictionary<List<List<string>>, List<int>>>>(x => x.Method2))
         );
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void GenericMethodWithTypeOnly_Open()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method3(!0)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(GenericMethod<>),
-            "Method3(!0)"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -145,14 +203,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void GenericMethodWithTypeOnly_Constructed()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method3(System.String)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(GenericMethod<string>),
-            "Method3(System.String)"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -161,14 +223,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void GenericMethodWithMethodOnly_Open()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method4`1(!!0)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(GenericMethod<>),
-            "Method4`1(!!0)"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -177,14 +243,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void GenericMethodWithMethodOnly_Constructed()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method4`1(!!0)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(GenericMethod<string>),
-            "Method4`1(!!0)"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -193,14 +263,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void GenericMethodWithBoth_Open()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method5`1(!0,!!0)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(GenericMethod<>),
-            "Method5`1(!0,!!0)"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -209,14 +283,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void GenericMethodWithBoth_Constructed()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method5`1(System.String,!!0)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(GenericMethod<string>),
-            "Method5`1(System.String,!!0)"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -225,14 +303,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void BasicExplicitImplementationDispose()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "System.IDisposable.Dispose";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(BasicExplicitImplementations),
-            "System.IDisposable.Dispose"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -241,14 +323,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void BasicExplicitImplementationDisposeWithEmptyParams()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "System.IDisposable.Dispose()";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(BasicExplicitImplementations),
-            "System.IDisposable.Dispose()"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -262,9 +348,11 @@ public class GetMethodInfoByManagedMethodTests
     [NUnit.Framework.Test]
     public void BasicExplicitImplementationGetEnumerator()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "System.Collections.Generic.IEnumerable<System.String>.GetEnumerator";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(BasicExplicitImplementations),
-            "System.Collections.Generic.IEnumerable<System.String>.GetEnumerator"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -273,14 +361,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void BasicExplicitImplementationGetEnumeratorWithEmptyParams()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "System.Collections.Generic.IEnumerable<System.String>.GetEnumerator()";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(BasicExplicitImplementations),
-            "System.Collections.Generic.IEnumerable<System.String>.GetEnumerator()"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -294,9 +386,31 @@ public class GetMethodInfoByManagedMethodTests
     [NUnit.Framework.Test]
     public void GenericExplicitImplementationGetEnumerator()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "System.Collections.Generic.IEnumerable<T>.GetEnumerator";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(GenericExplicitImplementations<string>),
-            "System.Collections.Generic.IEnumerable<T>.GetEnumerator"
+            managedMethod
+        );
+
+        MethodInfo? byReflection =
+            typeof(GenericExplicitImplementations<string>).GetMethod("System.Collections.Generic.IEnumerable<T>.GetEnumerator", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+        Assert.That(byReflection, Is.Not.Null);
+
+        Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
+    }
+
+    [NUnit.Framework.Test]
+    public void GenericExplicitImplementationGetEnumeratorWithEmptyParams()
+    {
+        const string managedMethod = "System.Collections.Generic.IEnumerable<T>.GetEnumerator()";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
+            typeof(GenericExplicitImplementations<string>),
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -308,15 +422,37 @@ public class GetMethodInfoByManagedMethodTests
     }
 
     [NUnit.Framework.Test]
-    public void GenericExplicitImplementationGetEnumeratorWithEmptyParams()
+    public void GenericExplicitImplementationGetEnumerator_Open()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
-            typeof(GenericExplicitImplementations<string>),
-            "System.Collections.Generic.IEnumerable<T>.GetEnumerator()"
+        const string managedMethod = "System.Collections.Generic.IEnumerable<T>.GetEnumerator";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
+            typeof(GenericExplicitImplementations<>),
+            managedMethod
         );
 
         MethodInfo? byReflection =
-            typeof(GenericExplicitImplementations<string>).GetMethod("System.Collections.Generic.IEnumerable<T>.GetEnumerator", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            typeof(GenericExplicitImplementations<>).GetMethod("System.Collections.Generic.IEnumerable<T>.GetEnumerator", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+        Assert.That(byReflection, Is.Not.Null);
+
+        Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
+    }
+
+    [NUnit.Framework.Test]
+    public void GenericExplicitImplementationGetEnumeratorWithEmptyParams_Open()
+    {
+        const string managedMethod = "System.Collections.Generic.IEnumerable<T>.GetEnumerator()";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
+            typeof(GenericExplicitImplementations<>),
+            managedMethod
+        );
+
+        MethodInfo? byReflection =
+            typeof(GenericExplicitImplementations<>).GetMethod("System.Collections.Generic.IEnumerable<T>.GetEnumerator", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
         Assert.That(byReflection, Is.Not.Null);
 
@@ -326,9 +462,11 @@ public class GetMethodInfoByManagedMethodTests
     [NUnit.Framework.Test]
     public void NestedGenerics1()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method1(!0,!1)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(A<>.B<>),
-            "Method1(!0,!1)"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -337,14 +475,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void NestedGenerics2()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method2(!1)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(A<>.B<>),
-            "Method2(!1)"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -353,14 +495,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void NestedGenerics3()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "Method3`1(!0,!1,!!0)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(A<>.B<>),
-            "Method3`1(!0, !1, !!0)"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -369,14 +515,18 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
     }
 
     [NUnit.Framework.Test]
     public void NestedNonGenericTypeInGenericType()
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(
+        const string managedMethod = "MoveNext";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
             typeof(List<>.Enumerator),
-            "MoveNext"
+            managedMethod
         );
 
         MethodInfo? byReflection =
@@ -385,6 +535,91 @@ public class GetMethodInfoByManagedMethodTests
         Assert.That(byReflection, Is.Not.Null);
 
         Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
+    }
+
+    [NUnit.Framework.Test]
+    public void InstanceConstructor()
+    {
+        const string managedMethod = ".ctor(System.Char[])";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
+            typeof(string),
+            managedMethod
+        );
+
+        MethodBase? byReflection =
+            typeof(string).GetConstructor([ typeof(char[]) ]);
+
+        Assert.That(byReflection, Is.Not.Null);
+
+        Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
+    }
+
+    [NUnit.Framework.Test]
+    public void StaticConstructor()
+    {
+        const string managedMethod = ".cctor";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
+            typeof(Comparer),
+            managedMethod
+        );
+
+        MethodBase? byReflection =
+            typeof(Comparer).GetConstructor(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic, null, CallingConventions.Any, Type.EmptyTypes, null);
+
+        Assert.That(byReflection, Is.Not.Null);
+
+        Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
+    }
+
+    [NUnit.Framework.Test]
+    public void GenericElementTypes()
+    {
+        const string managedMethod = "TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0[],!0*)";
+
+        MethodBase? method = ManagedIdentifier.FindMethod(
+            typeof(Tests<>),
+            managedMethod
+        );
+
+        MethodBase? byReflection =
+            typeof(Tests<>).GetMethod("TestGeneric", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        Assert.That(byReflection, Is.Not.Null);
+
+        Assert.That(method, Is.EqualTo(byReflection));
+
+        Assert.That(ManagedIdentifier.GetManagedMethod(method!), Is.EqualTo(managedMethod));
+    }
+
+    [NUnit.Framework.Test]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0[,],!0*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0[*],!0*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!0[],!0*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!!0>,!!0[],!0*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!1>,!!0[],!0*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0[],!1*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0[],!0&)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0[],!0)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0,!0*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<System.String>,!!0[],!0*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!1>,!!0[],!0*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0[],!0*&)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0[]&,!0*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0[,][],!0*)")]
+    [TestCase("TestGeneric`1(System.Collections.Generic.List`1<!0>,!!0[][,],!0*)")]
+    public void GenericElementTypesDifferentCantMatch(string managedMethod)
+    {
+        MethodBase? method = ManagedIdentifier.FindMethod(typeof(Tests<>), managedMethod);
+
+        Assert.That(method, Is.Null);
     }
 
     public unsafe class BasicMethod_Class
@@ -426,6 +661,13 @@ public class GetMethodInfoByManagedMethodTests
             public void Method1(T t, X x) { }
             public void Method2(X x) { }
             public void Method3<U>(T t, X x, U u) { }
+        }
+    }
+    public class Tests<T>
+    {
+        public unsafe void TestGeneric<T2>(List<T> t1, T2[] t2, T* ptr)
+        {
+
         }
     }
 }

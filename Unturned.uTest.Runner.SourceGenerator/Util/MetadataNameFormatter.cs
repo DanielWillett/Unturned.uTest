@@ -2,7 +2,6 @@ using Microsoft.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -11,11 +10,7 @@ namespace uTest.Util;
 
 internal class MetadataNameFormatter
 {
-    private static readonly AssemblyQualifiedNameEscaper QualifiedNameEscaper = new AssemblyQualifiedNameEscaper();
-    private class AssemblyQualifiedNameEscaper : TextEscaper
-    {
-        public AssemblyQualifiedNameEscaper() : base('\r', '\n', '\t', '\v', '\\', ',', '+', '[', ']', '*', '&') { }
-    }
+    private static readonly TextEscaper QualifiedNameEscaper = new TextEscaper('\r', '\n', '\t', '\v', '\\', ',', '+', '[', ']', '*', '&');
 
     private static string GetMetadataNameStr(Compilation compilation, ITypeSymbol type, bool byRef, bool includeAsmName, IMethodSymbol method)
     {
@@ -66,7 +61,11 @@ internal class MetadataNameFormatter
 
     private static string GetMetadataNameSlow(Compilation compilation, ITypeSymbol type, bool byRef, bool includeAsmName, IMethodSymbol method)
     {
-        StringBuilder sb = new StringBuilder(32 * (((type as INamedTypeSymbol)?.TypeArguments.Length ?? 0) + 1));
+        int estimatedLength = 32;
+        if (type is INamedTypeSymbol { IsGenericType: true, TypeArguments.IsDefaultOrEmpty: false } n)
+            estimatedLength += 32 * n.TypeArguments.Length;
+
+        StringBuilder sb = new StringBuilder(estimatedLength);
         GetMetadataName(compilation, type, sb, byRef: byRef, includeAsmName: includeAsmName, method: method);
         return sb.ToString();
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -22,8 +23,6 @@ public ref struct ManagedIdentifierTokenizer
     // this default comes from System.Reflection.Metadata's TypeNameParseOptions default value
     // https://github.com/dotnet/runtime/blob/main/src/libraries/System.Reflection.Metadata/src/System/Reflection/Metadata/TypeNameParseOptions.cs#L8
     private const int DefaultMaxGenericDepth = 20;
-
-    private static TextEscaper? _fullyQualifiedTypeNameEscaper;
 
     private readonly ReadOnlySpan<char> _text;
     private readonly bool _isTypeOnly;
@@ -107,7 +106,7 @@ public ref struct ManagedIdentifierTokenizer
                     return _methodArity;
 
                 case ManagedIdentifierTokenType.TypeArity:
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
                     return int.Parse(Value, NumberStyles.None, CultureInfo.InvariantCulture);
 #else
                     return int.Parse(Value.ToString(), NumberStyles.None, CultureInfo.InvariantCulture);
@@ -148,7 +147,7 @@ public ref struct ManagedIdentifierTokenizer
             switch (_tokenType)
             {
                 case ManagedIdentifierTokenType.TypeGenericParameterReference:
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
                     return int.Parse(Value, NumberStyles.None, CultureInfo.InvariantCulture);
 #else
                     return int.Parse(Value.ToString(), NumberStyles.None, CultureInfo.InvariantCulture);
@@ -193,6 +192,7 @@ public ref struct ManagedIdentifierTokenizer
     /// <remarks>This method will advance the tokenizer until it reaches the next type.</remarks>
     public bool IsSameTypeAs(Type type, StringBuilder? tempStringBuilder = null)
     {
+        // keep in sync with ManagedIdentifier.FullyQualifiedTypeNameEscaper
         ReadOnlySpan<char> escapedCharacters = [ '&', '*', '+', ',', '[', '\\', ']' ];
 
         if (_tokenType is ManagedIdentifierTokenType.NextParameter or ManagedIdentifierTokenType.OpenParameters or ManagedIdentifierTokenType.OpenTypeParameters)
@@ -201,37 +201,76 @@ public ref struct ManagedIdentifierTokenizer
                 return false;
         }
 
-        if (type.IsGenericParameter)
+        if (type.HasElementType)
         {
-            MethodBase? method;
+            // unwind element types of generic parameters (!!0[]*&, etc)
+            Stack<Type> elementTypeStack = StackPool<Type>.Rent();
             try
             {
-                method = type.DeclaringMethod;
-            }
-            catch (InvalidOperationException)
-            {
-                method = null;
-            }
-
-            if (method == null)
-            {
-                if (_tokenType != ManagedIdentifierTokenType.TypeGenericParameterReference
-                    || GenericReferenceIndex != type.GenericParameterPosition)
+                for (Type typeWithElement = type; typeWithElement.HasElementType;)
                 {
-                    return false;
+                    elementTypeStack.Push(typeWithElement);
+
+                    Type elementTypeChild = typeWithElement.GetElementType()!;
+                    if (elementTypeChild.IsGenericParameter)
+                    {
+                        if (!CheckGenericParam(elementTypeChild))
+                            return false;
+
+                        do
+                        {
+                            if (_tokenType is not ManagedIdentifierTokenType.Array
+                                and not ManagedIdentifierTokenType.Pointer
+                                and not ManagedIdentifierTokenType.Reference)
+                            {
+                                return elementTypeStack.Count == 0;
+                            }
+
+                            if (elementTypeStack.Count == 0)
+                                return false;
+
+                            typeWithElement = elementTypeStack.Pop();
+                            switch (_tokenType)
+                            {
+                                case ManagedIdentifierTokenType.Array:
+
+                                    if (!typeWithElement.IsArray)
+                                        return false;
+
+#if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+                                    bool isSzArray = typeWithElement.IsSZArray;
+#else
+                                    bool isSzArray = typeWithElement.GetArrayRank() == 1 && typeWithElement.GetElementType()!.MakeArrayType() == typeWithElement;
+#endif
+                                    if (isSzArray != IsSzArray || typeWithElement.GetArrayRank() != ArrayRank)
+                                        return false;
+
+                                    continue;
+
+                                case ManagedIdentifierTokenType.Pointer:
+                                    if (!typeWithElement.IsPointer)
+                                        return false;
+                                    continue;
+
+                                default: // case ManagedIdentifierTokenType.Reference:
+                                    if (!typeWithElement.IsByRef)
+                                        return false;
+                                    continue;
+                            }
+                        } while (MoveNext());
+                    }
+
+                    typeWithElement = elementTypeChild;
                 }
             }
-            else
+            finally
             {
-                if (_tokenType != ManagedIdentifierTokenType.MethodGenericParameterReference
-                    || _typeParamRefIndex != type.GenericParameterPosition)
-                {
-                    return false;
-                }
+                StackPool<Type>.Return(elementTypeStack);
             }
-
-            MoveNext();
-            return true;
+        }
+        else if (type.IsGenericParameter)
+        {
+            return CheckGenericParam(type);
         }
 
         bool isGeneric = type.IsConstructedGenericType;
@@ -242,7 +281,12 @@ public ref struct ManagedIdentifierTokenizer
         if (typeFullName == null)
             return false;
 
-        tempStringBuilder ??= new StringBuilder();
+        bool isRent = false;
+        if (tempStringBuilder == null)
+        {
+            isRent = true;
+            tempStringBuilder = StringBuilderPool.Rent();
+        }
 
         string fullName;
         do
@@ -256,8 +300,7 @@ public ref struct ManagedIdentifierTokenizer
                         tempStringBuilder.Append(_tokenType == ManagedIdentifierTokenType.NestedTypeSegment ? '+' : '.');
                     if (val.IndexOfAny(escapedCharacters) >= 0)
                     {
-                        _fullyQualifiedTypeNameEscaper ??= new TextEscaper(escapedCharacters.ToArray());
-                        tempStringBuilder.Append(_fullyQualifiedTypeNameEscaper.Escape(val.ToString()));
+                        tempStringBuilder.Append(ManagedIdentifier.FullyQualifiedTypeNameEscaper.Escape(val.ToString()));
                     }
                     else
                         AppendSpan(tempStringBuilder, val);
@@ -280,52 +323,60 @@ public ref struct ManagedIdentifierTokenizer
                     continue;
 
                 default:
-                    fullName = tempStringBuilder.ToString();
-                    tempStringBuilder.Clear();
-                    if (!string.Equals(fullName, typeFullName))
-                        return false;
-
-                    if (_tokenType != ManagedIdentifierTokenType.OpenTypeParameters)
-                        return !isGeneric;
-
-                    if (!isGeneric)
-                        return false;
-
-                    int startDepth = _typeParamDepth;
-                    if (startDepth > (MaxGenericDepth <= 0 ? DefaultMaxGenericDepth : MaxGenericDepth))
+                    try
                     {
-                        return false;
-                    }
-                        
-                    Type[] genericParameters = type.GetGenericArguments();
-                    int paramIndex = 0;
-                    if (!MoveNext() || _tokenType == ManagedIdentifierTokenType.CloseTypeParameters)
-                        return false;
+                        fullName = tempStringBuilder.ToString();
+                        tempStringBuilder.Clear();
+                        if (!string.Equals(fullName, typeFullName))
+                            return false;
 
-                    while (true)
+                        if (_tokenType != ManagedIdentifierTokenType.OpenTypeParameters)
+                            return !isGeneric;
+
+                        if (!isGeneric)
+                            return false;
+
+                        int startDepth = _typeParamDepth;
+                        if (startDepth > (MaxGenericDepth <= 0 ? DefaultMaxGenericDepth : MaxGenericDepth))
+                        {
+                            return false;
+                        }
+
+                        Type[] genericParameters = type.GetGenericArguments();
+                        int paramIndex = 0;
+                        if (!MoveNext() || _tokenType == ManagedIdentifierTokenType.CloseTypeParameters)
+                            return false;
+
+                        while (true)
+                        {
+                            if (paramIndex >= genericParameters.Length)
+                                return false;
+                            if (!IsSameTypeAs(genericParameters[paramIndex], tempStringBuilder))
+                            {
+                                return false;
+                            }
+
+                            if (_tokenType == ManagedIdentifierTokenType.NextParameter && !MoveNext())
+                            {
+                                return false;
+                            }
+
+                            ++paramIndex;
+
+                            if (startDepth == _typeParamDepth + 1 && _tokenType == ManagedIdentifierTokenType.CloseTypeParameters)
+                            {
+                                MoveNext();
+                                break;
+                            }
+                        }
+
+                        return paramIndex == genericParameters.Length;
+                    }
+                    finally
                     {
-                        if (paramIndex >= genericParameters.Length)
-                            return false;
-                        if (!IsSameTypeAs(genericParameters[paramIndex], tempStringBuilder))
-                        {
-                            return false;
-                        }
-
-                        if (_tokenType == ManagedIdentifierTokenType.NextParameter && !MoveNext())
-                        {
-                            return false;
-                        }
-
-                        ++paramIndex;
-
-                        if (startDepth == _typeParamDepth + 1 && _tokenType == ManagedIdentifierTokenType.CloseTypeParameters)
-                        {
-                            MoveNext();
-                            break;
-                        }
+                        if (isRent)
+                            StringBuilderPool.Return(tempStringBuilder);
                     }
-
-                    return paramIndex == genericParameters.Length;
             }
         } while (MoveNext());
 
@@ -333,9 +384,46 @@ public ref struct ManagedIdentifierTokenizer
             return false;
 
         fullName = tempStringBuilder.ToString();
-        tempStringBuilder.Clear();
+        if (isRent)
+            StringBuilderPool.Return(tempStringBuilder);
+        else
+            tempStringBuilder.Clear();
         return string.Equals(fullName, typeFullName);
     }
+
+    private bool CheckGenericParam(Type type)
+    {
+        MethodBase? method;
+        try
+        {
+            method = type.DeclaringMethod;
+        }
+        catch (InvalidOperationException)
+        {
+            method = null;
+        }
+
+        if (method == null)
+        {
+            if (_tokenType != ManagedIdentifierTokenType.TypeGenericParameterReference
+                || GenericReferenceIndex != type.GenericParameterPosition)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            if (_tokenType != ManagedIdentifierTokenType.MethodGenericParameterReference
+                || _typeParamRefIndex != type.GenericParameterPosition)
+            {
+                return false;
+            }
+        }
+
+        MoveNext();
+        return true;
+    }
+
     private static unsafe void AppendSpan(StringBuilder builder, ReadOnlySpan<char> span)
     {
         fixed (char* ptr = span)
@@ -456,7 +544,7 @@ public ref struct ManagedIdentifierTokenizer
                         _readIndex = ReadArity();
                         SkipWhitespace();
                         _tokenType = ManagedIdentifierTokenType.Arity;
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
                         _methodArity = int.Parse(Value, NumberStyles.None, CultureInfo.InvariantCulture);
 #else
                         _methodArity = int.Parse(Value.ToString(), NumberStyles.None, CultureInfo.InvariantCulture);
@@ -602,7 +690,7 @@ public ref struct ManagedIdentifierTokenizer
                                 _readIndex += digitCt + exclCt;
                                 if (exclCt == 2)
                                 {
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
                                     _typeParamRefIndex = int.Parse(Value, NumberStyles.None, CultureInfo.InvariantCulture);
 #else
                                     _typeParamRefIndex = int.Parse(Value.ToString(), NumberStyles.None, CultureInfo.InvariantCulture);

@@ -79,7 +79,7 @@ internal static class GeneratedTestExpansionHelper
     }
 }
 
-file class TestExpandProcessor
+internal class TestExpandProcessor
 {
     private readonly IMTPLogger _logger;
     private readonly List<UnturnedTest> _originalTests;
@@ -93,9 +93,15 @@ file class TestExpandProcessor
 
     private UnturnedTest _test;
     private Type _testType;
+    private Type _testTypeInstance;
+    private MethodInfo _testMethodInstance;
     private Lazy<object> _runner;
     private ParameterInfo[] _parameters;
-    private Type[] _genericArguments;
+    private Type[] _methodGenericArguments;
+    private Type[] _typeGenericArguments;
+
+    private string _managedType;
+    private string _managedMethod;
 
 #nullable restore
     public TestExpandProcessor(IMTPLogger logger, List<UnturnedTest> originalTests, CancellationToken token)
@@ -120,63 +126,425 @@ file class TestExpandProcessor
             await ExpandTestAsync(test).ConfigureAwait(false);
         }
         sw.Stop();
-        await _logger.LogInformationAsync($"Expanded {_originalTests.Count} tests to {_instances.Count} in {sw.Elapsed.Milliseconds} ms.");
+        await _logger.LogInformationAsync($"Expanded {_originalTests.Count} tests to {_instances.Count} in {sw.Elapsed.Milliseconds} ms.").ConfigureAwait(false);
 
         return _instances;
     }
 
     private static readonly int DefaultArgHash = UnturnedTestInstance.CalculateArgumentHash(
-        Array.Empty<UnturnedTestArgument>(),
-        Array.Empty<UnturnedTestArgument>()
+        Type.EmptyTypes,
+        Type.EmptyTypes,
+        Array.Empty<object>()
     );
 
     public ValueTask ExpandTestAsync(UnturnedTest test)
     {
         _test = test;
-        _testType = test.Method.DeclaringType!;
+        if (_testType != test.Method.DeclaringType)
+        {
+            _testType = test.Method.DeclaringType!;
+            _testTypeInstance = _testType;
+            try
+            {
+                _typeGenericArguments = _testType.GetGenericArguments();
+            }
+            catch (NotSupportedException)
+            {
+                _typeGenericArguments = Type.EmptyTypes;
+            }
+
+            CreateRunner();
+        }
+
         _parameters = test.Method.GetParameters();
-        _genericArguments = test.Method.GetGenericArguments();
+        try
+        {
+            _methodGenericArguments = test.Method.GetGenericArguments();
+        }
+        catch (NotSupportedException)
+        {
+            _methodGenericArguments = Type.EmptyTypes;
+        }
+
+        // basic 0-arg test
+        if (_parameters.Length == 0 && _methodGenericArguments.Length == 0 && _typeGenericArguments.Length == 0)
+        {
+            _instances.Add(new UnturnedTestInstance(
+                this,
+                test,
+                _testType,
+                test.Method,
+                test.ManagedType,
+                test.ManagedMethod,
+                Array.Empty<object>(),
+                index: 0,
+                argHash: DefaultArgHash,
+                Type.EmptyTypes,
+                Type.EmptyTypes)
+            );
+            return default;
+        }
+
+        return new ValueTask(ExpandComplexTest(null, _test.Owner, _testType.IsGenericTypeDefinition, 1, _typeGenericArguments.Length));
+    }
+
+    private void CreateRunner()
+    {
         _runner = new Lazy<object?>(() =>
         {
-            if (_runners.TryGetValue(_testType, out object? obj))
+            if (_runners.TryGetValue(_testTypeInstance, out object? obj))
                 return obj;
 
             object? instance;
             try
             {
-                instance = Activator.CreateInstance(_testType, true);
+                instance = Activator.CreateInstance(_testTypeInstance, true);
             }
             catch (Exception ex)
             {
-                _logger.LogError(string.Format(Properties.Resources.LogErrorCreatingRunner, _testType.FullName), ex);
+                _logger.LogError(string.Format(Properties.Resources.LogErrorCreatingRunner, _testTypeInstance.FullName), ex);
                 instance = null;
             }
 
-            _runners.Add(_testType, instance);
+            _runners.Add(_testTypeInstance, instance);
             return instance;
         }, LazyThreadSafetyMode.None);
-
-        // basic 0-arg test
-        if (_parameters.Length == 0 && _genericArguments.Length == 0)
-        {
-            _instances.Add(new UnturnedTestInstance(
-                test,
-                Array.Empty<UnturnedTestArgument>(),
-                Array.Empty<UnturnedTestArgument>(),
-                test.Uid,
-                test.DisplayName,
-                index: 0,
-                argHash: DefaultArgHash)
-            );
-            return default;
-        }
-
-        return new ValueTask(ExpandComplexTest(Array.Empty<UnturnedTestArgument>()));
     }
 
-    private async Task ExpandComplexTest(UnturnedTestArgument[] typeArguments)
+    private async Task ExpandComplexTest(Type[]? parentArgs, ITypeParamsProvider? provider, bool isUnbound, ulong expansionFactor, int expectedArity)
     {
+        // instead of method type params
+        bool isExpandingTypeParams = parentArgs == null;
+
+        if (!isExpandingTypeParams)
+        {
+            if (parentArgs!.Length == 0)
+            {
+                _managedType = _test.ManagedType;
+                _testTypeInstance = _testType;
+            }
+            else
+            {
+                try
+                {
+                    _testTypeInstance = _testType.MakeGenericType(parentArgs);
+                    _managedType = ManagedIdentifier.GetManagedType(_testTypeInstance);
+                }
+                catch (ArgumentException)
+                {
+                    _testTypeInstance = null;
+                }
+            }
+
+            if (_testTypeInstance == null)
+            {
+                await _logger.LogErrorAsync(
+                    string.Format(
+                        Properties.Resources.LogErrorGenericConstraints,
+                        parentArgs.Length == 1
+                            ? parentArgs[0].FullName
+                            : $"<{string.Join(", ", parentArgs.Select(ManagedIdentifier.GetManagedType))}>",
+                        _test.DisplayName
+                    )
+                ).ConfigureAwait(false);
+                return;
+            }
+
+            CreateRunner();
+        }
+
+        int arity = isExpandingTypeParams ? GetArity(_test.Method) : 0;
+        if (provider == null || (provider.TypeParameters == null && provider.TypeArgs == null))
+        {
+            if (isUnbound)
+                return;
+
+            if (isExpandingTypeParams)
+                await ExpandComplexTest(Type.EmptyTypes, _test, _test.Method.IsGenericMethodDefinition, 1, arity).ConfigureAwait(false);
+            else
+                await ExpandComplexTest(parentArgs!, Type.EmptyTypes, expansionFactor);
+            return;
+        }
+
+        UnturnedTestParameter[]? typeParams = provider.TypeParameters;
+        bool hasSetParams = false;
+        Type[][]? sets = null;
+        if (typeParams != null && typeParams.Length == expectedArity)
+        {
+            sets = new Type[typeParams.Length][];
+            ulong variationCount = 1;
+            for (int i = 0; i < typeParams.Length; ++i)
+            {
+                if (typeParams[i] is not UnturnedTestSetParameter { Values: Type[] set })
+                {
+                    variationCount = 0;
+                    continue;
+                }
+
+                set = Distinctify(set);
+                sets[i] = set;
+                variationCount *= (ulong)set.Length;
+            }
+
+            // if any type parameters dont have a set attribute it can't be expanded
+            if (variationCount * expansionFactor is > 0 and <= RangeHelper.MaxTestVariations)
+            {
+                expansionFactor *= variationCount;
+
+                int[] indices = new int[typeParams.Length];
+                
+                int variationCountFixed = checked ( (int)variationCount );
+
+                int newCt = _instances.Count + variationCountFixed;
+                if (_instances.Capacity < newCt)
+                    _instances.Capacity = newCt;
+
+                bool reachedEnd = false;
+                do
+                {
+                    for (int p = indices.Length - 1; p >= 0; --p)
+                    {
+                        ref int index = ref indices[p];
+                        if ((uint)index < sets[p].Length - 1u)
+                        {
+                            ++index;
+                            break;
+                        }
+
+                        index = 0;
+                        if (p != 0)
+                            continue;
+
+                        reachedEnd = true;
+                        break;
+                    }
+
+                    Type[] args = new Type[indices.Length];
+                    for (int p = 0; p < indices.Length; ++p)
+                    {
+                        args[p] = sets[p][indices[p]];
+                    }
+
+                    if (!isExpandingTypeParams)
+                        await ExpandComplexTest(parentArgs!, args, expansionFactor).ConfigureAwait(false);
+                    else
+                        await ExpandComplexTest(args, _test, _test.Method.IsGenericMethodDefinition, expansionFactor, arity).ConfigureAwait(false);
+                } while (!reachedEnd);
+            }
+        }
+
+        bool anyArgs = false;
+        UnturnedTestArgs[]? typeArgs = provider.TypeArgs;
+        if (typeArgs is { Length: > 0 })
+        {
+            for (int ti = 0; ti < typeArgs.Length; ti++)
+            {
+                UnturnedTestArgs args = typeArgs[ti];
+                args.IsValid = true;
+                if (args.Values is not Type[] types)
+                {
+                    args.IsValid = false;
+                    continue;
+                }
+
+                if (types.Length != expectedArity)
+                {
+                    // skip test: arg values length != expected parameter length
+                    await _logger.LogErrorAsync(
+                        string.Format(
+                            Properties.Resources.LogErrorMismatchedArgsTypeParameterCount,
+                            types.Length,
+                            provider.DisplayName,
+                            expectedArity
+                        )
+                    ).ConfigureAwait(false);
+                    args.IsValid = false;
+                    continue;
+                }
+
+                if (sets != null)
+                {
+                    for (int i = 0; i < types.Length; ++i)
+                    {
+                        Type[] set = sets[i];
+                        if (Array.IndexOf(set, types[i]) < 0)
+                            goto notAlreadyUsed;
+                    }
+
+                    // args value already represented by set.
+                    continue;
+
+                    notAlreadyUsed: ;
+                }
+
+                bool hasDuplicate = false;
+                for (int i = 0; i < ti; ++i)
+                {
+                    if (!typeArgs[i].IsValid)
+                        continue;
+
+                    Type[] values = (Type[])typeArgs[i].Values!;
+                    for (int j = 0; j < types.Length; ++j)
+                    {
+                        Type t1 = types[j], t2 = values[i];
+                        if (t1 != t2)
+                            goto notDuplicate;
+                    }
+
+                    // duplicate arg list
+                    hasDuplicate = true;
+                    continue;
+
+                    notDuplicate: ;
+                }
+
+                if (hasDuplicate)
+                    continue;
+
+                anyArgs = true;
+                if (!isExpandingTypeParams)
+                    await ExpandComplexTest(parentArgs!, types, expansionFactor).ConfigureAwait(false);
+                else
+                    await ExpandComplexTest(types, _test, _test.Method.IsGenericMethodDefinition, expansionFactor, arity).ConfigureAwait(false);
+            }
+        }
+
+        if (!anyArgs && !hasSetParams)
+        {
+            await _logger.LogErrorAsync(
+                string.Format(
+                    Properties.Resources.LogErrorParametersMissingValues,
+                    _test.DisplayName,
+                    _testType.FullName,
+                    RangeHelper.MaxTestVariations
+                )
+            ).ConfigureAwait(false);
+        }
+    }
+
+    private static int GetArity(MethodInfo method)
+    {
+        if (!method.IsGenericMethodDefinition)
+            return 0;
+
+        try
+        {
+            return method.GetGenericArguments().Length;
+        }
+        catch (NotSupportedException)
+        {
+            return 0;
+        }
+    }
+
+
+    private static Type[] Distinctify(Type[] set)
+    {
+        int unique = 0;
+        for (int i = 0; i < set.Length; ++i)
+        {
+            Type t = set[i];
+            for (int j = i + 1; j < set.Length; ++j)
+            {
+                if (t == set[j])
+                    goto notUnique;
+            }
+
+            ++unique;
+            notUnique:;
+        }
+
+        if (unique == set.Length)
+            return set;
+
+        Type[] newSet = new Type[unique];
+        unique = -1;
+        for (int i = 0; i < set.Length; ++i)
+        {
+            Type t = set[i];
+            for (int j = i + 1; j < set.Length; ++j)
+            {
+                if (t == set[j])
+                    goto notUnique;
+            }
+
+            newSet[++unique] = t;
+            notUnique:;
+        }
+
+        return newSet;
+    }
+
+    private async Task ExpandComplexTest(Type[] typeArguments, Type[] methodTypeArguments, ulong expansionFactor)
+    {
+        if (typeArguments.Length == 0)
+        {
+            _managedMethod = _test.ManagedMethod;
+            if (methodTypeArguments.Length == 0)
+            {
+                _testMethodInstance = _test.Method;
+            }
+            else
+            {
+                try
+                {
+                    _testMethodInstance = _test.Method.MakeGenericMethod(methodTypeArguments);
+                }
+                catch (ArgumentException)
+                {
+                    _testMethodInstance = null;
+                }
+            }
+        }
+        else if (MethodBase.GetMethodFromHandle(_test.Method.MethodHandle, _testTypeInstance.TypeHandle) is MethodInfo mtd)
+        {
+            _managedMethod = ManagedIdentifier.GetManagedMethod(mtd);
+            if (methodTypeArguments.Length == 0)
+            {
+                _testMethodInstance = mtd;
+            }
+            else
+            {
+                try
+                {
+                    _testMethodInstance = mtd.MakeGenericMethod(methodTypeArguments);
+                }
+                catch (ArgumentException)
+                {
+                    _testMethodInstance = null;
+                }
+            }
+        }
+        else
+        {
+            _testMethodInstance = null;
+        }
+
+        if (_testMethodInstance == null)
+        {
+            await _logger.LogErrorAsync(
+                string.Format(
+                    Properties.Resources.LogErrorGenericConstraints,
+                    methodTypeArguments.Length == 1
+                        ? methodTypeArguments[0].FullName
+                        : $"<{string.Join(", ", methodTypeArguments.Select(ManagedIdentifier.GetManagedType))}>",
+                    _test.DisplayName
+                )
+            ).ConfigureAwait(false);
+            return;
+        }
+
+        _parameters = _testMethodInstance.GetParameters();
+
         int startIndex = _instances.Count;
+
+        if (_test.Parameters.Length == 0)
+        {
+            int argHash = UnturnedTestInstance.CalculateArgumentHash(typeArguments, methodTypeArguments, Array.Empty<object>());
+
+            AddInstance(Array.Empty<object>(), startIndex, argHash, typeArguments, methodTypeArguments);
+            return;
+        }
 
         // range and set parameters
         ParameterValuesInfo[] infos = new ParameterValuesInfo[_test.Parameters.Length];
@@ -218,7 +586,7 @@ file class TestExpandProcessor
             if (!string.IsNullOrWhiteSpace(setFrom))
             {
                 Array array;
-                MemberInfo? member = GeneratedTestExpansionHelper.GetMember(setFrom!, _testType, out _);
+                MemberInfo? member = GeneratedTestExpansionHelper.GetMember(setFrom!, _testTypeInstance, out _);
 
                 if (member == null)
                 {
@@ -226,9 +594,9 @@ file class TestExpandProcessor
                         string.Format(
                             Properties.Resources.LogErrorMissingFromMember,
                             setFrom,
-                            _testType.FullName
+                            _testTypeInstance.FullName
                         )
-                    );
+                    ).ConfigureAwait(false);
                     break;
                 }
 
@@ -274,12 +642,13 @@ file class TestExpandProcessor
             variationCount *= infos[i].UniqueCount;
         }
 
-        if (variationCount is > 0 and <= RangeHelper.MaxTestVariations)
+        if (variationCount * expansionFactor is > 0 and <= RangeHelper.MaxTestVariations)
         {
-            int variationCountFixed = checked((int)variationCount);
+            int variationCountFixed = checked( (int)variationCount );
 
-            if (_instances.Capacity < variationCountFixed)
-                _instances.Capacity = variationCountFixed;
+            int newCt = _instances.Count + variationCountFixed;
+            if (_instances.Capacity < newCt)
+                _instances.Capacity = newCt;
 
             bool reachedEnd = false;
             do
@@ -301,17 +670,16 @@ file class TestExpandProcessor
                     break;
                 }
 
-                UnturnedTestArgument[] args = new UnturnedTestArgument[infos.Length];
+                object[] args = new object[infos.Length];
                 for (int p = 0; p < infos.Length; ++p)
                 {
                     ref ParameterValuesInfo info = ref infos[p];
-                    args[p] = new UnturnedTestArgument(info.Values!.GetValue(info.Index));
+                    args[p] = info.Values!.GetValue(info.Index);
                 }
 
-                int argHash = UnturnedTestInstance.CalculateArgumentHash(typeArguments, args);
+                int argHash = UnturnedTestInstance.CalculateArgumentHash(typeArguments, methodTypeArguments, args);
 
-                CreateTestNames(args, out string uid, out string displayName);
-                _instances.Add(new UnturnedTestInstance(_test, typeArguments, args, uid, displayName, _instances.Count - startIndex, argHash));
+                AddInstance(args, startIndex, argHash, typeArguments, methodTypeArguments);
             } while (!reachedEnd);
         }
         else if (hasAnySetsOrRanges)
@@ -320,10 +688,10 @@ file class TestExpandProcessor
                 string.Format(
                     Properties.Resources.LogErrorParametersMissingValues,
                     _test.DisplayName,
-                    _testType.FullName,
+                    _testTypeInstance.FullName,
                     RangeHelper.MaxTestVariations
                 )
-            );
+            ).ConfigureAwait(false);
         }
 
         // arg lists
@@ -341,11 +709,11 @@ file class TestExpandProcessor
                             _test.DisplayName,
                             _parameters.Length
                         )
-                    );
+                    ).ConfigureAwait(false);
                     continue;
                 }
 
-                UnturnedTestArgument[] args = new UnturnedTestArgument[_parameters.Length];
+                object[] args = new object[_parameters.Length];
                 bool anyErrors = false;
                 for (int i = 0; i < _parameters.Length; ++i)
                 {
@@ -368,7 +736,7 @@ file class TestExpandProcessor
                                 param.Name,
                                 _test.DisplayName
                             )
-                        );
+                        ).ConfigureAwait(false);
                         break;
                     }
 
@@ -385,28 +753,27 @@ file class TestExpandProcessor
                             await _logger.LogErrorAsync(
                                 string.Format(
                                     Properties.Resources.LogErrorMismatchedParameterType,
-                                    $"{{{Format(value)}}}",
+                                    $"{{{TestDisplayNameFormatter.FormatTestParameterValue(value)}}}",
                                     param.Name,
                                     _test.DisplayName
                                 ),
                                 ex
-                            );
+                            ).ConfigureAwait(false);
                             break;
                         }
                     }
 
-                    args[i] = new UnturnedTestArgument(value);
+                    args[i] = value;
                 }
 
-                if (anyErrors || InstanceAlreadyExists(typeArguments, args, startIndex, out int argHash))
+                if (anyErrors)
                     continue;
 
-                CreateTestNames(args, out string uid, out string displayName);
-                _instances.Add(new UnturnedTestInstance(_test, typeArguments, args, uid, displayName, _instances.Count - startIndex, argHash));
+                AddInstanceIfNotExists(args, startIndex, typeArguments, methodTypeArguments);
             }
             else if (!string.IsNullOrWhiteSpace(argList.From))
             {
-                MemberInfo? member = GeneratedTestExpansionHelper.GetMember(argList.From!, _testType, out _);
+                MemberInfo? member = GeneratedTestExpansionHelper.GetMember(argList.From!, _testTypeInstance, out _);
 
                 if (member == null)
                 {
@@ -414,49 +781,68 @@ file class TestExpandProcessor
                         string.Format(
                             Properties.Resources.LogErrorMissingFromMember,
                             argList.From,
-                            _testType.FullName
+                            _testTypeInstance.FullName
                         )
-                    );
+                    ).ConfigureAwait(false);
                     continue;
                 }
 
                 object? value = await InvokeFromMember(member).ConfigureAwait(false);
-                ParameterInfo[] parameters = _test.Method.GetParameters();
+                ParameterInfo[] parameters = _testMethodInstance.GetParameters();
                 if (value is IEnumerable enumerable)
                 {
                     foreach (object argListValue in enumerable)
                     {
                         if (!AnonymousTypeHelper.TryMapObjectToMethodParameters(
-                                argListValue, _test.Method, member, parameters, out UnturnedTestArgument[] args
+                                argListValue, _testMethodInstance, member, parameters, out object[] args
                             ))
                         {
                             continue;
                         }
 
-                        if (InstanceAlreadyExists(typeArguments, args, startIndex, out int argHash))
-                            continue;
-
-                        CreateTestNames(args, out string uid, out string displayName);
-                        _instances.Add(new UnturnedTestInstance(_test, typeArguments, args, uid, displayName, _instances.Count - startIndex, argHash));
+                        AddInstanceIfNotExists(args, startIndex, typeArguments, methodTypeArguments);
                     }
                 }
                 else if (value != null)
                 {
                     if (!AnonymousTypeHelper.TryMapObjectToMethodParameters(
-                            value, _test.Method, member, parameters, out UnturnedTestArgument[] args
+                            value, _testMethodInstance, member, parameters, out object[] args
                         ))
                     {
                         continue;
                     }
 
-                    if (InstanceAlreadyExists(typeArguments, args, startIndex, out int argHash))
-                        continue;
-
-                    CreateTestNames(args, out string uid, out string displayName);
-                    _instances.Add(new UnturnedTestInstance(_test, typeArguments, args, uid, displayName, _instances.Count - startIndex, argHash));
+                    AddInstanceIfNotExists(args, startIndex, typeArguments, methodTypeArguments);
                 }
             }
         }
+    }
+
+    private void AddInstanceIfNotExists(object[] args, int startIndex, Type[] typeArgs, Type[] methodArgs)
+    {
+        if (InstanceAlreadyExists(args, startIndex, out int argHash, typeArgs, methodArgs))
+            return;
+
+        AddInstance(args, startIndex, argHash, typeArgs, methodArgs);
+    }
+
+    private void AddInstance(object[] args, int startIndex, int argHash, Type[] typeArgs, Type[] methodArgs)
+    {
+        _instances.Add(
+            new UnturnedTestInstance(
+                this,
+                _test,
+                _testTypeInstance, 
+                _testMethodInstance,
+                _managedType,
+                _managedMethod,
+                args,
+                _instances.Count - startIndex,
+                argHash,
+                typeArgs,
+                methodArgs
+            )
+        );
     }
 
     private struct ParameterValuesInfo
@@ -543,44 +929,9 @@ file class TestExpandProcessor
         }
     }
 
-    private void CreateTestNames(UnturnedTestArgument[] args, out string uid, out string displayName)
+    private bool InstanceAlreadyExists(object[] args, int startIndex, out int argHash, Type[] typeArguments, Type[] methodTypeArguments)
     {
-        if (args.Length == 0)
-        {
-            uid = _test.Uid;
-            displayName = _test.DisplayName;
-            return;
-        }
-
-        _stringBuilder.Clear().Append(_test.Uid).Append(" { ");
-        for (int i = 0; i < args.Length; ++i)
-        {
-            string paramName = _parameters[i].Name;
-            if (i != 0)
-                _stringBuilder.Append(", ");
-            _stringBuilder.Append(paramName).Append(" = ").Append(Format(args[i].Value));
-        }
-
-        _stringBuilder.Append(" }");
-
-        uid = _stringBuilder.ToString();
-
-        _stringBuilder.Clear()
-            .Append(_test.ManagedType)
-            .Append('.').Append(_test.Method.Name)
-            .Append('(');
-        for (int i = 0; i < args.Length; ++i)
-        {
-            if (i != 0)
-                _stringBuilder.Append(", ");
-            _stringBuilder.Append(Format(args[i].Value));
-        }
-        displayName = _stringBuilder.Append(')').ToString();
-    }
-
-    private bool InstanceAlreadyExists(UnturnedTestArgument[] typeArguments, UnturnedTestArgument[] args, int startIndex, out int argHash)
-    {
-        argHash = UnturnedTestInstance.CalculateArgumentHash(typeArguments, args);
+        argHash = UnturnedTestInstance.CalculateArgumentHash(typeArguments, methodTypeArguments, args);
         for (int i = startIndex; i < _instances.Count; ++i)
         {
             UnturnedTestInstance inst = _instances[i];
@@ -590,9 +941,7 @@ file class TestExpandProcessor
             bool sequenceEquals = true;
             for (int a = 0; a < args.Length; ++a)
             {
-                ref UnturnedTestArgument a1 = ref inst.Arguments[a];
-                ref UnturnedTestArgument a2 = ref args[a];
-                if (a1.ValueEquals(in a2))
+                if (Equals(inst.Arguments[a], args[a]))
                     continue;
 
                 sequenceEquals = false;
@@ -604,37 +953,6 @@ file class TestExpandProcessor
         }
 
         return false;
-    }
-
-    private static unsafe string Format(object? value)
-    {
-        switch (value)
-        {
-            case null:
-                return "<null>";
-
-            case string str:
-                return $"\"{str}\"";
-            
-            case '\0':
-                return @"'\0'";
-            
-            case char c when char.IsControl(c):
-                return $"(char){((int)c).ToString(null, CultureInfo.InvariantCulture)}";
-            
-            case char c:
-                char* span = stackalloc char[3];
-                span[0] = '\'';
-                span[1] = c;
-                span[2] = '\'';
-                return new string(span);
-
-            case IFormattable f:
-                return f.ToString(null, CultureInfo.InvariantCulture);
-
-            default:
-                return value.ToString();
-        }
     }
 
     private Task<object?> InvokeFromMember(MemberInfo member)
@@ -689,4 +1007,36 @@ file class TestExpandProcessor
 
         return TaskAwaitableHelper.CreateTaskFromReturnValue(returnValue);
     }
+
+    internal void GetNames(in UnturnedTestInstance test, out string uid, out string displayName)
+    {
+        if (test.Arguments.Length == 0 && test.TypeArgs.Length == 0 && test.MethodTypeArgs.Length == 0)
+        {
+            uid = test.Test.Uid;
+        }
+        else
+        {
+            bool useIndex = !UnturnedTestUid.TryFormatParameters(test.Arguments, out string argList);
+
+            string? typeArgs = null;
+
+            if (test.MethodTypeArgs.Length != 0)
+            {
+                typeArgs = UnturnedTestUid.FormatTypeParameters(test.MethodTypeArgs);
+            }
+
+            UnturnedTestUid tUid = UnturnedTestUid.Create(
+                test.ManagedType,
+                test.ManagedMethod,
+                typeArgs,
+                useIndex ? null : argList,
+                useIndex ? test.Index : null
+            );
+
+            uid = tUid.Uid;
+        }
+        
+        displayName = TestDisplayNameFormatter.GetTestDisplayName(in test);
+    }
+
 }

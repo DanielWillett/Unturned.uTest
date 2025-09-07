@@ -18,9 +18,9 @@ public class AnonymousTypeHelperTests
     {
         FieldInfo field = GetField(() => V_1);
 
-        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_1, GetMethod(TestMethod), field, out UnturnedTestArgument[] args));
+        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_1, GetMethod(TestMethod), field, out object[] args));
 
-        UnturnedTestArgument[] expected = [ new(V_1) ];
+        object[] expected = [ V_1 ];
         Assert.That(args, Is.EquivalentTo(expected));
         return;
 
@@ -32,9 +32,9 @@ public class AnonymousTypeHelperTests
     {
         FieldInfo field = GetField(() => V_1);
 
-        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_1, GetMethod(TestMethod), field, out UnturnedTestArgument[] args));
+        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_1, GetMethod(TestMethod), field, out object[] args));
 
-        UnturnedTestArgument[] expected = [ new((long)V_1) ];
+        object[] expected = [ (long)V_1 ];
         Assert.That(args, Is.EquivalentTo(expected));
         return;
 
@@ -48,9 +48,9 @@ public class AnonymousTypeHelperTests
     {
         FieldInfo field = GetField(() => V_2);
 
-        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_2, GetMethod(TestMethod), field, out UnturnedTestArgument[] args));
+        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_2, GetMethod(TestMethod), field, out object[] args));
 
-        UnturnedTestArgument[] expected = [ new(V_2.Item1) ];
+        object[] expected = [ V_2.Item1 ];
         Assert.That(args, Is.EquivalentTo(expected));
         return;
 
@@ -62,9 +62,9 @@ public class AnonymousTypeHelperTests
     {
         FieldInfo field = GetField(() => V_2);
 
-        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_2, GetMethod(TestMethod), field, out UnturnedTestArgument[] args));
+        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_2, GetMethod(TestMethod), field, out object[] args));
 
-        UnturnedTestArgument[] expected = [ new((long)V_2.Item1) ];
+        object[] expected = [ (long)V_2.Item1 ];
         Assert.That(args, Is.EquivalentTo(expected));
         return;
 
@@ -78,9 +78,9 @@ public class AnonymousTypeHelperTests
     {
         FieldInfo field = GetField(() => V_3);
 
-        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_3, GetMethod(TestMethod), field, out UnturnedTestArgument[] args));
+        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_3, GetMethod(TestMethod), field, out object[] args));
 
-        UnturnedTestArgument[] expected = [ new(V_3.num1), new(V_3.Item1) ];
+        object[] expected = [ V_3.num1, V_3.Item1 ];
         Assert.That(args, Is.EquivalentTo(expected));
         return;
 
@@ -92,9 +92,9 @@ public class AnonymousTypeHelperTests
     {
         FieldInfo field = GetField(() => V_3);
 
-        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_3, GetMethod(TestMethod), field, out UnturnedTestArgument[] args));
+        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_3, GetMethod(TestMethod), field, out object[] args));
         
-        UnturnedTestArgument[] expected = [ new((ulong)V_3.num1), new((byte)V_3.Item1) ];
+        object[] expected = [ (ulong)V_3.num1, (byte)V_3.Item1 ];
         Assert.That(args, Is.EquivalentTo(expected));
         return;
 
@@ -108,9 +108,9 @@ public class AnonymousTypeHelperTests
     {
         FieldInfo field = GetField(() => V_4);
 
-        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_4, GetMethod(TestMethod), field, out UnturnedTestArgument[] args));
+        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_4, GetMethod(TestMethod), field, out object[] args));
 
-        UnturnedTestArgument[] expected = [ new(18L), new(3) ];
+        object[] expected = [ 18L, 3 ];
         Assert.That(args, Is.EquivalentTo(expected));
         return;
 
@@ -122,9 +122,9 @@ public class AnonymousTypeHelperTests
     {
         FieldInfo field = GetField(() => V_4);
 
-        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_4, GetMethod(TestMethod), field, out UnturnedTestArgument[] args));
+        Assert.That(AnonymousTypeHelper.TryMapObjectToMethodParameters(V_4, GetMethod(TestMethod), field, out object[] args));
         
-        UnturnedTestArgument[] expected = [ new(18UL), new((byte)3) ];
+        object[] expected = [ 18UL, (byte)3 ];
         Assert.That(args, Is.EquivalentTo(expected));
         return;
 

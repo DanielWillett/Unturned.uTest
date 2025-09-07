@@ -62,13 +62,14 @@ internal record struct TestTypeArgsAttributeInfo(EquatableList<EquatableTypeCont
         if (attribute == null)
             return false;
 
-        if (attribute.ConstructorArguments.Length > 0
+        if (!attribute.ConstructorArguments.IsDefaultOrEmpty
             && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Array } arg0)
         {
             ImmutableArray<TypedConstant> v = arg0.Values;
-            EquatableList<EquatableTypeContainer> list = new EquatableList<EquatableTypeContainer>(v.Length);
+            int l = v.IsDefault ? 0 : v.Length;
+            EquatableList<EquatableTypeContainer> list = new EquatableList<EquatableTypeContainer>(l);
             
-            for (int i = 0; i < v.Length; ++i)
+            for (int i = 0; i < l; ++i)
             {
                 TypedConstant c = v[i];
                 if (c.Kind != TypedConstantKind.Type )
@@ -106,7 +107,7 @@ internal record struct TestArgsAttributeInfo(
             return true;
         }
 
-        if (attribute.ConstructorArguments.Length > 0
+        if (!attribute.ConstructorArguments.IsDefaultOrEmpty
             && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Array } arg0)
         {
             attributeInfo = new TestArgsAttributeInfo(null, new EquatableObjectList(in arg0));
@@ -133,7 +134,7 @@ internal record TestParameterSetAttributeInfo(
             return new TestParameterSetAttributeInfo(fromMember, null);
         }
 
-        if (attribute.ConstructorArguments.Length > 0
+        if (!attribute.ConstructorArguments.IsDefaultOrEmpty
             && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Array } arg0)
         {
             return new TestParameterSetAttributeInfo(null, new EquatableObjectList(in arg0, distinct: true));
@@ -153,8 +154,8 @@ internal record TestParameterRangeAttributeInfo(
 {
     public static TestParameterRangeAttributeInfo? Create(AttributeData? attribute)
     {
-        if (attribute?.AttributeConstructor is not { Parameters: { Length: 2 or 3 } ctorParams }
-            || attribute.ConstructorArguments is not { Length: 2 or 3 } args)
+        if (attribute?.AttributeConstructor is not { Parameters: { IsDefault: false, Length: 2 or 3 } ctorParams }
+            || attribute.ConstructorArguments is not { IsDefault: false, Length: 2 or 3 } args)
         {
             return null;
         }
@@ -196,7 +197,7 @@ internal record TestParameterRangeAttributeInfo(
                 if (a0.Kind != TypedConstantKind.Primitive && a1.Kind != TypedConstantKind.Primitive)
                     return null;
 
-                object? step = args.Length > 2 ? args[2].Value : null;
+                object? step = args is { IsDefault: false, Length: > 2 } ? args[2].Value : null;
                 return ctorType switch
                 {
                     SpecialType.System_Int32 or SpecialType.System_Char
@@ -229,7 +230,7 @@ internal sealed class DelegateType : IEquatable<DelegateType>
     public DelegateType(IMethodSymbol methodSymbol)
     {
         if (!methodSymbol.ReturnsByRef && !methodSymbol.ReturnsByRefReadonly &&
-            (methodSymbol.Parameters.Length == 0
+            (methodSymbol.Parameters.IsDefaultOrEmpty
              || !methodSymbol.Parameters.Any(x => x.RefKind != RefKind.None
                                                   || x.IsParams
                                                   || x.ScopedKind != ScopedKind.None
@@ -239,11 +240,12 @@ internal sealed class DelegateType : IEquatable<DelegateType>
              )
             )
         {
-            if (methodSymbol.Parameters.Length is >= 0 and <= 16)
+            int paramCt = methodSymbol.Parameters.IsDefault ? 0 : methodSymbol.Parameters.Length;
+            if (paramCt <= 16)
             {
                 Predefined = methodSymbol.ReturnType.SpecialType == SpecialType.System_Void
-                    ? PredefinedDelegateType.Action0 + methodSymbol.Parameters.Length
-                    : PredefinedDelegateType.Func0 + methodSymbol.Parameters.Length;
+                    ? PredefinedDelegateType.Action0 + paramCt
+                    : PredefinedDelegateType.Func0 + paramCt;
                 Name = methodSymbol.ReturnType.SpecialType == SpecialType.System_Void
                     ? "Action"
                     : "Func";
@@ -262,7 +264,7 @@ internal sealed class DelegateType : IEquatable<DelegateType>
 
         Name = $"__uTestGeneratedDelegate_{methodSymbol.Name}_{{0}}";
 
-        if (methodSymbol.Parameters.Length != 0)
+        if (!methodSymbol.Parameters.IsDefaultOrEmpty)
         {
             Parameters = new EquatableList<DelegateParameter>(methodSymbol.Parameters.Length);
             foreach (IParameterSymbol parameter in methodSymbol.Parameters)
@@ -363,20 +365,20 @@ internal sealed class DelegateType : IEquatable<DelegateType>
             _ => string.Empty
         }}{ReturnType} @{name}({(Parameters == null || Parameters.Count == 0 ? ")" : string.Empty)}");
 
-        if (Parameters == null || Parameters.Count == 0)
-            return;
-
-        bldr.In();
-        for (int i = 0; i < Parameters.Count; i++)
+        if (Parameters != null && Parameters.Count != 0)
         {
-            DelegateParameter parameter = Parameters[i];
-            string def = parameter.Definition;
-            if (parameter.UnscopedRef)
-                def = "[global::System.Diagnostics.CodeAnalysis.UnscopedRefAttribute] " + def;
-            if (i == Parameters.Count - 1)
-                bldr.String(def);
-            else
-                bldr.Build($"{def},");
+            bldr.In();
+            for (int i = 0; i < Parameters.Count; i++)
+            {
+                DelegateParameter parameter = Parameters[i];
+                string def = parameter.Definition;
+                if (parameter.UnscopedRef)
+                    def = "[global::System.Diagnostics.CodeAnalysis.UnscopedRefAttribute] " + def;
+                if (i == Parameters.Count - 1)
+                    bldr.String(def);
+                else
+                    bldr.Build($"{def},");
+            }
         }
 
         bldr.Out().String(");");

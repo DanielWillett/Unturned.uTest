@@ -24,7 +24,8 @@ public static class SourceGenerationServices
 
     public static MethodInfo GetMethodInfoByManagedMethod(Type type, MethodInfo[] methods, string managedMethod)
     {
-        MethodInfo? method = ManagedIdentifier.FindMethod(methods, managedMethod.AsSpan());
+        // ReSharper disable once CoVariantArrayConversion
+        MethodInfo? method = ManagedIdentifier.FindMethod(methods, managedMethod.AsSpan()) as MethodInfo;
 
         return method ?? throw new MissingMethodException($"Unable to identify method {managedMethod} in type {type.FullName}.");
     }

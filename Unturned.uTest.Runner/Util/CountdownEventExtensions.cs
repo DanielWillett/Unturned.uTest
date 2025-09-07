@@ -32,7 +32,7 @@ internal static class CountDownEventExtensions
         finally
         {
             registeredHandle?.Unregister(null);
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_0_OR_GREATER
             await tokenRegistration.DisposeAsync().ConfigureAwait(false);
 #else
             tokenRegistration.Dispose();

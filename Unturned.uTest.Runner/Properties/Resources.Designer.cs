@@ -88,11 +88,29 @@ namespace uTest.Runner.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Type(s) {0} do not meet the generic constraints for test {2}..
+        /// </summary>
+        internal static string LogErrorGenericConstraints {
+            get {
+                return ResourceManager.GetString("LogErrorGenericConstraints", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to TestArgsAttribute was given {0} parameter(s) but test {1} should have exactly {2}..
         /// </summary>
         internal static string LogErrorMismatchedArgsParameterCount {
             get {
                 return ResourceManager.GetString("LogErrorMismatchedArgsParameterCount", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to TypeArgsAttribute was given {0} type parameter(s) but class or method {1} should have exactly {2}..
+        /// </summary>
+        internal static string LogErrorMismatchedArgsTypeParameterCount {
+            get {
+                return ResourceManager.GetString("LogErrorMismatchedArgsTypeParameterCount", resourceCulture);
             }
         }
         

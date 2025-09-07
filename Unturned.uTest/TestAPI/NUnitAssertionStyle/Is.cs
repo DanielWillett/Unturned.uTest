@@ -94,7 +94,7 @@ public static class Is
     /// Expression that is met when a numeric value is neither NaN or Infinity.
     /// </summary>
     public static ITerminalAssertionExpression<double, bool> Finite => new TerminalMutationAssertionExpression<double, bool>(
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
         double.IsFinite
 #else
         x => !double.IsNaN(x) && !double.IsInfinity(x)

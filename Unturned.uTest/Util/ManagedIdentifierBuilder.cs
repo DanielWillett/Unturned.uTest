@@ -97,34 +97,16 @@ public struct ManagedIdentifierBuilder : IDisposable
                 break;
         }
 
-        bool alreadyAppended = false;
-        if (methodName.Length is 5 or 6)
-        {
-            if (methodName.Equals(".cctor".AsSpan(), StringComparison.Ordinal))
-            {
-                Append(".cctor");
-                alreadyAppended = true;
-            }
-            if (methodName.Equals(".ctor".AsSpan(), StringComparison.Ordinal))
-            {
-                Append(".ctor");
-                alreadyAppended = true;
-            }
-        }
-
-        if (!alreadyAppended)
-        {
-            AppendOrEscapeAndAppend(methodName);
-        }
+        AppendOrEscapeAndAppend(methodName, isMethodName: true);
 
         _lastToken = ManagedIdentifierTokenType.MethodName;
         AppendArity(arity, ManagedIdentifierTokenType.Arity);
         _methodArity = arity;
     }
 
-    private readonly unsafe void AppendOrEscapeAndAppend(ReadOnlySpan<char> tokenizerValue, bool ignoreGenerics = false)
+    private readonly unsafe void AppendOrEscapeAndAppend(ReadOnlySpan<char> tokenizerValue, bool ignoreGenerics = false, bool isMethodName = false)
     {
-        if (ManagedIdentifier.IdentifierNeedsEscaping(tokenizerValue, ignoreGenerics))
+        if (ManagedIdentifier.IdentifierNeedsEscaping(tokenizerValue, ignoreGenerics, isMethodName))
         {
             Append('\'');
             ReadOnlySpan<char> rewriteValues = ['\'', '\\'];

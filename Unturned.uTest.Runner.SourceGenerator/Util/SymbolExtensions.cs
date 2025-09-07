@@ -37,6 +37,10 @@ internal static class SymbolExtensions
     public static IFieldSymbol? GetEnumMember(this ITypeSymbol enumType, object? underlyingValue)
     {
         ImmutableArray<ISymbol> allMembers = enumType.GetMembers();
+        if (allMembers.IsDefaultOrEmpty)
+        {
+            return null;
+        }
 
         IFieldSymbol? leadingObsolete = null;
 
@@ -93,7 +97,7 @@ internal static class SymbolExtensions
         if (data == null)
             return true;
 
-        if (data.ConstructorArguments.Length == 3)
+        if (data.ConstructorArguments is { IsDefaultOrEmpty: false, Length: 3 })
         {
             TypedConstant arg = data.ConstructorArguments[2];
             return arg is { Kind: TypedConstantKind.Primitive, Value: true };

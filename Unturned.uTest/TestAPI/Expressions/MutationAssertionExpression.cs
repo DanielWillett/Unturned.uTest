@@ -15,22 +15,22 @@ internal class DecimalSignAssertionExpression : MutationAssertionExpression<deci
 /// <summary>
 /// An <see cref="ITerminalAssertionExpression{TIn,TOut}"/> that produces a value based on a mutator function applied to the value it consumes.
 /// </summary>
-public class TerminalMutationAssertionExpression<TIn, TOut>(Func<TIn?, TOut?> func)
-    : MutationAssertionExpression<TIn, TOut>(func), ITerminalAssertionExpression<TIn?, TOut?>;
+public class TerminalMutationAssertionExpression<TIn, TOut>(Func<TIn, TOut> func)
+    : MutationAssertionExpression<TIn, TOut>(func), ITerminalAssertionExpression<TIn, TOut>;
 
 /// <summary>
 /// An <see cref="INonTerminalAssertionExpression{TIn,TOut}"/> that produces a value based on a mutator function applied to the value it consumes.
 /// </summary>
-public class MutationAssertionExpression<TIn, TOut> : INonTerminalAssertionExpression<TIn?, TOut?>, ISpecialBehaviorAssertionExpression
+public class MutationAssertionExpression<TIn, TOut> : INonTerminalAssertionExpression<TIn, TOut>, ISpecialBehaviorAssertionExpression
 {
-    private readonly Func<TIn?, TOut?> _func;
+    private readonly Func<TIn, TOut> _func;
 
     internal SpecialBehavior SpecialBehavior;
 
     SpecialBehavior ISpecialBehaviorAssertionExpression.SpecialBehavior => SpecialBehavior;
 
     /// <inheritdoc />
-    public IAssertionExpressionParent<TIn?>? Parent { get; set; }
+    public IAssertionExpressionParent<TIn>? Parent { get; set; }
 
     /// <inheritdoc />
     public IAssertionExpression? Child { get; set; }
@@ -39,21 +39,21 @@ public class MutationAssertionExpression<TIn, TOut> : INonTerminalAssertionExpre
     {
         set
         {
-            if (Parent is ConstantAssertionExpression<TIn?> c)
-                c.Value = value;
+            if (Parent is ConstantAssertionExpression<TIn> c)
+                c.Value = value!;
             else
-                Parent = new ConstantAssertionExpression<TIn?>(value);
+                Parent = new ConstantAssertionExpression<TIn>(value!);
         }
     }
 
-    public MutationAssertionExpression(Func<TIn?, TOut?> func)
+    public MutationAssertionExpression(Func<TIn, TOut> func)
     {
         _func = func;
     }
 
 
     /// <inheritdoc />
-    public TOut? Solve()
+    public TOut Solve()
     {
         if (Parent == null)
             throw new InvalidOperationException(string.Format(Properties.Resources.AssertionExpressionMissingParent, this));

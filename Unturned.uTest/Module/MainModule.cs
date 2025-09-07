@@ -231,7 +231,7 @@ internal class MainModule : MonoBehaviour, IDisposable
     /// <summary>
     /// Quits the game instantly with an exit code.
     /// </summary>
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_0_OR_GREATER
     [DoesNotReturn]
 #endif
     public void ForceQuitGame(string reason, UnturnedTestExitCode exitCode)
