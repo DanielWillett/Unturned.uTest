@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text;
-using Debug = System.Diagnostics.Debug;
 
 namespace uTest;
 
@@ -196,14 +195,14 @@ public readonly struct UnturnedTestUid(string uid)
         out ReadOnlyMemory<char> managedType,
         out ReadOnlyMemory<char> managedMethod,
         out ReadOnlyMemory<char>[] methodTypeParamManagedTypes,
-        out object?[] parameters,
+        out object?[]? parameters,
         out int variantIndex
     )
     {
         managedType = ReadOnlyMemory<char>.Empty;
         managedMethod = ReadOnlyMemory<char>.Empty;
         methodTypeParamManagedTypes = Array.Empty<ReadOnlyMemory<char>>();
-        parameters = Array.Empty<object>();
+        parameters = null;
         variantIndex = 0;
 
         int firstColon = uid.IndexOf(':');

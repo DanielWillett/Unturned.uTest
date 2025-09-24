@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Microsoft.Testing.Platform.Extensions.TestFramework;
+using uTest.Logging;
 using uTest.Module;
 using uTest.Protocol;
 
@@ -62,7 +64,7 @@ internal class UnturnedLauncher : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private void TryWriteModuleDirectoryOrSetEnabled(string installDir, List<Assembly>? testAssemblies, bool enabled = false, bool disableOnly = false)
+    private void TryWriteModuleDirectoryOrSetEnabled(string installDir, Assembly? testAssembly, bool enabled = false, bool disableOnly = false)
     {
         string moduleRoot = Path.Combine(installDir, "Modules", "uTest");
 
@@ -92,22 +94,29 @@ internal class UnturnedLauncher : IDisposable
             throw new NotSupportedException("Unable to locate the Unturned.uTest.Runner DLL.", ex);
         }
 
-        List<string>? assemblyLocations = null;
-        if (!disableOnly && testAssemblies != null)
+        Assembly mtpAssembly = typeof(ITestFramework).Assembly;
+        string mtpDllLocation;
+        try
         {
-            assemblyLocations = new List<string>(testAssemblies.Count);
-            foreach (Assembly testAsm in testAssemblies)
+            mtpDllLocation = mtpAssembly.Location;
+        }
+        catch (Exception ex)
+        {
+            throw new NotSupportedException("Unable to locate the Unturned.uTest.Runner DLL.", ex);
+        }
+
+        string? assemblyLocation = null;
+        if (!disableOnly && testAssembly != null)
+        {
+            try
             {
-                try
-                {
-                    string location = testAsm.Location;
-                    if (!string.IsNullOrEmpty(location))
-                        assemblyLocations.Add(location);
-                }
-                catch
-                {
-                    _logger.Warning($"Unable to find location of assembly {testAsm.FullName}.");
-                }
+                string location = testAssembly.Location;
+                if (!string.IsNullOrEmpty(location))
+                    assemblyLocation = Path.GetFullPath(location);
+            }
+            catch
+            {
+                _logger.LogWarning($"Unable to find location of assembly {testAssembly.FullName}.");
             }
         }
 
@@ -154,7 +163,8 @@ internal class UnturnedLauncher : IDisposable
 
         json = json
             .Replace("\"$enabled$\"", enabled ? "true" : "false")
-            .Replace("$version$", uTestAssembly.GetName().Version.ToString(4));
+            .Replace("$version$", uTestAssembly.GetName().Version.ToString(4))
+            .Replace("$testAssembly$", assemblyLocation == null ? string.Empty : Path.GetFileName(assemblyLocation));
 
         lock (_sync)
         {
@@ -167,14 +177,12 @@ internal class UnturnedLauncher : IDisposable
 
                 File.Copy(uTestDllLocation, Path.Combine(moduleRoot, "Unturned.uTest.dll"), true);
                 File.Copy(thisDllLocation, Path.Combine(moduleRoot, "Unturned.uTest.Runner.dll"), true);
-                if (assemblyLocations != null)
+                File.Copy(mtpDllLocation, Path.Combine(moduleRoot, "Microsoft.Testing.Platform.dll"), true);
+                if (assemblyLocation != null)
                 {
-                    for (int i = 0; i < assemblyLocations.Count; i++)
-                    {
-                        string location = assemblyLocations[i];
-                        assemblyLocations[i] = Path.GetFileName(location);
-                        File.Copy(location, Path.Combine(moduleRoot, assemblyLocations[i]), true);
-                    }
+                    string location = assemblyLocation;
+                    assemblyLocation = Path.GetFileName(location);
+                    File.Copy(location, Path.Combine(moduleRoot, assemblyLocation), true);
                 }
 
                 foreach (string file in Directory.EnumerateFiles(moduleRoot, "*.dll", SearchOption.TopDirectoryOnly))
@@ -185,7 +193,8 @@ internal class UnturnedLauncher : IDisposable
                         || string.Equals(fileName, "System.Runtime.CompilerServices.Unsafe.dll", StringComparison.Ordinal)
                         || string.Equals(fileName, "System.Runtime.dll", StringComparison.Ordinal)
                         || string.Equals(fileName, "netstandard.dll", StringComparison.Ordinal)
-                        || assemblyLocations != null && assemblyLocations.Contains(fileName))
+                        || string.Equals(fileName, "Microsoft.Testing.Platform.dll", StringComparison.Ordinal)
+                        || string.Equals(fileName, assemblyLocation, StringComparison.Ordinal))
                     {
                         continue;
                     }
@@ -196,7 +205,7 @@ internal class UnturnedLauncher : IDisposable
                     }
                     catch (SystemException ex)
                     {
-                        _logger.Exception("Failed to delete extra test assembly.", ex);
+                        _logger.LogError("Failed to delete extra test assembly.", ex);
                     }
                 }
             }
@@ -220,7 +229,7 @@ internal class UnturnedLauncher : IDisposable
         }
     }
 
-    public Task<Process> LaunchUnturned(out bool alreadyLaunched, List<Assembly> testAssemblies, CancellationToken token)
+    public Task<Process> LaunchUnturned(out bool alreadyLaunched, Assembly testAssembly, CancellationToken token)
     {
         Process? existingProcess = _process;
         if (existingProcess is { HasExited: true })
@@ -301,7 +310,7 @@ internal class UnturnedLauncher : IDisposable
                 token.ThrowIfCancellationRequested();
 
                 disabledModule = false;
-                TryWriteModuleDirectoryOrSetEnabled(installDir, testAssemblies, enabled: true);
+                TryWriteModuleDirectoryOrSetEnabled(installDir, testAssembly, enabled: true);
 
                 if (_task != startupTcs)
                 {
@@ -314,7 +323,7 @@ internal class UnturnedLauncher : IDisposable
                     throw new InvalidOperationException("Failed to start Unturned.");
                 }
 
-                _logger.Info($"Unturned process started with PID {process.Id}.");
+                _logger.LogInformation($"Unturned process started with PID {process.Id}.");
 
                 TaskCompletionSource<int> exitCompletionSource = new TaskCompletionSource<int>();
 
@@ -329,13 +338,13 @@ internal class UnturnedLauncher : IDisposable
                     {
                         int exitCode = process.ExitCode;
                         exitCompletionSource.TrySetResult(exitCode);
-                        _logger.Info($"Unturned process exited with PID {_processId}, error code: {exitCode}.");
+                        _logger.LogInformation($"Unturned process exited with PID {_processId}, error code: {exitCode}.");
                         ExitCode = (UnturnedTestExitCode)exitCode;
                     }
                     catch
                     {
                         exitCompletionSource.TrySetResult(int.MaxValue);
-                        _logger.Info($"Unturned process exited with PID {_processId}.");
+                        _logger.LogInformation($"Unturned process exited with PID {_processId}.");
                         ExitCode = (UnturnedTestExitCode)int.MaxValue;
                     }
                 };
@@ -375,13 +384,13 @@ internal class UnturnedLauncher : IDisposable
                     {
                         int exitCode = _process.ExitCode;
                         exitCompletionSource.TrySetResult(exitCode);
-                        _logger.Info($"Unturned process disconnected with PID {_processId}, error code: {exitCode}.");
+                        _logger.LogInformation($"Unturned process disconnected with PID {_processId}, error code: {exitCode}.");
                         ExitCode = (UnturnedTestExitCode)exitCode;
                     }
                     catch
                     {
                         exitCompletionSource.TrySetResult(int.MaxValue);
-                        _logger.Info($"Unturned process disconnected with PID {_processId}.");
+                        _logger.LogInformation($"Unturned process disconnected with PID {_processId}.");
                         ExitCode = (UnturnedTestExitCode)int.MaxValue;
                     }
                 };
@@ -389,7 +398,7 @@ internal class UnturnedLauncher : IDisposable
                 Client.Disconnected += onDisconnection;
                 try
                 {
-                    _logger.Info("Initial connection established.");
+                    _logger.LogInformation("Initial connection established.");
 
                     disabledModule = true;
                     DisableModule(installDir);
@@ -398,7 +407,7 @@ internal class UnturnedLauncher : IDisposable
 
                     Action<ITransportMessage> onMessage = message =>
                     {
-                        _logger.Info($"Message received: {message.GetType().FullName}.");
+                        _logger.LogInformation($"Message received: {message.GetType().FullName}.");
 
                         if (message is LevelLoadedMessage)
                             completionSource.SetResult(0);
@@ -433,7 +442,7 @@ internal class UnturnedLauncher : IDisposable
                     throw new UnturnedStartException($"Exit code: {exitCompletionSource.Task.Result}.");
                 }
 
-                _logger.Info("Level loaded.");
+                _logger.LogInformation("Level loaded.");
 
                 _task?.SetResult(process);
                 _task = null;

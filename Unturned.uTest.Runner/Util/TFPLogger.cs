@@ -1,42 +1,25 @@
-using Microsoft.Testing.Platform.Logging;
+using uTest.Logging;
 
 namespace uTest.Runner.Util;
 
-internal class TFPLogger : ILogger
+internal class MTPLogger : ILogger
 {
     private readonly Microsoft.Testing.Platform.Logging.ILogger _logger;
 
-    public TFPLogger(Microsoft.Testing.Platform.Logging.ILogger logger)
+    public MTPLogger(Microsoft.Testing.Platform.Logging.ILogger logger)
     {
         _logger = logger;
     }
 
-    /// <inheritdoc />
-    public void Info(string message)
+    public Task LogAsync<TState>(LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        _logger.LogInformation(message);
+        return _logger.LogAsync((Microsoft.Testing.Platform.Logging.LogLevel)logLevel, state, exception, formatter);
     }
 
-    /// <inheritdoc />
-    public void Warning(string message)
+    public void Log<TState>(LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        _logger.LogWarning(message);
+        _logger.Log((Microsoft.Testing.Platform.Logging.LogLevel)logLevel, state, exception, formatter);
     }
 
-    /// <inheritdoc />
-    public void Error(string message)
-    {
-        _logger.LogError(message);
-    }
-
-    /// <inheritdoc />
-    public void Exception(string? message, Exception ex)
-    {
-        if (message != null && ex != null)
-            _logger.LogError(message, ex);
-        else if (ex != null)
-            _logger.LogError(ex);
-        else if (message != null)
-            _logger.LogError(message);
-    }
+    public bool IsEnabled(LogLevel logLevel) => _logger.IsEnabled((Microsoft.Testing.Platform.Logging.LogLevel)logLevel);
 }

@@ -1,10 +1,15 @@
+using System;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
-namespace uTest.Runner.Util;
+namespace uTest;
 
+/// <summary>
+/// Utility for getting named properties from anonymous types.
+/// </summary>
 internal static class AnonymousTypeHelper
 {
     private static readonly ConcurrentDictionary<Type, PropertyInfo[]> MappingCache =

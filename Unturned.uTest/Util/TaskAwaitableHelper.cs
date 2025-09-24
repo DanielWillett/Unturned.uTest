@@ -1,10 +1,15 @@
+using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 
-namespace uTest.Runner.Util;
+namespace uTest;
 
+/// <summary>
+/// Utilities for running methods returning any kinds of awaitable types (except for types that rely on extension methods).
+/// </summary>
 internal static class TaskAwaitableHelper
 {
     private static readonly ConcurrentDictionary<Type, AwaitableInfo> AwaitableCache =

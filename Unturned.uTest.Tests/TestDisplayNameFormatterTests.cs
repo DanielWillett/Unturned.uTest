@@ -1,14 +1,15 @@
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
-using uTest.Runner;
+using uTest;
+using Assert = NUnit.Framework.Assert;
 
 #pragma warning disable CS8500 // This takes the address of, gets the size of, or declares a pointer to a managed type
 
 namespace uTest_Test;
 internal class TestDisplayNameFormatterTests
 {
-    [Test]
+    [NUnit.Framework.Test]
     [TestCase(typeof(decimal), "decimal")]
     [TestCase(typeof(object), "object")]
     [TestCase(typeof(string), "string")]

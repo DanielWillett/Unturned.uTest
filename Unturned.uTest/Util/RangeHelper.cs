@@ -1,7 +1,9 @@
+using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using uTest.Discovery;
 
-namespace uTest.Runner.Util;
+namespace uTest;
 
 internal static class RangeHelper
 {

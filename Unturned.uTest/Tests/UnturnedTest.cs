@@ -1,8 +1,8 @@
-using Microsoft.Testing.Platform.Extensions.Messages;
+using System;
 using System.Globalization;
 using System.Reflection;
 
-namespace uTest.Runner;
+namespace uTest.Discovery;
 
 /// <summary>
 /// Internal API used by source-generator.
@@ -29,9 +29,6 @@ public class UnturnedTest : ITypeParamsProvider
     public required UnturnedTestParameter[] Parameters { get; init; }
     public required UnturnedTestArgs[] Args { get; init; }
 
-    public TestMethodIdentifierProperty? IdentifierInfo { get; init; }
-    public TestFileLocationProperty? LocationInfo { get; init; }
-
     public UnturnedTestParameter[]? TypeParameters { get; init; }
     public UnturnedTestArgs[]? TypeArgs { get; init; }
 
@@ -39,6 +36,9 @@ public class UnturnedTest : ITypeParamsProvider
     public override string ToString() => Uid;
 }
 
+#if RELEASE
+[System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+#endif
 internal interface ITypeParamsProvider
 {
     UnturnedTestParameter[]? TypeParameters { get; }
@@ -46,6 +46,9 @@ internal interface ITypeParamsProvider
     string DisplayName { get; }
 }
 
+#if RELEASE
+[System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+#endif
 internal class UnturnedTestOwnerInfo : ITypeParamsProvider
 {
     internal Type Type;
@@ -135,12 +138,18 @@ public readonly struct UnturnedTestSetParameterInfo
     public Array? Values { get; init; }
 }
 
+#if RELEASE
+[System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+#endif
 internal interface IUnturnedTestRangeParameter
 {
     UnturnedTestSetParameterInfo SetParameterInfo { get; }
     void Visit<TVisitor>(ref TVisitor visitor) where TVisitor : IUnturnedTestRangeParameterVisitor;
 }
 
+#if RELEASE
+[System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+#endif
 internal interface IUnturnedTestRangeParameter<out T, out TStep> : IUnturnedTestRangeParameter
     where T : unmanaged, IConvertible
     where TStep : unmanaged, IComparable<TStep>, IConvertible
@@ -150,6 +159,9 @@ internal interface IUnturnedTestRangeParameter<out T, out TStep> : IUnturnedTest
     TStep Step { get; }
 }
 
+#if RELEASE
+[System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+#endif
 internal interface IUnturnedTestRangeParameterVisitor
 {
     void Visit<T, TStep>(IUnturnedTestRangeParameter<T, TStep> parameter)

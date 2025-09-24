@@ -1,73 +1,65 @@
-﻿using Microsoft.Testing.Platform.Extensions.Messages;
-using Microsoft.Testing.Platform.Requests;
-using System.Reflection;
+﻿using System;
 using System.Text;
+using uTest.Discovery;
 
-namespace uTest.Runner.Util;
-
-#pragma warning disable TPEXP
+namespace uTest;
 
 internal static class FilterHelper
 {
-    private static readonly PropertyBag EmptyBag = new PropertyBag();
-    private static ConstructorInfo? _treeCtor;
-
-    public static TreeNodeFilter CreateTreeFilter(string filter)
+    private struct RemoveUnfilteredTestsUidListState
     {
-        _treeCtor ??= typeof(TreeNodeFilter).GetConstructor(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, [ typeof(string) ], null);
-
-        if (_treeCtor == null)
-            throw new MissingMethodException(nameof(TreeNodeFilter), ".ctor(string)");
-
-        return (TreeNodeFilter)_treeCtor.Invoke([ filter ]);
+        public bool Exists;
+        public UnturnedTest Test;
     }
 
-    public static void RemoveUnfilteredTests(ITestExecutionFilter filter, List<UnturnedTest> tests, int startIndex, int length = -1)
+    public static void RemoveUnfilteredTests(ITestFilter filter, List<UnturnedTest> tests, int startIndex, int length = -1)
     {
         if (length < 0)
             length = tests.Count - startIndex;
         length += startIndex;
-        switch (filter)
+        RemoveUnfilteredTestsUidListState state;
+        switch (filter.Type)
         {
-            case TestNodeUidListFilter listFilter:
-                TestNodeUid[] uids = listFilter.TestNodeUids;
+            case TestFilterType.UidList:
                 for (int i = length - 1; i >= startIndex; --i)
                 {
                     UnturnedTest test = tests[i];
-                    int index = -1;
+                    state.Test = test;
+                    state.Exists = false;
                     if (test.Expandable)
                     {
-                        for (int x = 0; x < uids.Length; ++x)
+                        filter.ForEachUid(ref state, static (ref state, uid) =>
                         {
-                            if (!UnturnedTestUid.IsSameBaseMethod(test.Uid, uids[x].Value, allowTypeDefinitionMatching: test.Owner!.TypeParameters is { Length: > 0 }))
-                                continue;
+                            if (!UnturnedTestUid.IsSameBaseMethod(state.Test.Uid, uid, allowTypeDefinitionMatching: state.Test.Owner!.TypeParameters is { Length: > 0 }))
+                                return true;
 
-                            index = x;
-                            break;
-                        }
+                            state.Exists = true;
+                            return false;
+                        });
                     }
                     else
                     {
-                        for (int x = 0; x < uids.Length; ++x)
+                        filter.ForEachUid(ref state, static (ref state, uid) =>
                         {
-                            if (!string.Equals(uids[x].Value, test.Uid, StringComparison.Ordinal))
-                                continue;
+                            if (!string.Equals(uid, state.Test.Uid, StringComparison.Ordinal))
+                                return true;
 
-                            index = x;
-                            break;
-                        }
+                            state.Exists = true;
+                            return false;
+                        });
                     }
 
-                    if (index >= 0)
-                        continue;
-
-                    tests.RemoveAt(i);
+                    if (!state.Exists)
+                    {
+                        tests.RemoveAt(i);
+                    }
                 }
 
                 break;
 
-            case TreeNodeFilter treeFilter:
-                bool needsProperties = treeFilter.Filter.IndexOf('[') >= 0;
+            case TestFilterType.TreePath:
+                string treeFilter = filter.TreePath;
+                bool needsProperties = treeFilter.IndexOf('[') >= 0;
                 for (int i = length - 1; i >= startIndex; --i)
                 {
                     UnturnedTest test = tests[i];
@@ -87,14 +79,8 @@ internal static class FilterHelper
                     }
                     else
                     {
-                        PropertyBag bag = EmptyBag;
-                        if (needsProperties)
-                        {
-                            bag = new PropertyBag();
-                            new UnturnedTestInstance(test).AddProperties(bag);
-                        }
-
-                        if (treeFilter.MatchesFilter(test.TreePath, bag!))
+                        UnturnedTestInstance instance = new UnturnedTestInstance(test);
+                        if (filter.MatchesTreePathFilter(in instance, needsProperties))
                             continue;
                     }
 
@@ -104,27 +90,51 @@ internal static class FilterHelper
         }
     }
 
-    public static bool PotentiallyMatchesFilter(Type testType, ITestExecutionFilter filter)
+    private struct PotentiallyMatchesFilterUidListState
     {
-        switch (filter)
-        {
-            case TestNodeUidListFilter listFilter:
-                
-                return Array.Exists(
-                    listFilter.TestNodeUids,
-                    testType.IsGenericTypeDefinition
-                        ? uid => UnturnedTestUid.IsSameTypeDefinitionAs(uid.Value, testType)
-                        : uid => UnturnedTestUid.IsSameTypeAs(uid.Value, testType)
-                );
+        public bool Exists;
+        public Type TestType;
+    }
 
-            case TreeNodeFilter treeFilter:
+    public static bool PotentiallyMatchesFilter(Type testType, ITestFilter filter)
+    {
+        switch (filter.Type)
+        {
+            case TestFilterType.UidList:
+
+                PotentiallyMatchesFilterUidListState state;
+                state.TestType = testType;
+                state.Exists = false;
+
+                filter.ForEachUid(ref state,
+                    testType.IsGenericTypeDefinition
+                    ? static (ref state, uid) =>
+                    {
+                        if (!UnturnedTestUid.IsSameTypeDefinitionAs(uid, state.TestType))
+                            return true;
+
+                        state.Exists = true;
+                        return false;
+                    }
+                    : static (ref state, uid) =>
+                    {
+                        if (!UnturnedTestUid.IsSameTypeAs(uid, state.TestType))
+                            return true;
+
+                        state.Exists = true;
+                        return false;
+                    });
+
+                return state.Exists;
+
+            case TestFilterType.TreePath:
 
                 // a node type tree filter would look something like this:
                 //  /Assembly/Namespace/Name/Method/...
                 //  |         type         | | method and type args ...
                 // get index of third slash
                 int slashes = string.IsNullOrEmpty(testType.Namespace) ? 3 : 4;
-                if (TreeFiltersWithinNSlashes(treeFilter, slashes, out ReadOnlySpan<char> filterPortion))
+                if (TreeFiltersWithinNSlashes(filter.TreePath, slashes, out ReadOnlySpan<char> filterPortion))
                 {
                     return true;
                 }
@@ -136,12 +146,12 @@ internal static class FilterHelper
         return true;
     }
 
-    private static int FirstSelectionIndex(TreeNodeFilter filter)
+    private static int FirstSelectionIndex(string filter)
     {
-        return filter.Filter.AsSpan().IndexOfAny(['[', '&', '|', '%', '(', '=', '*', ']', ')']);
+        return filter.AsSpan().IndexOfAny([ '[', '&', '|', '%', '(', '=', '*', ']', ')' ]);
     }
 
-    private static bool TreeFiltersWithinNSlashes(TreeNodeFilter filter, int n, out ReadOnlySpan<char> filterPortion)
+    private static bool TreeFiltersWithinNSlashes(string filter, int n, out ReadOnlySpan<char> filterPortion)
     {
         int firstSpecialCheck = FirstSelectionIndex(filter);
 
@@ -149,10 +159,10 @@ internal static class FilterHelper
         // first char is always '/'.
         for (int i = 1; i < n; ++i)
         {
-            int nextSlash = filter.Filter.IndexOf('/', lastSlash + 1);
+            int nextSlash = filter.IndexOf('/', lastSlash + 1);
             if (nextSlash == -1)
             {
-                lastSlash = filter.Filter.Length;
+                lastSlash = filter.Length;
                 break;
             }
 
@@ -160,37 +170,24 @@ internal static class FilterHelper
         }
 
         int index = firstSpecialCheck < 0 ? lastSlash : Math.Min(firstSpecialCheck, lastSlash);
-        if (index < filter.Filter.Length)
+        if (index < filter.Length)
         {
-            if (filter.Filter[index] == '/')
+            if (filter[index] == '/')
                 ++index;
-            filterPortion = filter.Filter.AsSpan(0, index);
+            filterPortion = filter.AsSpan(0, index);
         }
-        else if (filter.Filter[^1] == '/')
+        else if (filter[^1] == '/')
         {
-            filterPortion = (filter.Filter + "/").AsSpan();
+            filterPortion = (filter + "/").AsSpan();
         }
         else
         {
-            filterPortion = filter.Filter.AsSpan();
+            filterPortion = filter.AsSpan();
         }
         return firstSpecialCheck >= 0 && firstSpecialCheck < lastSlash;
     }
 
-    public static bool MatchesFilter(TreeNodeFilter filter, in UnturnedTestInstance instance)
-    {
-        bool needsPropertyBag = filter.Filter.IndexOf('[') >= 0;
-        PropertyBag bag = EmptyBag;
-        if (needsPropertyBag)
-        {
-            bag = new PropertyBag();
-            instance.AddProperties(bag);
-        }
-
-        return filter.MatchesFilter(instance.TreePath, bag);
-    }
-
-    public static bool TreeCouldContainThisTypeConfiguration(UnturnedTest test, Type[] typeArgs, Type[]? methodArgs, object?[]? parameters, TreeNodeFilter filter)
+    public static bool TreeCouldContainThisTypeConfiguration(UnturnedTest test, Type[] typeArgs, Type[]? methodArgs, object?[]? parameters, string filter)
     {
         // a node type tree filter would look something like this:
         //  /Namespace/Name/Method/<TypeArgs>/<MethodArgs>/(Parameters)

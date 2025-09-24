@@ -1,8 +1,10 @@
-using System.Diagnostics;
+using System;
 using System.Globalization;
 using System.Text;
+using uTest;
+using uTest.Discovery;
 
-namespace uTest.Runner;
+namespace uTest;
 
 internal static class TestDisplayNameFormatter
 {

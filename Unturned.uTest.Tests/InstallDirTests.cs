@@ -1,6 +1,6 @@
 using System;
-using NUnit.Framework;
 using uTest;
+using uTest.Logging;
 using TestAttribute = NUnit.Framework.TestAttribute;
 
 namespace uTest_Test;

@@ -282,7 +282,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     openGlobalTestName = globalTestName;
                 }
 
-                bldr.Build($"[assembly: global::uTest.Runner.GeneratedTestBuilderAttribute(typeof({openGlobalTestName}), typeof({globalName}))]")
+                bldr.Build($"[assembly: global::uTest.Discovery.GeneratedTestBuilderAttribute(typeof({openGlobalTestName}), typeof({globalName}))]")
                     .Empty();
 
                 if (@namespace != null)
@@ -296,7 +296,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 bldr.String("[global::System.ComponentModel.EditorBrowsableAttribute(global::System.ComponentModel.EditorBrowsableState.Never)]")
                     .String("[global::System.Runtime.CompilerServices.CompilerGeneratedAttribute]")
                     .Build($"[global::System.CodeDom.Compiler.GeneratedCodeAttribute(\"Unturned.uTest\", \"{Assembly.GetExecutingAssembly().GetName().Version.ToString(3)}\")]")
-                    .Build($"internal sealed class {className} : global::uTest.Runner.IGeneratedTestProvider")
+                    .Build($"internal sealed class {className} : global::uTest.Discovery.IGeneratedTestProvider")
                     .String("{").In();
 
                 List<(DelegateType, string)> createdTypes = new List<(DelegateType, string)>();
@@ -328,7 +328,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
 
                 // start method
                 bldr    .String("[global::System.Runtime.CompilerServices.CompilerGeneratedAttribute]")
-                        .String("public void Build(global::uTest.Runner.IGeneratedTestBuilder builder)")
+                        .String("public void Build(global::uTest.Discovery.IGeneratedTestBuilder builder)")
                         .String("{").In();
 
                 string escManagedType = StringLiteralEscaper.Escape(classInfo.ManagedType);
@@ -384,7 +384,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     bool expandableMethod = expandableType || method.TypeParameters is { Count: > 0 } || method.Parameters is { Count: > 0 };
 
                     string escManagedMethod = StringLiteralEscaper.Escape(method.ManagedMethod);
-                    bldr.String("builder.Add(new global::uTest.Runner.UnturnedTest()")
+                    bldr.String("builder.Add(new global::uTest.Runner.UnturnedMTPTest()")
                         .In().String("{").In()
                             .Build($"ManagedType = \"{escManagedType}\",")
                             .Build($"ManagedMethod = \"{escManagedMethod}\",")
@@ -432,11 +432,11 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     bldr    .String("Parameters = ").In();
                     if (method.Parameters is not { Count: > 0 })
                     {
-                        bldr.String("global::System.Array.Empty<global::uTest.Runner.UnturnedTestParameter>(),").Out();
+                        bldr.String("global::System.Array.Empty<global::uTest.Discovery.UnturnedTestParameter>(),").Out();
                     }
                     else
                     {
-                        bldr.String("new global::uTest.Runner.UnturnedTestParameter[]")
+                        bldr.String("new global::uTest.Discovery.UnturnedTestParameter[]")
                             .String("{").In();
 
                         for (int i = 0; i < method.Parameters.Count; i++)
@@ -449,24 +449,24 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             if (parameter.RangeParameter is null && parameter.SetParameter is null)
                             {
                                 mode = 0;
-                                bldr.String("new global::uTest.Runner.UnturnedTestParameter()");
+                                bldr.String("new global::uTest.Discovery.UnturnedTestParameter()");
                             }
                             else if (parameter.RangeParameter is null)
                             {
                                 mode = 1;
-                                bldr.String("new global::uTest.Runner.UnturnedTestSetParameter()");
+                                bldr.String("new global::uTest.Discovery.UnturnedTestSetParameter()");
                             }
                             else if (parameter.RangeParameter.EnumTypeGloballyQualified != null)
                             {
                                 mode = 2;
                                 destinationType = parameter.RangeParameter.Type;
-                                bldr.Build($"new global::uTest.Runner.UnturnedTestRangeEnumParameter<{parameter.RangeParameter.EnumTypeGloballyQualified}, {parameter.RangeParameter.Type.GetTypeKeyword()}>()");
+                                bldr.Build($"new global::uTest.Discovery.UnturnedTestRangeEnumParameter<{parameter.RangeParameter.EnumTypeGloballyQualified}, {parameter.RangeParameter.Type.GetTypeKeyword()}>()");
                             }
                             else if (parameter.RangeParameter.Type == SpecialType.System_Char)
                             {
                                 mode = 3;
                                 destinationType = parameter.RangeParameter.Type;
-                                bldr.Build($"new global::uTest.Runner.UnturnedTestRangeCharParameter()");
+                                bldr.Build($"new global::uTest.Discovery.UnturnedTestRangeCharParameter()");
                             }
                             else
                             {
@@ -515,7 +515,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                     _ /* SpecialType.System_Decimal */ => "decimal"
                                 };
 
-                                bldr.Build($"new global::uTest.Runner.UnturnedTestRangeParameter<{rangeType}>()");
+                                bldr.Build($"new global::uTest.Discovery.UnturnedTestRangeParameter<{rangeType}>()");
                             }
 
                             bldr.String("{").In()
@@ -596,7 +596,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             {
                                 if (parameter.SetParameter is not null)
                                 {
-                                    bldr.Build($"SetParameterInfo = new global::uTest.Runner.UnturnedTestSetParameterInfo()")
+                                    bldr.Build($"SetParameterInfo = new global::uTest.Discovery.UnturnedTestSetParameterInfo()")
                                         .String("{").In();
                                     ExtendSet(in parameter, bldr, method, file, linePrep);
                                     bldr.Out()
@@ -629,17 +629,17 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     bldr.String("Args = ").In();
                     if (method.ArgsAttributes is not { Count: > 0 })
                     {
-                        bldr.String("global::System.Array.Empty<global::uTest.Runner.UnturnedTestArgs>(),").Out();
+                        bldr.String("global::System.Array.Empty<global::uTest.Discovery.UnturnedTestArgs>(),").Out();
                     }
                     else
                     {
-                        bldr.String("new global::uTest.Runner.UnturnedTestArgs[]")
+                        bldr.String("new global::uTest.Discovery.UnturnedTestArgs[]")
                             .String("{").In();
 
                         for (int i = 0; i < method.ArgsAttributes.Count; i++)
                         {
                             TestArgsAttributeInfo argsAttribute = method.ArgsAttributes[i];
-                            bldr.String("new global::uTest.Runner.UnturnedTestArgs()")
+                            bldr.String("new global::uTest.Discovery.UnturnedTestArgs()")
                                 .String("{").In();
                             if (argsAttribute.From != null)
                             {
@@ -712,7 +712,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
 
     private static void AppendTypeArgsInfo(SourceStringBuilder bldr, EquatableList<TestTypeArgsAttributeInfo> typeArgs, string end, string? linePrep)
     {
-        bldr.Build($"new global::uTest.Runner.UnturnedTestArgs[]")
+        bldr.Build($"new global::uTest.Discovery.UnturnedTestArgs[]")
             .String("{")
             .In();
 
@@ -720,7 +720,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
         {
             TestTypeArgsAttributeInfo typeParam = typeArgs[i];
 
-            bldr.Build($"new global::uTest.Runner.UnturnedTestArgs()")
+            bldr.Build($"new global::uTest.Discovery.UnturnedTestArgs()")
                 .String("{").In();
 
             if (linePrep != null)
@@ -741,7 +741,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
 
     private static void AppendTypeParameterInfo(SourceStringBuilder bldr, EquatableList<TestTypeParameterInfo> typeParameters, string end, string? linePrep)
     {
-        bldr.Build($"new global::uTest.Runner.UnturnedTestParameter[]")
+        bldr.Build($"new global::uTest.Discovery.UnturnedTestParameter[]")
             .String("{")
             .In();
 
@@ -764,7 +764,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 hasSet = false;
             }
 
-            bldr.Build($"new global::uTest.Runner.{type}()")
+            bldr.Build($"new global::uTest.Discovery.{type}()")
                 .String("{").In()
                 .Build($"Name = \"{StringLiteralEscaper.Escape(typeParam.Name)}\",")
                 .Build($"Position = {i}{comma}");

@@ -2,8 +2,10 @@ using Newtonsoft.Json;
 using SDG.Framework.IO;
 using SDG.Framework.Modules;
 using System;
+using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using uTest.Protocol;
 using Component = UnityEngine.Component;
 
@@ -45,6 +47,11 @@ internal class MainModule : MonoBehaviour, IDisposable
     public ILogger Logger => CommandWindowLogger.Instance;
 
     /// <summary>
+    /// The assembly that contains the running tests.
+    /// </summary>
+    public Assembly TestAssembly { get; private set; } = null!;
+
+    /// <summary>
     /// Entrypoint for module.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -66,7 +73,28 @@ internal class MainModule : MonoBehaviour, IDisposable
 
         Version version = Assembly.GetExecutingAssembly().GetName().Version;
 
-        Dedicator.commandWindow.title = "uTest";
+        SDG.Framework.Modules.Module? module = ModuleHook.getModuleByName("uTest");
+        if (module == null)
+        {
+            CommandWindow.LogError("Failed to find uTest module.");
+            IsFaulted = true;
+            return;
+        }
+
+        Regex assemblies = new Regex(
+            @"(?:Unturned\.uTest, Version=[\d\.]+, Culture=neutral, PublicKeyToken=null)|(netstandard, Version=2\.1\.0\.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51)",
+            RegexOptions.Singleline
+        );
+
+        TestAssembly = Array.Find(module.assemblies, x => !assemblies.IsMatch(x.FullName));
+        if (TestAssembly == null)
+        {
+            CommandWindow.LogError("Failed to find test assembly.");
+            IsFaulted = true;
+            return;
+        }
+
+        Dedicator.commandWindow.title = Properties.Resources.WindowTitle;
 
         // todo: docs
         string log = $"""
@@ -90,7 +118,7 @@ internal class MainModule : MonoBehaviour, IDisposable
             if (_hasQuit)
                 return;
 
-            Logger.Warning("Lost contact with runner, shutting down...");
+            Logger.LogWarning("Lost contact with runner, shutting down...");
             GameThread.Run(this, me =>
             {
                 me.ForceQuitGame("Shutdown due to losing contact with runner.", UnturnedTestExitCode.GracefulShutdown);
@@ -119,7 +147,7 @@ internal class MainModule : MonoBehaviour, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    Logger.Exception("Error running tests.", ex);
+                    await Logger.LogErrorAsync("Error running tests.", ex);
                     exitCode = UnturnedTestExitCode.StartupFailure;
                 }
 
@@ -156,7 +184,7 @@ internal class MainModule : MonoBehaviour, IDisposable
         Task.Run(async () =>
         {
             await Environment.SendAsync(new LevelLoadedMessage());
-            Logger.Info("Sent level loaded");
+            await Logger.LogInformationAsync("Sent level loaded");
         });
         _sentLevelLoadedRealtime = Time.realtimeSinceStartup;
     }

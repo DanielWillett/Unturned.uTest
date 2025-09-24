@@ -13,6 +13,11 @@
             "Path": "/Unturned.uTest.dll",
             "Role": "Both_Optional",
             "Load_As_Byte_Array": true
+        },
+        {
+            "Path": "/$testAssembly$",
+            "Role": "Both_Optional",
+            "Load_As_Byte_Array": true
         }
     ]
 }

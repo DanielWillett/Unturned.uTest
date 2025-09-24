@@ -17,13 +17,13 @@ public class UidParseTests
                 out ReadOnlyMemory<char> managedType,
                 out ReadOnlyMemory<char> managedMethod,
                 out ReadOnlyMemory<char>[] managedTypes,
-                out object?[] parameters,
+                out object?[]? parameters,
                 out int variantIndex),
             Is.True
         );
 
         Assert.That(managedTypes, Is.Empty);
-        Assert.That(parameters, Is.Empty);
+        Assert.That(parameters, Is.Null);
         Assert.That(variantIndex, Is.Zero);
 
         Assert.That(managedType.ToString(), Is.EqualTo(type));
@@ -40,12 +40,12 @@ public class UidParseTests
                 out ReadOnlyMemory<char> managedType,
                 out ReadOnlyMemory<char> managedMethod,
                 out ReadOnlyMemory<char>[] managedTypes,
-                out object?[] p,
+                out object?[]? p,
                 out int variantIndex),
             Is.True
         );
 
-        Assert.That(p, Is.Empty);
+        Assert.That(p, Is.Null);
 
         Assert.That(managedType.ToString(), Is.EqualTo(type));
         Assert.That(managedMethod.ToString(), Is.EqualTo(method));
@@ -98,7 +98,7 @@ public class UidParseTests
                 out ReadOnlyMemory<char> managedType,
                 out ReadOnlyMemory<char> managedMethod,
                 out ReadOnlyMemory<char>[] managedTypes,
-                out object?[] p,
+                out object?[]? p,
                 out int variantIndex),
             Is.True
         );
@@ -109,7 +109,8 @@ public class UidParseTests
         Assert.That(managedMethod.ToString(), Is.EqualTo(method));
 
         Assert.That(managedTypes.Length, Is.EqualTo(types.Length));
-        Assert.That(p.Length, Is.EqualTo(parameters.Length));
+        Assert.That(p, Is.Not.Null);
+        Assert.That(p!.Length, Is.EqualTo(parameters.Length));
 
         for (int i = 0; i < managedTypes.Length; ++i)
             Assert.That(managedTypes[i].ToString(), Is.EqualTo(types[i]));

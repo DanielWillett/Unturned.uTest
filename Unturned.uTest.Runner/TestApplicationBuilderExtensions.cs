@@ -40,7 +40,7 @@ public static class TestApplicationBuilderExtensions
 
         if (sourceAssembly != null)
         {
-            capabilities.Add(new GeneratedTestRegistrationList(sourceAssembly));
+            capabilities.Add(new GeneratedTestRegistrationListCapability(sourceAssembly));
         }
 
         capabilities.Add(new BannerCapability(ext));

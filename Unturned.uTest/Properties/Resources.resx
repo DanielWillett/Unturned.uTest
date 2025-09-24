@@ -147,6 +147,36 @@
   <data name="LevelObjectInconsistantRubble" xml:space="preserve">
     <value>Expected object and interactable rubble to belong to the same object.</value>
   </data>
+  <data name="LogErrorCreatingRunner" xml:space="preserve">
+    <value>Failed to create an instance of test class "{0}".</value>
+  </data>
+  <data name="LogErrorGenericConstraints" xml:space="preserve">
+    <value>Type(s) {0} do not meet the generic constraints for test {1}.</value>
+  </data>
+  <data name="LogErrorMismatchedArgsParameterCount" xml:space="preserve">
+    <value>TestArgsAttribute was given {0} parameter(s) but test {1} should have exactly {2}.</value>
+  </data>
+  <data name="LogErrorMismatchedArgsTypeParameterCount" xml:space="preserve">
+    <value>TypeArgsAttribute was given {0} type parameter(s) but class or method {1} should have exactly {2}.</value>
+  </data>
+  <data name="LogErrorMismatchedParameterType" xml:space="preserve">
+    <value>Value {0} can not be converted to type {1} for parameter "{2}" in test {3}.</value>
+  </data>
+  <data name="LogErrorMissingFromMember" xml:space="preserve">
+    <value>Member referred to by 'From' property ({0}) does not exist in {1}.</value>
+  </data>
+  <data name="LogErrorParametersMissingValues" xml:space="preserve">
+    <value>Not all parameters on test {0} in {1} have value sets or ranges. This could also be caused by a range containing too many elements, as a test can not have more than {2} variations.</value>
+  </data>
+  <data name="LogErrorReadingFromMember" xml:space="preserve">
+    <value>Exception encountered accessing member referred to by 'From' property ({0}) in {1}.</value>
+  </data>
+  <data name="LogErrorUnresolvedTestUid" xml:space="preserve">
+    <value>Test UID "{0}" could not be linked to a test variation, it will be skipped.</value>
+  </data>
+  <data name="LogErrorUnresolvedTestUids" xml:space="preserve">
+    <value>{0}/{1} test UID(s) were not able to be linked to test variations.</value>
+  </data>
   <data name="NotSupportedExceptionNullActor" xml:space="preserve">
     <value>Operations are not supported on the NullActor.</value>
   </data>
@@ -227,5 +257,8 @@
   </data>
   <data name="UnturnedStartExceptionDefaultMessage" xml:space="preserve">
     <value>The Unturned instance failed to start with uTest.</value>
+  </data>
+  <data name="WindowTitle" xml:space="preserve">
+    <value>Unturned.uTest (Runner)</value>
   </data>
 </root>

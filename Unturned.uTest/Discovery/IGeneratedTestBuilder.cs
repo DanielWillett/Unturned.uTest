@@ -1,4 +1,6 @@
-namespace uTest.Runner;
+using System;
+
+namespace uTest.Discovery;
 
 /// <summary>
 /// Sink interface for <see cref="IGeneratedTestProvider.Build"/> used by the source-generator to list all tests in this assembly.

@@ -1,12 +1,10 @@
-using Microsoft.Testing.Platform.Requests;
+using System;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
-using uTest.Runner.Util;
-using IMTPLogger = Microsoft.Testing.Platform.Logging.ILogger;
 
 #pragma warning disable TPEXP
 
-namespace uTest.Runner;
+namespace uTest.Discovery;
 
 internal class GeneratedTestRegistrationList : ITestRegistrationList
 {
@@ -17,17 +15,14 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
         _assembly = assembly;
     }
 
-    public async Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(ITestExecutionFilter filter, IMTPLogger logger, CancellationToken token = default)
+    public async Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(ILogger logger, ITestFilter? filter, CancellationToken token = default)
     {
-        List<UnturnedTest> tests = GetPotentiallyMatchingTests(filter, logger, token);
+        List<UnturnedTest> tests = GetPotentiallyMatchingTests(filter, token);
         return await ExpandTestsAsync(logger, tests, filter, token);
     }
 
-    private List<UnturnedTest> GetPotentiallyMatchingTests(ITestExecutionFilter? filter, IMTPLogger logger, CancellationToken token)
+    private List<UnturnedTest> GetPotentiallyMatchingTests(ITestFilter? filter, CancellationToken token)
     {
-        if (filter is NopFilter)
-            filter = null;
-
         object[] arr = _assembly.GetCustomAttributes(typeof(GeneratedTestBuilderAttribute), false);
         if (arr.Length == 0)
             return new List<UnturnedTest>(0);
@@ -99,12 +94,12 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
     }
 
     /// <inheritdoc />
-    public Task<List<UnturnedTest>> GetTestsAsync(IMTPLogger logger, CancellationToken token = default)
+    public Task<List<UnturnedTest>> GetTestsAsync(ILogger logger, CancellationToken token = default)
     {
-        return Task.FromResult(GetPotentiallyMatchingTests(null, logger, token));
+        return Task.FromResult(GetPotentiallyMatchingTests(null, token));
     }
 
-    public Task<List<UnturnedTestInstance>> ExpandTestsAsync(IMTPLogger logger, List<UnturnedTest> originalTests, ITestExecutionFilter? filter, CancellationToken token = default)
+    public Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, CancellationToken token = default)
     {
         return GeneratedTestExpansionHelper.ExpandTestsAsync(logger, originalTests, filter, token);
     }

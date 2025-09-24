@@ -1,58 +1,82 @@
-using Microsoft.Testing.Platform.Extensions.Messages;
-using Microsoft.Testing.Platform.Logging;
-using Microsoft.Testing.Platform.Requests;
-using System.Collections;
+using System;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using System.Text;
-using uTest.Runner.Util;
-using IMTPLogger = Microsoft.Testing.Platform.Logging.ILogger;
 
 #pragma warning disable TPEXP
 
-namespace uTest.Runner;
+namespace uTest.Discovery;
 
 internal static class GeneratedTestExpansionHelper
 {
     private static Type[]? _asyncMethodFromArgTypes;
 
-    public static async Task<List<UnturnedTestInstance>> ExpandTestsAsync(IMTPLogger logger, List<UnturnedTest> originalTests, ITestExecutionFilter? filter, CancellationToken token)
+    private struct ForEachUidLookupIdState
     {
-        if (filter is NopFilter)
-            filter = null;
+        public List<string>? UidsToFind;
+        public List<UnturnedTestInstance> Instances;
+        public TestExpandProcessor Processor;
+    }
 
+    public static async Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, CancellationToken token)
+    {
         TestExpandProcessor processor = new TestExpandProcessor(logger, originalTests, token);
 
-        List<TestNodeUid>? uidsToFind = null;
+        List<string>? uidsToFind = null;
         List<UnturnedTestInstance>? instances = null;
-        if (filter is TestNodeUidListFilter list)
+        if (filter is { Type: TestFilterType.UidList })
         {
-            TestNodeUid[] uids = list.TestNodeUids;
-            instances = new List<UnturnedTestInstance>(uids.Length);
-            foreach (TestNodeUid id in uids)
+            ForEachUidLookupIdState state;
+
+            int uidCount = filter.UidCount;
+            instances = new List<UnturnedTestInstance>(uidCount);
+            state.Instances = instances;
+            state.UidsToFind = null;
+            state.Processor = processor;
+            await filter.ForEachUid(ref state, static (ref state, id) =>
             {
-                UnturnedTestInstance? instance = await processor.GetTestFromUid(id.Value);
-                if (!instance.HasValue)
+                ValueTask<UnturnedTestInstance?> task = state.Processor.GetTestFromUid(id);
+                if (!task.IsCompleted)
                 {
-                    (uidsToFind ??= new List<TestNodeUid>()).Add(id);
-                    continue;
+                    state.UidsToFind ??= new List<string>();
+                    return new ValueTask(CoreTask(task, state, id));
                 }
 
-                instances.Add(instance.Value);
-            }
+                UnturnedTestInstance? instance = task.GetAwaiter().GetResult();
+                if (!instance.HasValue)
+                {
+                    (state.UidsToFind ??= new List<string>()).Add(id);
+                }
+                else
+                {
+                    state.Instances.Add(instance.Value);
+                }
 
-            if (instances.Count != uids.Length)
-            {
-                await logger.LogErrorAsync(string.Format(Properties.Resources.LogErrorTestUidsNotFound,
-                    uids.Length - instances.Count, uids.Length)).ConfigureAwait(false);
-            }
+                return default;
+
+                static async Task CoreTask(ValueTask<UnturnedTestInstance?> task, ForEachUidLookupIdState state, string id)
+                {
+                    UnturnedTestInstance? instance = await task.ConfigureAwait(false);
+                    if (!instance.HasValue)
+                    {
+                        state.UidsToFind!.Add(id);
+                        return;
+                    }
+
+                    state.Instances.Add(instance.Value);
+                }
+            });
 
             if (uidsToFind == null)
                 return instances;
         }
 
-        processor.TreeFilter = filter as TreeNodeFilter;
+        if (filter is { Type: TestFilterType.TreePath })
+        {
+            processor.TreeFilter = filter;
+        }
 
         List<UnturnedTestInstance> allInstances = await processor.ExpandTestsAsync().ConfigureAwait(false);
 
@@ -71,10 +95,16 @@ internal static class GeneratedTestExpansionHelper
                 break;
         }
 
-        foreach (TestNodeUid uid in uidsToFind)
+        foreach (string uid in uidsToFind)
         {
-            await logger.LogErrorAsync(string.Format(Properties.Resources.LogErrorTestUidNotFound, uid.Value))
+            await logger.LogErrorAsync(string.Format(Properties.Resources.LogErrorUnresolvedTestUid, uid))
                 .ConfigureAwait(false);
+        }
+
+        if (instances!.Count != filter!.UidCount)
+        {
+            await logger.LogErrorAsync(string.Format(Properties.Resources.LogErrorUnresolvedTestUids,
+                filter.UidCount - instances.Count, filter.UidCount)).ConfigureAwait(false);
         }
 
         return instances!;
@@ -141,14 +171,23 @@ internal static class GeneratedTestExpansionHelper
 
 internal class TestExpandProcessor
 {
-    private readonly IMTPLogger _logger;
+    private readonly ILogger _logger;
     private readonly List<UnturnedTest> _originalTests;
     private readonly Dictionary<Type, object?> _runners;
     private readonly CancellationToken _token;
 
     private readonly List<UnturnedTestInstance> _instances;
 
-    internal TreeNodeFilter? TreeFilter;
+    private bool _treeFilterNeedsPropertyBag;
+    internal ITestFilter? TreeFilter
+    {
+        get;
+        set
+        {
+            field = value;
+            _treeFilterNeedsPropertyBag = value != null && value.TreePath.IndexOf('[') >= 0;
+        }
+    }
 
 #nullable disable
 
@@ -165,7 +204,7 @@ internal class TestExpandProcessor
     private string _managedMethod;
 
 #nullable restore
-    public TestExpandProcessor(IMTPLogger logger, List<UnturnedTest> originalTests, CancellationToken token)
+    public TestExpandProcessor(ILogger logger, List<UnturnedTest> originalTests, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
 
@@ -177,22 +216,22 @@ internal class TestExpandProcessor
         _instances = new List<UnturnedTestInstance>();
     }
     
-    private UnturnedTest? _expandedTest;
+    private MethodInfo? _expandedTestMethod;
     
     /// <summary>
     /// Creates a <see cref="UnturnedTestInstance"/> from a <see cref="UnturnedTestUid"/> with no additional information.
     /// </summary>
-    internal async Task<UnturnedTestInstance?> GetTestFromUid(UnturnedTestUid uid)
+    internal ValueTask<UnturnedTestInstance?> GetTestFromUid(UnturnedTestUid uid)
     {
         if (!UnturnedTestUid.TryParse(
                 uid.Uid,
                 out ReadOnlyMemory<char> managedType,
                 out ReadOnlyMemory<char> managedMethod,
                 out ReadOnlyMemory<char>[] methodTypeParams,
-                out object?[] parameters,
+                out object?[]? parameters,
                 out int variantIndex))
         {
-            return null;
+            return default;
         }
 
         ReadOnlyMemory<char> managedTypeWithoutTypeArgs;
@@ -227,7 +266,7 @@ internal class TestExpandProcessor
 
         if (genericParameterCount > 0 && !isConstructedGenericType)
         {
-            return null;
+            return default;
         }
 
         ReadOnlyMemory<char> methodName = managedMethod;
@@ -236,7 +275,7 @@ internal class TestExpandProcessor
         {
             if (!ManagedIdentifier.TryGetMethodName(managedMethod.Span, out ReadOnlySpan<char> mtdName))
             {
-                return null;
+                return default;
             }
 
             int index = managedMethod.Span.IndexOf(mtdName, StringComparison.Ordinal);
@@ -257,10 +296,10 @@ internal class TestExpandProcessor
             int paramCount = test.Parameters.Length;
             if (paramCount == 0)
             {
-                if (parameters is { Length: > 0 })
+                if (parameters is { Length: > 0 } || variantIndex > 0)
                     continue;
             }
-            else if (parameters == null || parameters.Length != paramCount)
+            else if (parameters != null && parameters.Length != paramCount)
                 continue;
 
             // check type generic parameter count
@@ -437,39 +476,59 @@ internal class TestExpandProcessor
                 }
             }
 
-            if (parameters != null)
+            if (parameters != null || paramCount == 0)
             {
-                return new UnturnedTestInstance(
+                object?[] p = parameters ?? Array.Empty<object>();
+                UnturnedTestInstance instance = new UnturnedTestInstance(
                     this,
                     test,
                     type,
                     testMethod,
                     typeArgs.Length == 0 ? test.ManagedType : ManagedIdentifier.GetManagedType(type),
                     typeArgs.Length == 0 ? test.ManagedMethod : ManagedIdentifier.GetManagedMethod(testMethod),
-                    parameters,
+                    p,
                     variantIndex,
-                    UnturnedTestInstance.CalculateArgumentHash(typeArgs, methodTypeArgs, parameters),
+                    UnturnedTestInstance.CalculateArgumentHash(typeArgs, methodTypeArgs, p),
                     typeArgs,
                     methodTypeArgs
                 );
+                if (!string.Equals(instance.Uid, uid))
+                    continue;
+
+                return new ValueTask<UnturnedTestInstance?>(instance);
             }
 
-            if (_expandedTest != test)
+            if (isConstructedGenericType)
             {
-                _instances.Clear();
-                _expandedTest = test;
-                SetupExpandTest(test);
-                await SetupExpandTest(typeArgs).ConfigureAwait(false);
-                await ExpandComplexTest(typeArgs, methodTypeArgs, (ulong)(typeArgs.Length * methodTypeArgs.Length)).ConfigureAwait(false);
+                if (!managedType.Span.Equals(ManagedIdentifier.GetManagedType(type), StringComparison.Ordinal))
+                    continue;
+                if (!managedMethod.Span.Equals(ManagedIdentifier.GetManagedMethod(testMethod), StringComparison.Ordinal))
+                    continue;
             }
 
-            if (variantIndex >= _instances.Count)
-                return null;
+            if (_expandedTestMethod != testMethod)
+            {
+                return new ValueTask<UnturnedTestInstance?>(ExpandTestAndReturn(this, test, testMethod, typeArgs, methodTypeArgs, variantIndex));
+            }
 
-            return _instances[variantIndex];
+            return variantIndex >= _instances.Count ? default : new ValueTask<UnturnedTestInstance?>(_instances[variantIndex]);
         }
 
-        return null;
+        return new ValueTask<UnturnedTestInstance?>(default(UnturnedTestInstance?));
+
+        static async Task<UnturnedTestInstance?> ExpandTestAndReturn(TestExpandProcessor processor, UnturnedTest test, MethodInfo testMethod, Type[] typeArgs, Type[] methodTypeArgs, int variantIndex)
+        {
+            processor._instances.Clear();
+            processor._expandedTestMethod = testMethod;
+            processor.SetupExpandTest(test);
+            await processor.SetupExpandTest(typeArgs).ConfigureAwait(false);
+            await processor.ExpandComplexTest(typeArgs, methodTypeArgs, (ulong)(typeArgs.Length * methodTypeArgs.Length)).ConfigureAwait(false);
+
+            if (variantIndex >= processor._instances.Count)
+                return null;
+
+            return processor._instances[variantIndex];
+        }
 
         // theres no effecient way to go from managed type to CLR Type without the assembly name so we just find it from the parameter info
         static Type? FindTypeByManagedTypeName(ReadOnlySpan<char> typeName, ITypeParamsProvider provider, int index)
@@ -651,7 +710,7 @@ internal class TestExpandProcessor
         bool isExpandingTypeParams = parentArgs == null;
         if (!isExpandingTypeParams && TreeFilter != null)
         {
-            if (!FilterHelper.TreeCouldContainThisTypeConfiguration(_test, parentArgs!, null, null, TreeFilter))
+            if (!FilterHelper.TreeCouldContainThisTypeConfiguration(_test, parentArgs!, null, null, TreeFilter.TreePath))
                 return;
         }
 
@@ -890,7 +949,7 @@ internal class TestExpandProcessor
     {
         if (TreeFilter != null)
         {
-            if (!FilterHelper.TreeCouldContainThisTypeConfiguration(_test, typeArguments, methodTypeArguments, null, TreeFilter))
+            if (!FilterHelper.TreeCouldContainThisTypeConfiguration(_test, typeArguments, methodTypeArguments, null, TreeFilter.TreePath))
                 return;
         }
 
@@ -1259,7 +1318,7 @@ internal class TestExpandProcessor
             methodArgs
         );
 
-        if (TreeFilter != null && !FilterHelper.MatchesFilter(TreeFilter, in instance))
+        if (TreeFilter != null && !TreeFilter.MatchesTreePathFilter(in instance, _treeFilterNeedsPropertyBag))
             return false;
 
         _instances.Add(instance);

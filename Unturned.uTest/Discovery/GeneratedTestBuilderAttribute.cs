@@ -1,6 +1,6 @@
-using System.ComponentModel;
+using System;
 
-namespace uTest.Runner;
+namespace uTest.Discovery;
 
 /// <summary>
 /// Attribute used by the source-generator to designate <see cref="IGeneratedTestProvider"/> implementations for this assembly.

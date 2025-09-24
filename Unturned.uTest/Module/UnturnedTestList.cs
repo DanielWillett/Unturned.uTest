@@ -12,12 +12,15 @@ internal class UnturnedTestList
 
     [JsonRequired]
     public List<UnturnedTestReference> Tests { get; set; }
+
+    [JsonRequired]
+    public string TestListTypeName { get; set; }
+
+    public bool IsAllTests { get; set; }
 }
 
 internal class UnturnedTestReference
 {
     [JsonRequired]
     public string Uid { get; set; }
-
-    public int MetadataToken { get; set; }
 }

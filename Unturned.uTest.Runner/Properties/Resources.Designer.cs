@@ -88,92 +88,11 @@ namespace uTest.Runner.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Type(s) {0} do not meet the generic constraints for test {2}..
-        /// </summary>
-        internal static string LogErrorGenericConstraints {
-            get {
-                return ResourceManager.GetString("LogErrorGenericConstraints", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to TestArgsAttribute was given {0} parameter(s) but test {1} should have exactly {2}..
-        /// </summary>
-        internal static string LogErrorMismatchedArgsParameterCount {
-            get {
-                return ResourceManager.GetString("LogErrorMismatchedArgsParameterCount", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to TypeArgsAttribute was given {0} type parameter(s) but class or method {1} should have exactly {2}..
-        /// </summary>
-        internal static string LogErrorMismatchedArgsTypeParameterCount {
-            get {
-                return ResourceManager.GetString("LogErrorMismatchedArgsTypeParameterCount", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Value {0} can not be converted to type {1} for parameter &quot;{2}&quot; in test {3}..
-        /// </summary>
-        internal static string LogErrorMismatchedParameterType {
-            get {
-                return ResourceManager.GetString("LogErrorMismatchedParameterType", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Member referred to by &apos;From&apos; property ({0}) does not exist in {1}..
-        /// </summary>
-        internal static string LogErrorMissingFromMember {
-            get {
-                return ResourceManager.GetString("LogErrorMissingFromMember", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   Looks up a localized string similar to This test session (UID &quot;{0}&quot;) has already been closed..
         /// </summary>
         internal static string LogErrorNotStarted {
             get {
                 return ResourceManager.GetString("LogErrorNotStarted", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Not all parameters on test {0} in {1} have value sets or ranges. This could also be caused by a range containing too many elements, as a test can not have more than {2} variations..
-        /// </summary>
-        internal static string LogErrorParametersMissingValues {
-            get {
-                return ResourceManager.GetString("LogErrorParametersMissingValues", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Exception encountered accessing member referred to by &apos;From&apos; property ({0}) in {1}..
-        /// </summary>
-        internal static string LogErrorReadingFromMember {
-            get {
-                return ResourceManager.GetString("LogErrorReadingFromMember", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to Test UID &quot;{0}&quot; could not be linked to a test variation, it will be skipped..
-        /// </summary>
-        internal static string LogErrorTestUidNotFound {
-            get {
-                return ResourceManager.GetString("LogErrorTestUidNotFound", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to {0}/{1} test UID(s) were not able to be linked to test variations..
-        /// </summary>
-        internal static string LogErrorTestUidsNotFound {
-            get {
-                return ResourceManager.GetString("LogErrorTestUidsNotFound", resourceCulture);
             }
         }
     }

@@ -11,6 +11,7 @@ using Newtonsoft.Json;
 using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
+using uTest.Discovery;
 using uTest.Module;
 using uTest.Protocol;
 using uTest.Runner.Unturned;
@@ -58,7 +59,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
     private readonly ITestFrameworkCapabilities _capabilities;
     private readonly IMessageBus _messageBus;
     private readonly ILogger<UnturnedTestFramework> _logger;
-    private readonly ILogger _uTestLogger;
+    private readonly uTest.Logging.ILogger _uTestLogger;
     private readonly GracefulStopCapability? _stopCapability;
     private readonly ILoggerFactory _loggerFactory;
 
@@ -93,7 +94,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
         _loggerFactory = serviceProvider.GetLoggerFactory();
         _logger = _loggerFactory.CreateLogger<UnturnedTestFramework>();
-        _uTestLogger = new TFPLogger(_logger);
+        _uTestLogger = new MTPLogger(_logger);
 
         _runTestsAsync = RunTestsAsync;
         _discoverTestsAsync = DiscoverTestsAsync;
@@ -106,7 +107,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
     private async Task<List<UnturnedTestInstance>?> GetTests(TestExecutionRequest r, CancellationToken token)
     {
-        ITestRegistrationList? list = _capabilities.GetCapability<ITestRegistrationList>();
+        ITestRegistrationList? list = _capabilities.GetCapability<ITestRegistrationListCapability>();
 
         if (list == null)
         {
@@ -114,8 +115,14 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
             return null;
         }
 
-        Microsoft.Testing.Platform.Logging.ILogger logger = _loggerFactory.CreateLogger(list.GetType().FullName!);
-        List<UnturnedTestInstance> testInstances = await list.GetMatchingTestsAsync(r.Filter, logger, token).ConfigureAwait(false);
+        uTest.Logging.ILogger logger = new MTPLogger(_loggerFactory.CreateLogger(list.GetType().FullName!));
+        
+        List<UnturnedTestInstance> testInstances = await list.GetMatchingTestsAsync(
+            logger,
+            MTPFilterHelper.CreateFilter(r.Filter),
+            token
+        ).ConfigureAwait(false);
+
         if (testInstances.Count == 0)
         {
             _logger.LogInformation("No tests.");
@@ -217,20 +224,16 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
             string settingsFile = _launcher.GetSettingsFile();
 
-            List<Assembly> testAssemblies = new List<Assembly>();
+            Assembly? testAssembly = null;
 
             List<UnturnedTestReference> exportedTests = new List<UnturnedTestReference>(tests.Count);
+
             foreach (UnturnedTestInstance test in tests)
             {
-                Assembly asm = test.Test.Method.DeclaringType!.Assembly;
-                if (!testAssemblies.Contains(asm))
-                    testAssemblies.Add(asm);
+                if (testAssembly == null)
+                    testAssembly = test.Test.Method.DeclaringType!.Assembly;
 
-                exportedTests.Add(new UnturnedTestReference
-                {
-                    MetadataToken = test.Test.Method.MetadataToken,
-                    Uid = test.Uid
-                });
+                exportedTests.Add(new UnturnedTestReference { Uid = test.Uid });
             }
 
             using (JsonTextWriter writer = new JsonTextWriter(new StreamWriter(settingsFile)))
@@ -248,11 +251,13 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                 serializer.Serialize(writer, new UnturnedTestList
                 {
                     SessionUid = r.Session.SessionUid.Value,
-                    Tests = exportedTests
+                    Tests = exportedTests,
+                    TestListTypeName = typeof(GeneratedTestRegistrationList).AssemblyQualifiedName,
+                    IsAllTests = r.Filter == null
                 });
             }
 
-            Process process = await _launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssemblies, token);
+            Process process = await _launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssembly, token);
 
             _logger.LogInformation("Launched.");
 

@@ -3,8 +3,8 @@ using System;
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
-using uTest.Runner;
-using uTest.Runner.Util;
+using uTest;
+using Assert = NUnit.Framework.Assert;
 using TestAttribute = NUnit.Framework.TestAttribute;
 
 namespace uTest_Test;

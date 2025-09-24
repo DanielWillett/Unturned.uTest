@@ -2,7 +2,7 @@
 
   <PropertyGroup>
 
-    <TargetFrameworks>netstandard2.1;netstandard2.0;net471</TargetFrameworks>
+    <TargetFrameworks>netstandard2.1;net471</TargetFrameworks>
     <LangVersion>preview</LangVersion>
     <RootNamespace>uTest</RootNamespace>
     <Nullable>enable</Nullable>
@@ -31,6 +31,8 @@
   <ItemGroup>
     <Using Include="System.ComponentModel" />
     <Using Include="System.Diagnostics.CodeAnalysis" />
+    <Using Include="uTest.Logging.ILogger" Alias="ILogger" />
+    <Using Include="uTest.Logging" />
   </ItemGroup>
 
   <ItemGroup>
@@ -76,7 +78,7 @@
     <PackageReference Include="System.Buffers" Version="4.6.1" />
     <PackageReference Include="System.Memory" Version="4.5.1" />
     <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.0" />
-    <Reference Include="System.Web"/>
+    <Reference Include="System.Web" />
 
   </ItemGroup>
 

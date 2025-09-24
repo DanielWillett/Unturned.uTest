@@ -164,7 +164,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
     private void OnConnected()
     {
         _probablyConnected = true;
-        Logger.Info("Connected to test environment host.");
+        Logger.LogInformation("Connected to test environment host.");
         TPipeStream? stream = PipeStream;
 
         try
@@ -173,7 +173,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
         }
         catch (Exception ex)
         {
-            Logger.Exception("Error invoking Connected event.", ex);
+            Logger.LogError("Error invoking Connected event.", ex);
         }
 
         if (stream != null)
@@ -203,14 +203,14 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
         if (bytesRead == 0)
         {
             _probablyConnected = false;
-            Logger.Info("Disconnected from test environment host.");
+            Logger.LogInformation("Disconnected from test environment host.");
             try
             {
                 Disconnected?.Invoke();
             }
             catch (Exception ex)
             {
-                Logger.Exception("Error invoking Disconnected event.", ex);
+                Logger.LogError("Error invoking Disconnected event.", ex);
             }
             StartReconnecting();
             return;
@@ -300,7 +300,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
                         }
                         catch (Exception ex)
                         {
-                            Logger.Exception("Failed to respond to a ping.", ex);
+                            Logger.LogError("Failed to respond to a ping.", ex);
                         }
                     });
                 }
@@ -321,7 +321,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
                             }
                             catch (Exception ex)
                             {
-                                Logger.Exception($"Error invoking message handler: {handler}.", ex);
+                                Logger.LogError($"Error invoking message handler: {handler}.", ex);
                             }
 
                             handled = true;
@@ -337,7 +337,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
                         }
                         catch (Exception ex)
                         {
-                            Logger.Exception("Error invoking MessageReceived event.", ex);
+                            Logger.LogError("Error invoking MessageReceived event.", ex);
                         }
                     }
                 }
@@ -345,7 +345,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
         }
         catch (Exception ex)
         {
-            Logger.Exception(null, ex);
+            Logger.LogError(null, ex);
         }
 
         if (!_cts.IsCancellationRequested && PipeStream == stream)

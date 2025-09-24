@@ -1,18 +1,15 @@
-using Microsoft.Testing.Platform.Capabilities.TestFramework;
-using Microsoft.Testing.Platform.Extensions.Messages;
-using Microsoft.Testing.Platform.Requests;
+using System;
 using System.Reflection;
-using IMTPLogger = Microsoft.Testing.Platform.Logging.ILogger;
 
-namespace uTest.Runner;
+namespace uTest.Discovery;
 
-internal interface ITestRegistrationList : ITestFrameworkCapability
+internal interface ITestRegistrationList
 {
-    Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(ITestExecutionFilter filter, IMTPLogger logger, CancellationToken token = default);
+    Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(ILogger logger, ITestFilter? filter, CancellationToken token = default);
 
-    Task<List<UnturnedTest>> GetTestsAsync(IMTPLogger logger, CancellationToken token = default);
+    Task<List<UnturnedTest>> GetTestsAsync(ILogger logger, CancellationToken token = default);
 
-    Task<List<UnturnedTestInstance>> ExpandTestsAsync(IMTPLogger logger, List<UnturnedTest> originalTests, ITestExecutionFilter? filter, CancellationToken token = default);
+    Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, CancellationToken token = default);
 }
 
 internal readonly struct UnturnedTestInstance
@@ -105,38 +102,6 @@ internal readonly struct UnturnedTestInstance
         }
 
         return hashCode;
-    }
-
-    public void AddProperties(PropertyBag bag)
-    {
-        if (Test.LocationInfo != null)
-            bag.Add(Test.LocationInfo);
-        if (Test.IdentifierInfo != null)
-            bag.Add(Test.IdentifierInfo);
-    }
-
-    public TestNode CreateTestNode(out TestNodeUid? parentUid)
-    {
-        TestNode node = new TestNode
-        {
-            DisplayName = DisplayName,
-            Uid = new TestNodeUid(Uid)
-        };
-
-        AddProperties(node.Properties);
-
-        parentUid = null;
-        if (HasParameters)
-        {
-            parentUid = new TestNodeUid(Test.Uid);
-        }
-
-        return node;
-    }
-
-    public TestNode CreateTestNode()
-    {
-        return CreateTestNode(out _);
     }
 
     /// <inheritdoc />

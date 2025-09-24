@@ -103,8 +103,7 @@ public class InstallDirUtility
         }
         catch (SystemException ex)
         {
-            logger.Warning("Unable to read cache file.");
-            logger.Exception(null, ex);
+            logger.LogError("Unable to read cache file.", ex);
         }
     }
 
@@ -180,8 +179,7 @@ public class InstallDirUtility
         }
         catch (SystemException ex)
         {
-            _logger.Warning("Unable to write cache file.");
-            _logger.Exception(null, ex);
+            _logger.LogError("Unable to write cache file.", ex);
         }
     }
 
@@ -191,7 +189,7 @@ public class InstallDirUtility
         unturnedPath = null!;
         if (matches.Count == 0 || matches[matches.Count - 1].Groups.Count <= 1)
         {
-            _logger.Error($"Failed to match {GameName} installation in: \"{libraryFilePath}\".");
+            _logger.LogError($"Failed to match {GameName} installation in: \"{libraryFilePath}\".");
             return false;
         }
 
@@ -202,7 +200,7 @@ public class InstallDirUtility
         }
         if (!Directory.Exists(libraryDir))
         {
-            _logger.Error($"Library \"{libraryDir}\" has been removed.");
+            _logger.LogError($"Library \"{libraryDir}\" has been removed.");
             return false;
         }
 
@@ -211,14 +209,14 @@ public class InstallDirUtility
         {
             if (!isUnix)
             {
-                _logger.Error($"{GameName} installation at \"{gameInstallDir}\" has been removed.");
+                _logger.LogError($"{GameName} installation at \"{gameInstallDir}\" has been removed.");
                 return false;
             }
 
             gameInstallDir = Path.Combine(libraryDir, "SteamApps", "common", GameName);
             if (!Directory.Exists(gameInstallDir))
             {
-                _logger.Error($"{GameName} installation at \"{gameInstallDir}\" has been removed.");
+                _logger.LogError($"{GameName} installation at \"{gameInstallDir}\" has been removed.");
                 return false;
             }
         }
@@ -247,7 +245,7 @@ public class InstallDirUtility
             }
             catch
             {
-                logger.Warning("Failed to access drive information, not checking secondary drives.");
+                logger.LogWarning("Failed to access drive information, not checking secondary drives.");
                 fixedDrives = new List<DriveInfo>(0);
             }
 
@@ -409,7 +407,7 @@ file static class UnixInstallDirUtility
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            logger.Error($"Platform not supported: {RuntimeInformation.OSDescription}.");
+            logger.LogError($"Platform not supported: {RuntimeInformation.OSDescription}.");
             return false;
         }
 
@@ -427,7 +425,7 @@ file static class UnixInstallDirUtility
             }
         }
 
-        logger.Error($"Steam directory not found in any of the following paths: \"{string.Join("\", \"", _linuxInstallPaths)}\". Automatic discovery is not supported on Linux, consider manually changing the install directory.");
+        logger.LogError($"Steam directory not found in any of the following paths: \"{string.Join("\", \"", _linuxInstallPaths)}\". Automatic discovery is not supported on Linux, consider manually changing the install directory.");
         return false;
     }
 
@@ -436,7 +434,7 @@ file static class UnixInstallDirUtility
         if (!Directory.Exists(steamDir))
         {
             if (logDirNotFound)
-                logger.Error($"Steam directory not found in \"{steamDir}\". Automatic discovery is not supported on MacOS, consider manually changing the install directory.");
+                logger.LogError($"Steam directory not found in \"{steamDir}\". Automatic discovery is not supported on MacOS, consider manually changing the install directory.");
             return false;
         }
 
@@ -447,7 +445,7 @@ file static class UnixInstallDirUtility
             libraryFilePath = steamDir + "/SteamApps/libraryfolders.vdf";
             if (!File.Exists(libraryFilePath))
             {
-                logger.Error($"Failed to recognize Steam directory: \"{steamDir}\" because the library configuration file at \"{libraryFilePath}\" was missing.");
+                logger.LogError($"Failed to recognize Steam directory: \"{steamDir}\" because the library configuration file at \"{libraryFilePath}\" was missing.");
                 return false;
             }
         }
@@ -476,7 +474,7 @@ file static class WindowsInstallDirUtility
         }
         catch (Exception ex)
         {
-            logger.Exception("Failed to access the registry.", ex);
+            logger.LogError("Failed to access the registry.", ex);
             steamDir = null;
         }
 
@@ -484,19 +482,19 @@ file static class WindowsInstallDirUtility
         {
             string defaultDir = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFilesX86), "Steam");
             steamDir = defaultDir;
-            logger.Warning($"Failed to find Steam directory in registry, falling back to {defaultDir}.");
+            logger.LogWarning($"Failed to find Steam directory in registry, falling back to {defaultDir}.");
         }
 
         if (!Directory.Exists(steamDir))
         {
-            logger.Error($"Steam directory \"{steamDir}\" was removed.");
+            logger.LogError($"Steam directory \"{steamDir}\" was removed.");
             return false;
         }
 
         string libraryFilePath = Path.Combine(steamDir, "steamapps", "libraryfolders.vdf");
         if (!File.Exists(libraryFilePath))
         {
-            logger.Error($"Failed to recognize Steam directory: \"{steamDir}\" because the library configuration file at \"{libraryFilePath}\" was missing.");
+            logger.LogError($"Failed to recognize Steam directory: \"{steamDir}\" because the library configuration file at \"{libraryFilePath}\" was missing.");
             return false;
         }
 

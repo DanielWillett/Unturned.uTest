@@ -1,6 +1,8 @@
 ﻿using Microsoft.Testing.Platform.Requests;
 using NUnit.Framework;
+using uTest;
 using uTest.Runner.Util;
+using Assert = NUnit.Framework.Assert;
 
 namespace uTest_Test.Filtering;
 
@@ -32,9 +34,9 @@ public class TreeFilterTests
     [TestCase("/Unturned.uTest.Tests/uTest_Test.Filtering/TreeFilterTests/TestBasicTree/<System.Int32,System.String>/<System.String>/%28\"String\"%29")]
     public void TestBasicTree(string shouldMatch)
     {
-        TreeNodeFilter filter = FilterHelper.CreateTreeFilter(shouldMatch);
+        TreeNodeFilter filter = MTPFilterHelper.CreateTreeFilter(shouldMatch);
 
-        Assert.That(FilterHelper.PotentiallyMatchesFilter(typeof(TreeFilterTests), filter));
+        Assert.That(FilterHelper.PotentiallyMatchesFilter(typeof(TreeFilterTests), new TreeNodeFilterWrapper(filter)));
     }
 
     [NUnit.Framework.Test]
@@ -48,8 +50,8 @@ public class TreeFilterTests
     [TestCase("/mscorlib/uTest_Test.Filtering/TxreeFilterTests/TestBasicTree/<System.Int32,System.String>/<System.String>/%28\"String\"%29")]
     public void TestBasicTreeShortCircuits(string shouldntMatch)
     {
-        TreeNodeFilter filter = FilterHelper.CreateTreeFilter(shouldntMatch);
+        TreeNodeFilter filter = MTPFilterHelper.CreateTreeFilter(shouldntMatch);
 
-        Assert.That(FilterHelper.PotentiallyMatchesFilter(typeof(TreeFilterTests), filter), Is.False);
+        Assert.That(FilterHelper.PotentiallyMatchesFilter(typeof(TreeFilterTests), new TreeNodeFilterWrapper(filter)), Is.False);
     }
 }
