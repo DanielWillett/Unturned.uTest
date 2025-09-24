@@ -150,4 +150,10 @@
   <data name="LogErrorReadingFromMember" xml:space="preserve">
     <value>Exception encountered accessing member referred to by 'From' property ({0}) in {1}.</value>
   </data>
+  <data name="LogErrorTestUidNotFound" xml:space="preserve">
+    <value>Test UID "{0}" could not be linked to a test variation, it will be skipped.</value>
+  </data>
+  <data name="LogErrorTestUidsNotFound" xml:space="preserve">
+    <value>{0}/{1} test UID(s) were not able to be linked to test variations.</value>
+  </data>
 </root>

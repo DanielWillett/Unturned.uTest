@@ -34,7 +34,7 @@
 
   <PropertyGroup>
 
-    <!-- Update build file as well -->
+    <!-- Update csproj as well -->
     <MTPVersion>2.0.0-preview.25415.9</MTPVersion>
 
     <!-- Treats the 'generator failed to generate source' warnings as errors. -->
@@ -51,7 +51,7 @@
 
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(IsUnturnedTestProject)' == 'True' And '$(uTestMoe)' != 'NETStandard'">
+  <PropertyGroup Condition="'$(IsUnturnedTestProject)' == 'True'">
     
     <OutputType>Exe</OutputType>
 
@@ -104,7 +104,7 @@
 
   <ItemGroup Condition="'$(uTestMode)' == 'NETFramework'">
 
-    <!-- Reference .NET Standard 2.0 target for MTP -->
+    <!-- Reference MTP -->
     <PackageReference Include="Microsoft.Testing.Platform" Version="$(MTPVersion)"/>
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" Version="$(MTPVersion)"/>
 

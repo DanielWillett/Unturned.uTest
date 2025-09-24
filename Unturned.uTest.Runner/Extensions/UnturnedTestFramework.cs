@@ -115,14 +115,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         }
 
         Microsoft.Testing.Platform.Logging.ILogger logger = _loggerFactory.CreateLogger(list.GetType().FullName!);
-        List<UnturnedTest> tests = await list.GetTestsAsync(logger, token).ConfigureAwait(false);
-        if (tests.Count == 0)
-        {
-            _logger.LogInformation("No tests.");
-            return null;
-        }
-
-        List<UnturnedTestInstance> testInstances = await list.ExpandTestsAsync(logger, tests, token).ConfigureAwait(false);
+        List<UnturnedTestInstance> testInstances = await list.GetMatchingTestsAsync(r.Filter, logger, token).ConfigureAwait(false);
         if (testInstances.Count == 0)
         {
             _logger.LogInformation("No tests.");
@@ -171,6 +164,8 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         try
         {
             await _logger.LogInformationAsync($"Discovering tests: {ctx.Request.Session.SessionUid.Value}.");
+            
+            Debugger.Launch();
 
             List<UnturnedTestInstance>? tests = await GetTests(r, token).ConfigureAwait(false);
             if (tests == null)
@@ -233,14 +228,8 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
                 exportedTests.Add(new UnturnedTestReference
                 {
-                    MethodName = test.Test.IdentifierInfo?.MethodName ?? test.Test.Method.Name,
                     MetadataToken = test.Test.Method.MetadataToken,
-                    Uid = test.Uid,
-                    TypeName = test.Test.Method.DeclaringType!.AssemblyQualifiedName,
-                    ParameterTypeNames = test.Test.Method
-                        .GetParameters()
-                        .Select(x => x.ParameterType.AssemblyQualifiedName)
-                        .ToArray()
+                    Uid = test.Uid
                 });
             }
 

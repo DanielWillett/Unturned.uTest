@@ -15,7 +15,7 @@ namespace uTest;
 /// <see href="https://github.com/microsoft/vstest/blob/main/docs/RFCs/0017-Managed-TestCase-Properties.md"/>
 /// </para>
 /// </summary>
-public static class ManagedIdentifier
+public static partial class ManagedIdentifier
 {
     // https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/array.h#L12
     // also the same on Mono
@@ -52,20 +52,54 @@ public static class ManagedIdentifier
         return builder.ToString();
     }
 
+    private static readonly string[] GenericReferenceCache =
+    [
+        "!0", "!!0",
+        "!1", "!!1",
+        "!2", "!!2",
+        "!3", "!!3",
+        "!4", "!!4",
+        "!5", "!!5",
+        "!6", "!!6",
+        "!7", "!!7",
+        "!8", "!!8",
+        "!9", "!!9"
+    ];
+
+    private static string GetGenericReferenceName(int index, bool isMethod)
+    {
+        int cacheIndex = index * 2 + (isMethod ? 1 : 0);
+        if (cacheIndex < GenericReferenceCache.Length)
+            return GenericReferenceCache[cacheIndex];
+
+        return isMethod ? ("!!" + index) : ("!" + index);
+    }
+
     /// <summary>
     /// Gets the managed type identifier for a CLR type.
     /// </summary>
     public static string GetManagedType(Type type)
     {
+        return GetManagedType(type, false);
+    }
+
+    /// <summary>
+    /// Gets the managed type identifier for a CLR type.
+    /// </summary>
+    public static string GetManagedType(Type type, bool excludeNamespace)
+    {
         if (type == null)
             return string.Empty;
+
+        if (type.IsGenericParameter)
+            return GetGenericReferenceName(type.GenericParameterPosition, type.DeclaringMethod != null);
 
         if (ManagedTypeCache.TryGetValue(type, out string v))
             return v;
 
         StringBuilder sb = new StringBuilder();
         ManagedIdentifierBuilder builder = new ManagedIdentifierBuilder(sb);
-        AppendType(ref builder, type);
+        AppendType(ref builder, type, excludeNamespace);
         builder.Close();
         string str = builder.ToString();
         ManagedTypeCache.TryAdd(type, str);
@@ -85,6 +119,66 @@ public static class ManagedIdentifier
         AppendMethod(ref builder, method);
         builder.Close();
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// Extracts the method name (without the arity indicator) from a managed method. Note this includes the explicit interface prefix.
+    /// </summary>
+    /// <returns>The method name, or empty if it couldn't be extracted.</returns>
+    public static bool TryGetMethodName(ReadOnlySpan<char> managedMethod, out ReadOnlySpan<char> methodName)
+    {
+        ManagedIdentifierTokenizer tokenizer = new ManagedIdentifierTokenizer(managedMethod, ManagedIdentifierKind.Method);
+
+        StringBuilder? sb = null;
+        
+        while (tokenizer.MoveNext())
+        {
+            switch (tokenizer.TokenType)
+            {
+                case ManagedIdentifierTokenType.MethodName:
+                    if (sb != null)
+                    {
+                        methodName = AppendSpan(sb, tokenizer.Value).ToString();
+                        StringBuilderPool.Return(sb);
+                    }
+                    else
+                    {
+                        methodName = tokenizer.Value;
+                    }
+                    return true;
+
+                case ManagedIdentifierTokenType.MethodImplementationTypeSegment:
+                    AppendSpan(sb ??= StringBuilderPool.Rent(), tokenizer.Value);
+                    break;
+
+                default:
+                    methodName = ReadOnlySpan<char>.Empty;
+                    return false;
+            }
+        }
+
+        if (sb != null)
+            StringBuilderPool.Return(sb);
+        methodName = ReadOnlySpan<char>.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Check if the value of <paramref name="managedType"/> could possibly represent the given <paramref name="type"/>.
+    /// </summary>
+    public static bool IsSameType(Type type, ReadOnlySpan<char> managedType)
+    {
+        ManagedIdentifierTokenizer tokenizer = new ManagedIdentifierTokenizer(managedType, ManagedIdentifierKind.Type);
+        return tokenizer.IsSameTypeAs(type);
+    }
+
+    /// <summary>
+    /// Check if the value of <paramref name="managedType"/> could possibly represent the given <paramref name="type"/> (ignoring generic parameters).
+    /// </summary>
+    public static bool IsSameTypeDefinition(Type type, ReadOnlySpan<char> managedType)
+    {
+        ManagedIdentifierTokenizer tokenizer = new ManagedIdentifierTokenizer(managedType, ManagedIdentifierKind.Type);
+        return tokenizer.IsSameTypeAs(type, typeDefinitionOnly: true);
     }
 
     private static void AppendMethod(ref ManagedIdentifierBuilder builder, MethodBase method)
@@ -144,9 +238,10 @@ public static class ManagedIdentifier
 
     private static readonly char[] NamespaceSplitChars = [ '.' ];
 
-    private static void AppendType(ref ManagedIdentifierBuilder builder, Type type)
+    private static void AppendType(ref ManagedIdentifierBuilder builder, Type type, bool excludeNamespace = false)
     {
-        Type elementType = ReduceElementType(type, out ElementTypeState elementTypeState);
+        ElementTypeState elementTypeState = default;
+        Type elementType = elementTypeState.ReduceElementType(type);
 
         if (elementType.IsGenericParameter)
         {
@@ -194,20 +289,23 @@ public static class ManagedIdentifier
                 throw new InvalidOperationException("Should be unreachable, unable to identify generic parameter owner.");
             }
 
-            AppendElementType(ref builder, elementTypeState);
+            elementTypeState.AppendElementType(ref builder, AddElementType);
             return;
         }
 
-        string? @namespace = elementType.Namespace;
-        if (@namespace != null)
+        if (!excludeNamespace)
         {
-            if (@namespace.IndexOf('.') < 0)
+            string? @namespace = elementType.Namespace;
+            if (@namespace != null)
             {
-                builder.AddTypeSegment(FullyQualifiedTypeNameEscaper.Unescape(@namespace), false);
-            }
-            else foreach (string section in @namespace.Split(NamespaceSplitChars, StringSplitOptions.RemoveEmptyEntries))
-            {
-                builder.AddTypeSegment(FullyQualifiedTypeNameEscaper.Unescape(section), false);
+                if (@namespace.IndexOf('.') < 0)
+                {
+                    builder.AddTypeSegment(FullyQualifiedTypeNameEscaper.Unescape(@namespace), false);
+                }
+                else foreach (string section in @namespace.Split(NamespaceSplitChars, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    builder.AddTypeSegment(FullyQualifiedTypeNameEscaper.Unescape(section), false);
+                }
             }
         }
 
@@ -251,7 +349,7 @@ public static class ManagedIdentifier
 
         if (!elementType.IsConstructedGenericType)
         {
-            AppendElementType(ref builder, in elementTypeState);
+            elementTypeState.AppendElementType(ref builder, AddElementType);
             return;
         }
 
@@ -269,7 +367,7 @@ public static class ManagedIdentifier
 
         if (lastGenericArgs.Length == 0)
         {
-            AppendElementType(ref builder, in elementTypeState);
+            elementTypeState.AppendElementType(ref builder, AddElementType);
             return;
         }
 
@@ -286,10 +384,10 @@ public static class ManagedIdentifier
 
         builder.EndTypeParameters();
 
-        AppendElementType(ref builder, in elementTypeState);
+        elementTypeState.AppendElementType(ref builder, AddElementType);
     }
 
-    private static ReadOnlySpan<char> TryRemoveArity(string name, int expectedArity)
+    internal static ReadOnlySpan<char> TryRemoveArity(ReadOnlySpan<char> name, int expectedArity)
     {
         if (expectedArity == 0)
             return name;
@@ -307,18 +405,18 @@ public static class ManagedIdentifier
             return name;
 
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
-        if (!int.TryParse(name.AsSpan(arityStartIndex), NumberStyles.None, CultureInfo.InvariantCulture, out int arity))
+        if (!int.TryParse(name.Slice(arityStartIndex), NumberStyles.None, CultureInfo.InvariantCulture, out int arity))
 #else
-        if (!int.TryParse(name.Substring(arityStartIndex), NumberStyles.None, CultureInfo.InvariantCulture, out int arity))
+        if (!int.TryParse(name.Slice(arityStartIndex).ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out int arity))
 #endif
         {
             return name;
         }
 
-        return expectedArity != arity ? name : name.AsSpan(0, arityStartIndex - 1);
+        return expectedArity != arity ? name : name.Slice(0, arityStartIndex - 1);
     }
 
-    internal static ReadOnlySpan<char> TryRemoveArity(string name)
+    internal static ReadOnlySpan<char> TryRemoveArity(ReadOnlySpan<char> name)
     {
         int arityStartIndex;
         for (arityStartIndex = name.Length - 1; arityStartIndex > 0; --arityStartIndex)
@@ -332,7 +430,7 @@ public static class ManagedIdentifier
         if (arityStartIndex <= 0)
             return name;
 
-        return name.AsSpan(0, arityStartIndex - 1);
+        return name.Slice(0, arityStartIndex - 1);
     }
 
     internal static bool IdentifierNeedsEscaping(ReadOnlySpan<char> identifier, bool ignoreGenerics, bool isMethodName = false)
@@ -572,6 +670,9 @@ public static class ManagedIdentifier
         return bestCandidate;
     }
 
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+#endif
     internal static StringBuilder AppendSpan(StringBuilder builder, ReadOnlySpan<char> span)
     {
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
@@ -589,88 +690,27 @@ public static class ManagedIdentifier
         return builder;
     }
 
-
-    internal struct ElementTypeState
+    private static void AddElementType(ref ManagedIdentifierBuilder builder, Type type)
     {
-        public Type? FirstElement;
-        public Stack<Type>? Stack;
-    }
-
-    internal static Type ReduceElementType(Type type, out ElementTypeState types)
-    {
-        Type elementType = type;
-        types = default;
-        while (true)
+        if (type.IsArray)
         {
-            Type nextElementType;
-            if (elementType.HasElementType)
-            {
-                nextElementType = elementType.GetElementType()!;
-            }
-            else
-            {
-                if (types.Stack != null)
-                    types.FirstElement = null;
-                return elementType;
-            }
-
-            if (types.FirstElement == null)
-                types.FirstElement = elementType;
-            else if (types.Stack == null)
-            {
-                types.Stack = StackPool<Type>.Rent();
-                types.Stack.Push(types.FirstElement);
-                types.Stack.Push(elementType);
-            }
-            else
-            {
-                types.Stack.Push(elementType);
-            }
-
-            elementType = nextElementType;
-        }
-    }
-
-    private static void AppendElementType(ref ManagedIdentifierBuilder builder, in ElementTypeState elementTypeState)
-    {
-        if (elementTypeState.Stack != null)
-        {
-            while (elementTypeState.Stack.Count > 0)
-            {
-                AddElementType(ref builder, elementTypeState.Stack.Pop());
-            }
-
-            StackPool<Type>.Return(elementTypeState.Stack);
-        }
-        else if (elementTypeState.FirstElement != null)
-        {
-            AddElementType(ref builder, elementTypeState.FirstElement);
-        }
-
-        return;
-
-        static void AddElementType(ref ManagedIdentifierBuilder builder, Type type)
-        {
-            if (type.IsArray)
-            {
 #if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
-                builder.MakeArrayType(type.IsSZArray ? 0 : type.GetArrayRank());
+            builder.MakeArrayType(type.IsSZArray ? 0 : type.GetArrayRank());
 #else
-                // no better way to check if type is SZ array ([]) or MD 1-rank array ([*])
-                int rank = type.GetArrayRank();
-                if (rank == 1 && type.GetElementType()!.MakeArrayType() == type)
-                    rank = 0;
-                builder.MakeArrayType(rank);
+            // no better way to check if type is SZ array ([]) or MD 1-rank array ([*])
+            int rank = type.GetArrayRank();
+            if (rank == 1 && type.GetElementType()!.MakeArrayType() == type)
+                rank = 0;
+            builder.MakeArrayType(rank);
 #endif
-            }
-            else if (type.IsByRef)
-            {
-                builder.MakeReferenceType();
-            }
-            else if (type.IsPointer)
-            {
-                builder.MakePointerType();
-            }
+        }
+        else if (type.IsByRef)
+        {
+            builder.MakeReferenceType();
+        }
+        else if (type.IsPointer)
+        {
+            builder.MakePointerType();
         }
     }
 

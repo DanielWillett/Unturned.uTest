@@ -964,7 +964,7 @@ public class ManagedMethodIdentifierTests
 
     public class NestedType<T>
     {
-        private void Method<X>(List<X> list, Dictionary<X, T> dict) { }
+        private void Method<X>(List<X> list, Dictionary<X, T> dict) where X : notnull { }
     }
 
     [NUnit.Framework.Test]

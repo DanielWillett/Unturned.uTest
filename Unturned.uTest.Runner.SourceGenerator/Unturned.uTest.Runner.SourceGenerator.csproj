@@ -27,7 +27,10 @@
     <Compile Include="../Unturned.uTest/Util/TextEscaper.cs" Link="Util/TextEscaper.cs" />
     <Compile Include="../Unturned.uTest/Util/StringBuilderPool.cs" Link="Util/StringBuilderPool.cs" />
     <Compile Include="../Unturned.uTest/Util/StackPool.cs" Link="Util/StackPool.cs" />
+    <Compile Include="../Unturned.uTest/Util/TreeNodeFilterHelper.cs" Link="Util/TreeNodeFilterHelper.cs" />
+    <Compile Include="../Unturned.uTest/Util/ElementTypeState.cs" Link="Util/ElementTypeState.cs" />
     <Compile Include="../Unturned.uTest/Tests/UnturnedTestUid.cs" Link="Tests/UnturnedTestUid.cs" />
+    <Compile Include="../Unturned.uTest/Util/MathHelper.cs" Link="Util/MathHelper.cs" />
 
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0" PrivateAssets="all" />

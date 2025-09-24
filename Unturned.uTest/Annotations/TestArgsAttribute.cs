@@ -13,7 +13,7 @@ public sealed class TestArgsAttribute : Attribute
     ///// <summary>
     ///// List of parameter values in the order they're declared by the method definition.
     ///// </summary>
-    //public object[]? Args { get; }
+    //public object?[]? Args { get; }
 
     /// <summary>
     /// The name of a member (field, property, method) to fetch the arguments from in the declaring type.
@@ -69,7 +69,7 @@ public sealed class TestArgsAttribute : Attribute
     /// </summary>
     /// <param name="args">List of parameter values in the order they're declared by the method definition.</param>
     [SetsRequiredMembers]
-    public TestArgsAttribute(params object[] args)
+    public TestArgsAttribute(params object?[]? args)
     {
         //Args = args;
         From = null;

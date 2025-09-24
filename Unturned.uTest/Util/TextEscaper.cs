@@ -9,6 +9,21 @@ internal class TextEscaper
 
     internal char[] Escapables => _escapables;
 
+    public bool IsEscapeSequenceChar(char c)
+    {
+        if (_customMappings != null)
+        {
+            for (int i = 0; i < _customMappings.Length; ++i)
+            {
+                ref CharMap map = ref _customMappings[i];
+                if (map.Result == c)
+                    return true;
+            }
+        }
+
+        return Array.IndexOf(Escapables, c) >= 0 && c is not ('\0' or '\t' or '\n' or '\v' or '\r');
+    }
+
     public TextEscaper(char[] escapables, CharMap[] customMappings)
     {
         Array.Sort(escapables, (a, b) => a - b);

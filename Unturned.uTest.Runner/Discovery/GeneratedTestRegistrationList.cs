@@ -1,6 +1,10 @@
+using Microsoft.Testing.Platform.Requests;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
+using uTest.Runner.Util;
 using IMTPLogger = Microsoft.Testing.Platform.Logging.ILogger;
+
+#pragma warning disable TPEXP
 
 namespace uTest.Runner;
 
@@ -13,13 +17,20 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
         _assembly = assembly;
     }
 
-    /// <inheritdoc />
-    public Task<List<UnturnedTest>> GetTestsAsync(IMTPLogger logger, CancellationToken token = default)
+    public async Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(ITestExecutionFilter filter, IMTPLogger logger, CancellationToken token = default)
     {
+        List<UnturnedTest> tests = GetPotentiallyMatchingTests(filter, logger, token);
+        return await ExpandTestsAsync(logger, tests, filter, token);
+    }
+
+    private List<UnturnedTest> GetPotentiallyMatchingTests(ITestExecutionFilter? filter, IMTPLogger logger, CancellationToken token)
+    {
+        if (filter is NopFilter)
+            filter = null;
+
         object[] arr = _assembly.GetCustomAttributes(typeof(GeneratedTestBuilderAttribute), false);
         if (arr.Length == 0)
-            return Task.FromResult(new List<UnturnedTest>(0));
-
+            return new List<UnturnedTest>(0);
         List<Exception>? exceptions = null;
 
         List<UnturnedTest> testList = new List<UnturnedTest>();
@@ -27,6 +38,9 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
         for (int i = 0; i < arr.Length; ++i)
         {
             if (arr[i] is not GeneratedTestBuilderAttribute attr)
+                continue;
+
+            if (filter != null && !FilterHelper.PotentiallyMatchesFilter(attr.TestType, filter))
                 continue;
 
             Type type = attr.Type;
@@ -49,8 +63,14 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
 
                 GeneratedTestBuilder builder = new GeneratedTestBuilder(testList, attr.TestType);
 
+                int index = testList.Count;
                 provider = (IGeneratedTestProvider)ctor.Invoke(Array.Empty<object>());
                 provider.Build(builder);
+
+                if (filter != null)
+                {
+                    FilterHelper.RemoveUnfilteredTests(filter, testList, index);
+                }
             }
             catch (TargetInvocationException ex) when (ex.InnerException != null)
             {
@@ -71,15 +91,21 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
         {
             if (exceptions.Count == 1)
                 ExceptionDispatchInfo.Capture(exceptions[0]).Throw();
-            
+
             throw new AggregateException(exceptions);
         }
 
-        return Task.FromResult(testList);
+        return testList;
     }
 
-    public Task<List<UnturnedTestInstance>> ExpandTestsAsync(IMTPLogger logger, List<UnturnedTest> originalTests, CancellationToken token = default)
+    /// <inheritdoc />
+    public Task<List<UnturnedTest>> GetTestsAsync(IMTPLogger logger, CancellationToken token = default)
     {
-        return GeneratedTestExpansionHelper.ExpandTestsAsync(logger, originalTests, token);
+        return Task.FromResult(GetPotentiallyMatchingTests(null, logger, token));
+    }
+
+    public Task<List<UnturnedTestInstance>> ExpandTestsAsync(IMTPLogger logger, List<UnturnedTest> originalTests, ITestExecutionFilter? filter, CancellationToken token = default)
+    {
+        return GeneratedTestExpansionHelper.ExpandTestsAsync(logger, originalTests, filter, token);
     }
 }

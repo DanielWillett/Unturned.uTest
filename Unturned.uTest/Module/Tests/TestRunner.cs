@@ -25,6 +25,8 @@ internal class TestRunner
 
         TestExecutionPipeline pipeline = new TestExecutionPipeline(this, _logger, token);
 
+        ITestRegistrationList 
+
         foreach (UnturnedTestReference test in testList.Tests)
         {
             Type type = Type.GetType(test.TypeName, throwOnError: true, ignoreCase: false)!;

@@ -372,7 +372,8 @@ public struct ManagedIdentifierBuilder : IDisposable
 
         if (_lastToken is not (ManagedIdentifierTokenType.OpenParameters
                                    or ManagedIdentifierTokenType.OpenTypeParameters
-                                   or ManagedIdentifierTokenType.NextParameter))
+                                   or ManagedIdentifierTokenType.NextParameter
+                                   or ManagedIdentifierTokenType.Uninitialized))
         {
             if (index > ushort.MaxValue)
                 throw new ArgumentOutOfRangeException(nameof(index));
@@ -380,7 +381,7 @@ public struct ManagedIdentifierBuilder : IDisposable
             ThrowInvalidLastToken(ManagedIdentifierTokenType.MethodGenericParameterReference);
         }
 
-        if (index >= _methodArity)
+        if (_lastToken != ManagedIdentifierTokenType.Uninitialized && index >= _methodArity)
         {
             throw new ArgumentOutOfRangeException(nameof(index), _methodArity == 0
                 ? "This method did not specify an arity."
@@ -412,7 +413,8 @@ public struct ManagedIdentifierBuilder : IDisposable
 
         if (_lastToken is not (ManagedIdentifierTokenType.OpenParameters
                                    or ManagedIdentifierTokenType.OpenTypeParameters
-                                   or ManagedIdentifierTokenType.NextParameter))
+                                   or ManagedIdentifierTokenType.NextParameter
+                                   or ManagedIdentifierTokenType.Uninitialized))
         {
             ThrowInvalidLastToken(ManagedIdentifierTokenType.TypeGenericParameterReference);
         }

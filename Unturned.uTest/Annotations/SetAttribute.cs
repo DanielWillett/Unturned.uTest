@@ -76,7 +76,7 @@ public sealed class SetAttribute : Attribute
     /// This constructor can be used with <see cref="Type"/> values on generic parameters.
     /// </remarks>
     [SetsRequiredMembers]
-    public SetAttribute(params object?[] values)
+    public SetAttribute(params object?[]? values)
     {
         //Values = values;
         //From = null;

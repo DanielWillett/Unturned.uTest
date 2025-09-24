@@ -3,6 +3,9 @@ using Microsoft.Testing.Platform.Capabilities.TestFramework;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Microsoft.Testing.Platform.Helpers;
+
+#pragma warning disable TPEXP
 
 namespace uTest.Runner;
 
@@ -44,6 +47,9 @@ public static class TestApplicationBuilderExtensions
         capabilities.Add(new UnturnedTestFramework.GracefulStopCapability());
 
         capabilities.Capacity = capabilities.Count;
+
+        bldr.AddTreeNodeFilterService(ext);
+        bldr.AddMaximumFailedTestsService(ext);
 
         bldr.RegisterTestFramework(
             _ => new TestFrameworkCapabilities(capabilities),

@@ -16,6 +16,14 @@ internal sealed class EquatableObjectList : IEquatable<EquatableObjectList?>
 
     public EquatableObjectList(in TypedConstant value, bool distinct = false)
     {
+        // if Attribute(params object[] value):
+        //  Attribute(null) is parsed as a null array instead of [ null ].
+        if (value.IsNull)
+        {
+            _objects = new object[1];
+            return;
+        }
+
         ImmutableArray<TypedConstant> objArgs = value.Values;
         if (objArgs.IsDefaultOrEmpty)
         {
@@ -43,7 +51,7 @@ internal sealed class EquatableObjectList : IEquatable<EquatableObjectList?>
                     args[i] = new EquatableEnumValueContainer(
                         qualifiedTypeName,
                         field is not { CanBeReferencedByName: true } ? null : field.Name,
-                        element.Value
+                        element.Value!
                     );
 
                     break;

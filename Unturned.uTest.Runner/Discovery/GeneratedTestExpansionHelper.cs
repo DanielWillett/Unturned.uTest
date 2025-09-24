@@ -1,4 +1,6 @@
+using Microsoft.Testing.Platform.Extensions.Messages;
 using Microsoft.Testing.Platform.Logging;
+using Microsoft.Testing.Platform.Requests;
 using System.Collections;
 using System.Diagnostics;
 using System.Globalization;
@@ -7,17 +9,75 @@ using System.Text;
 using uTest.Runner.Util;
 using IMTPLogger = Microsoft.Testing.Platform.Logging.ILogger;
 
+#pragma warning disable TPEXP
+
 namespace uTest.Runner;
 
 internal static class GeneratedTestExpansionHelper
 {
     private static Type[]? _asyncMethodFromArgTypes;
 
-    public static async Task<List<UnturnedTestInstance>> ExpandTestsAsync(IMTPLogger logger, List<UnturnedTest> originalTests, CancellationToken token)
+    public static async Task<List<UnturnedTestInstance>> ExpandTestsAsync(IMTPLogger logger, List<UnturnedTest> originalTests, ITestExecutionFilter? filter, CancellationToken token)
     {
+        if (filter is NopFilter)
+            filter = null;
+
         TestExpandProcessor processor = new TestExpandProcessor(logger, originalTests, token);
 
-        return await processor.ExpandTestsAsync().ConfigureAwait(false);
+        List<TestNodeUid>? uidsToFind = null;
+        List<UnturnedTestInstance>? instances = null;
+        if (filter is TestNodeUidListFilter list)
+        {
+            TestNodeUid[] uids = list.TestNodeUids;
+            instances = new List<UnturnedTestInstance>(uids.Length);
+            foreach (TestNodeUid id in uids)
+            {
+                UnturnedTestInstance? instance = await processor.GetTestFromUid(id.Value);
+                if (!instance.HasValue)
+                {
+                    (uidsToFind ??= new List<TestNodeUid>()).Add(id);
+                    continue;
+                }
+
+                instances.Add(instance.Value);
+            }
+
+            if (instances.Count != uids.Length)
+            {
+                await logger.LogErrorAsync(string.Format(Properties.Resources.LogErrorTestUidsNotFound,
+                    uids.Length - instances.Count, uids.Length)).ConfigureAwait(false);
+            }
+
+            if (uidsToFind == null)
+                return instances;
+        }
+
+        processor.TreeFilter = filter as TreeNodeFilter;
+
+        List<UnturnedTestInstance> allInstances = await processor.ExpandTestsAsync().ConfigureAwait(false);
+
+        if (uidsToFind == null)
+            return allInstances;
+
+        foreach (UnturnedTestInstance instance in allInstances)
+        {
+            int index = uidsToFind.IndexOf(instance.Uid);
+            if (index < 0)
+                continue;
+
+            instances!.Add(instance);
+            uidsToFind.RemoveAt(index);
+            if (uidsToFind.Count == 0)
+                break;
+        }
+
+        foreach (TestNodeUid uid in uidsToFind)
+        {
+            await logger.LogErrorAsync(string.Format(Properties.Resources.LogErrorTestUidNotFound, uid.Value))
+                .ConfigureAwait(false);
+        }
+
+        return instances!;
     }
 
     internal enum FromMemberType { Field, Property, Method, MethodWithCancellationToken }
@@ -85,9 +145,10 @@ internal class TestExpandProcessor
     private readonly List<UnturnedTest> _originalTests;
     private readonly Dictionary<Type, object?> _runners;
     private readonly CancellationToken _token;
-    private readonly StringBuilder _stringBuilder;
 
     private readonly List<UnturnedTestInstance> _instances;
+
+    internal TreeNodeFilter? TreeFilter;
 
 #nullable disable
 
@@ -114,10 +175,335 @@ internal class TestExpandProcessor
 
         _runners = new Dictionary<Type, object?>();
         _instances = new List<UnturnedTestInstance>();
-
-        _stringBuilder = new StringBuilder(128);
     }
     
+    private UnturnedTest? _expandedTest;
+    
+    /// <summary>
+    /// Creates a <see cref="UnturnedTestInstance"/> from a <see cref="UnturnedTestUid"/> with no additional information.
+    /// </summary>
+    internal async Task<UnturnedTestInstance?> GetTestFromUid(UnturnedTestUid uid)
+    {
+        if (!UnturnedTestUid.TryParse(
+                uid.Uid,
+                out ReadOnlyMemory<char> managedType,
+                out ReadOnlyMemory<char> managedMethod,
+                out ReadOnlyMemory<char>[] methodTypeParams,
+                out object?[] parameters,
+                out int variantIndex))
+        {
+            return null;
+        }
+
+        ReadOnlyMemory<char> managedTypeWithoutTypeArgs;
+        ReadOnlySpan<char> managedTypeSpan = managedType.Span;
+        int arityIndex = managedTypeSpan.LastIndexOf('`');
+        bool isConstructedGenericType = arityIndex >= 0;
+        int genericParameterCount = 0;
+        if (isConstructedGenericType)
+        {
+            int arityStartIndex = arityIndex;
+            while (arityIndex < managedTypeSpan.Length && char.IsDigit(managedTypeSpan[arityIndex + 1]))
+                ++arityIndex;
+            
+            if (managedTypeSpan[arityIndex] == '`'
+                || !MathHelper.TryParseInt(managedTypeSpan.Slice(arityStartIndex + 1, arityIndex - arityStartIndex), out genericParameterCount))
+            {
+                // 'TypeWithoutDigits`'
+                isConstructedGenericType = false;
+                managedTypeWithoutTypeArgs = managedType;
+            }
+            else
+            {
+                managedTypeWithoutTypeArgs = managedType.Slice(0, arityIndex + 1);
+                if (managedTypeWithoutTypeArgs.Length == managedTypeSpan.Length)
+                    isConstructedGenericType = false;
+            }
+        }
+        else
+        {
+            managedTypeWithoutTypeArgs = managedType;
+        }
+
+        if (genericParameterCount > 0 && !isConstructedGenericType)
+        {
+            return null;
+        }
+
+        ReadOnlyMemory<char> methodName = managedMethod;
+
+        if (isConstructedGenericType)
+        {
+            if (!ManagedIdentifier.TryGetMethodName(managedMethod.Span, out ReadOnlySpan<char> mtdName))
+            {
+                return null;
+            }
+
+            int index = managedMethod.Span.IndexOf(mtdName, StringComparison.Ordinal);
+            methodName = index < 0
+                ? mtdName.ToString().AsMemory()
+                : managedMethod.Slice(index, mtdName.Length);
+        }
+
+        Type? testType = null;
+        Type[]? typeArgs = null;
+
+        foreach (UnturnedTest test in _originalTests)
+        {
+            if (test.Owner == null)
+                continue;
+
+            // check parameter count
+            int paramCount = test.Parameters.Length;
+            if (paramCount == 0)
+            {
+                if (parameters is { Length: > 0 })
+                    continue;
+            }
+            else if (parameters == null || parameters.Length != paramCount)
+                continue;
+
+            // check type generic parameter count
+            if (genericParameterCount != 0)
+            {
+                if (test.Owner.TypeParameters == null || test.Owner.TypeParameters.Length != genericParameterCount)
+                    continue;
+            }
+            else if (test.Owner.TypeParameters is { Length: > 0 })
+                continue;
+
+            // check type name
+            if (!managedTypeWithoutTypeArgs.Span.Equals(test.ManagedType.AsSpan(), StringComparison.Ordinal))
+                continue;
+
+            if (isConstructedGenericType)
+            {
+                // check method name without parameter types
+                // constructed types can replace parameters directly (ex. Type`1.Method(!0) -> Type`1<System.String>.Method(System.String) )
+                if (!ManagedIdentifier.TryGetMethodName(test.ManagedMethod.AsSpan(), out ReadOnlySpan<char> testMethodName)
+                    || !testMethodName.Equals(methodName.Span, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+            }     // check method name
+            else if (!managedMethod.Span.Equals(test.ManagedMethod.AsSpan(), StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            Type type = test.Owner.Type;
+            if (isConstructedGenericType)
+            {
+                // fill in type parameters using the values from SetAtribute/TypeArgsAttribute.
+                if (testType == null)
+                {
+                    ManagedIdentifierTokenizer typeTokenizer = new ManagedIdentifierTokenizer(managedType.Span, ManagedIdentifierKind.Type);
+                    while (typeTokenizer.MoveNext())
+                    {
+                        if (typeTokenizer.TokenType == ManagedIdentifierTokenType.OpenTypeParameters)
+                            break;
+                    }
+
+                    if (typeTokenizer.TokenType != ManagedIdentifierTokenType.OpenTypeParameters)
+                        continue;
+
+                    StringBuilder sb = StringBuilderPool.Rent();
+
+                    bool anyFailed = false;
+
+                    typeArgs = new Type[test.Owner.TypeParameters!.Length];
+                    for (int i = 0; i < typeArgs.Length; ++i)
+                    {
+                        if (typeTokenizer.TokenType == ManagedIdentifierTokenType.CloseTypeParameters)
+                        {
+                            anyFailed = true;
+                            break;
+                        }
+
+                        ManagedIdentifierBuilder builder = new ManagedIdentifierBuilder(sb);
+                        int depth = 0;
+                        while (typeTokenizer.MoveNext())
+                        {
+                            ManagedIdentifierTokenType tkn = typeTokenizer.TokenType;
+                            if (depth == 0 && tkn is ManagedIdentifierTokenType.NextParameter or ManagedIdentifierTokenType.CloseTypeParameters)
+                            {
+                                break;
+                            }
+
+                            if (tkn == ManagedIdentifierTokenType.OpenTypeParameters)
+                            {
+                                ++depth;
+                            }
+                            else if (tkn == ManagedIdentifierTokenType.CloseTypeParameters)
+                            {
+                                if (depth > 0)
+                                    --depth;
+                            }
+
+                            builder.WriteToken(in typeTokenizer);
+                        }
+
+                        Type? t = FindTypeByManagedTypeName(builder.ToString().AsSpan(), test.Owner, i);
+                        if (t == null)
+                        {
+                            anyFailed = true;
+                            break;
+                        }
+
+                        typeArgs[i] = t;
+                    }
+
+                    StringBuilderPool.Return(sb);
+
+                    if (anyFailed || typeTokenizer.TokenType != ManagedIdentifierTokenType.CloseTypeParameters)
+                        continue;
+
+                    try
+                    {
+                        testType = type.MakeGenericType(typeArgs);
+                    }
+                    catch (ArgumentException)
+                    {
+                        continue;
+                    }
+                }
+
+                type = testType;
+            }
+            else
+            {
+                typeArgs = Type.EmptyTypes;
+            }
+
+            Type[] methodTypeArgs;
+            // by now we know this is the correct type and method name
+            if (methodTypeParams.Length > 0)
+            {
+                if (test.TypeParameters == null || test.TypeParameters.Length != methodTypeParams.Length)
+                    continue;
+
+                methodTypeArgs = new Type[methodTypeParams.Length];
+                bool anyFailed = false;
+                for (int i = 0; i < methodTypeParams.Length; ++i)
+                {
+                    Type? methodTypeArg = FindTypeByManagedTypeName(methodTypeParams[i].Span, test, i);
+                    if (methodTypeArg == null)
+                    {
+                        anyFailed = true;
+                        break;
+                    }
+
+                    methodTypeArgs[i] = methodTypeArg;
+                }
+
+                if (anyFailed)
+                    continue;
+            }
+            else if (test.TypeParameters is { Length: > 0 })
+            {
+                continue;
+            }
+            else
+            {
+                methodTypeArgs = Type.EmptyTypes;
+            }
+
+            MethodInfo? testMethod;
+            if (typeArgs!.Length > 0)
+                testMethod = (MethodInfo?)MethodBase.GetMethodFromHandle(test.Method.MethodHandle, type.TypeHandle);
+            else
+                testMethod = test.Method;
+
+            if (testMethod == null)
+                continue;
+
+            if (isConstructedGenericType)
+            {
+                // check method name with parameter types filled in
+                string thisTestManagedMethod = ManagedIdentifier.GetManagedMethod(testMethod);
+                if (!managedMethod.Span.Equals(thisTestManagedMethod.AsSpan(), StringComparison.Ordinal))
+                    continue;
+            }
+
+            if (methodTypeArgs.Length > 0)
+            {
+                try
+                {
+                    testMethod = test.Method.MakeGenericMethod(methodTypeArgs);
+                }
+                catch (ArgumentException)
+                {
+                    continue;
+                }
+            }
+
+            if (parameters != null)
+            {
+                return new UnturnedTestInstance(
+                    this,
+                    test,
+                    type,
+                    testMethod,
+                    typeArgs.Length == 0 ? test.ManagedType : ManagedIdentifier.GetManagedType(type),
+                    typeArgs.Length == 0 ? test.ManagedMethod : ManagedIdentifier.GetManagedMethod(testMethod),
+                    parameters,
+                    variantIndex,
+                    UnturnedTestInstance.CalculateArgumentHash(typeArgs, methodTypeArgs, parameters),
+                    typeArgs,
+                    methodTypeArgs
+                );
+            }
+
+            if (_expandedTest != test)
+            {
+                _instances.Clear();
+                _expandedTest = test;
+                SetupExpandTest(test);
+                await SetupExpandTest(typeArgs).ConfigureAwait(false);
+                await ExpandComplexTest(typeArgs, methodTypeArgs, (ulong)(typeArgs.Length * methodTypeArgs.Length)).ConfigureAwait(false);
+            }
+
+            if (variantIndex >= _instances.Count)
+                return null;
+
+            return _instances[variantIndex];
+        }
+
+        return null;
+
+        // theres no effecient way to go from managed type to CLR Type without the assembly name so we just find it from the parameter info
+        static Type? FindTypeByManagedTypeName(ReadOnlySpan<char> typeName, ITypeParamsProvider provider, int index)
+        {
+            if (typeName.IsEmpty)
+                return null;
+
+            if (provider.TypeParameters != null
+                && provider.TypeParameters.Length > index
+                && provider.TypeParameters[index] is UnturnedTestSetParameter { Values: Type[] setTypes }
+                )
+            {
+                for (int i = 0; i < setTypes.Length; ++i)
+                {
+                    if (ManagedIdentifier.IsSameType(setTypes[i], typeName))
+                        return setTypes[i];
+                }
+            }
+
+            if (provider.TypeArgs != null)
+            {
+                for (int i = 0; i < provider.TypeArgs.Length; ++i)
+                {
+                    if (provider.TypeArgs[i] is { Values: Type[] types }
+                        && types.Length > index
+                        && ManagedIdentifier.IsSameType(types[index], typeName))
+                        return types[index];
+                }
+            }
+
+            return null;
+        }
+    }
+
     public async Task<List<UnturnedTestInstance>> ExpandTestsAsync()
     {
         Stopwatch sw = Stopwatch.StartNew();
@@ -131,13 +517,13 @@ internal class TestExpandProcessor
         return _instances;
     }
 
-    private static readonly int DefaultArgHash = UnturnedTestInstance.CalculateArgumentHash(
+    internal static readonly int DefaultArgHash = UnturnedTestInstance.CalculateArgumentHash(
         Type.EmptyTypes,
         Type.EmptyTypes,
         Array.Empty<object>()
     );
 
-    public ValueTask ExpandTestAsync(UnturnedTest test)
+    private void SetupExpandTest(UnturnedTest test)
     {
         _test = test;
         if (_testType != test.Method.DeclaringType)
@@ -165,6 +551,54 @@ internal class TestExpandProcessor
         {
             _methodGenericArguments = Type.EmptyTypes;
         }
+    }
+
+    private ValueTask<bool> SetupExpandTest(Type[] typeArgs)
+    {
+        if (typeArgs.Length == 0)
+        {
+            _managedType = _test.ManagedType;
+            _testTypeInstance = _testType;
+        }
+        else
+        {
+            try
+            {
+                _testTypeInstance = _testType.MakeGenericType(typeArgs);
+                _managedType = ManagedIdentifier.GetManagedType(_testTypeInstance);
+            }
+            catch (ArgumentException)
+            {
+                _testTypeInstance = null;
+            }
+        }
+
+        if (_testTypeInstance == null)
+        {
+            return new ValueTask<bool>(LogCore(this, typeArgs));
+        }
+
+        CreateRunner();
+        return new ValueTask<bool>(true);
+
+        static async Task<bool> LogCore(TestExpandProcessor processor, Type[] typeArgs)
+        {
+            await processor._logger.LogErrorAsync(
+                string.Format(
+                    Properties.Resources.LogErrorGenericConstraints,
+                    typeArgs.Length == 1
+                        ? typeArgs[0].FullName
+                        : $"<{string.Join(", ", typeArgs.Select(ManagedIdentifier.GetManagedType))}>",
+                    processor._test.DisplayName
+                )
+            ).ConfigureAwait(false);
+            return false;
+        }
+    }
+
+    public ValueTask ExpandTestAsync(UnturnedTest test)
+    {
+        SetupExpandTest(test);
 
         // basic 0-arg test
         if (_parameters.Length == 0 && _methodGenericArguments.Length == 0 && _typeGenericArguments.Length == 0)
@@ -215,42 +649,15 @@ internal class TestExpandProcessor
     {
         // instead of method type params
         bool isExpandingTypeParams = parentArgs == null;
-
-        if (!isExpandingTypeParams)
+        if (!isExpandingTypeParams && TreeFilter != null)
         {
-            if (parentArgs!.Length == 0)
-            {
-                _managedType = _test.ManagedType;
-                _testTypeInstance = _testType;
-            }
-            else
-            {
-                try
-                {
-                    _testTypeInstance = _testType.MakeGenericType(parentArgs);
-                    _managedType = ManagedIdentifier.GetManagedType(_testTypeInstance);
-                }
-                catch (ArgumentException)
-                {
-                    _testTypeInstance = null;
-                }
-            }
-
-            if (_testTypeInstance == null)
-            {
-                await _logger.LogErrorAsync(
-                    string.Format(
-                        Properties.Resources.LogErrorGenericConstraints,
-                        parentArgs.Length == 1
-                            ? parentArgs[0].FullName
-                            : $"<{string.Join(", ", parentArgs.Select(ManagedIdentifier.GetManagedType))}>",
-                        _test.DisplayName
-                    )
-                ).ConfigureAwait(false);
+            if (!FilterHelper.TreeCouldContainThisTypeConfiguration(_test, parentArgs!, null, null, TreeFilter))
                 return;
-            }
+        }
 
-            CreateRunner();
+        if (!isExpandingTypeParams && !await SetupExpandTest(parentArgs!))
+        {
+            return;
         }
 
         int arity = isExpandingTypeParams ? GetArity(_test.Method) : 0;
@@ -330,6 +737,10 @@ internal class TestExpandProcessor
                     else
                         await ExpandComplexTest(args, _test, _test.Method.IsGenericMethodDefinition, expansionFactor, arity).ConfigureAwait(false);
                 } while (!reachedEnd);
+            }
+            else
+            {
+                sets = null;
             }
         }
 
@@ -477,6 +888,12 @@ internal class TestExpandProcessor
 
     private async Task ExpandComplexTest(Type[] typeArguments, Type[] methodTypeArguments, ulong expansionFactor)
     {
+        if (TreeFilter != null)
+        {
+            if (!FilterHelper.TreeCouldContainThisTypeConfiguration(_test, typeArguments, methodTypeArguments, null, TreeFilter))
+                return;
+        }
+
         if (typeArguments.Length == 0)
         {
             _managedMethod = _test.ManagedMethod;
@@ -826,23 +1243,27 @@ internal class TestExpandProcessor
         AddInstance(args, startIndex, argHash, typeArgs, methodArgs);
     }
 
-    private void AddInstance(object[] args, int startIndex, int argHash, Type[] typeArgs, Type[] methodArgs)
+    private bool AddInstance(object[] args, int startIndex, int argHash, Type[] typeArgs, Type[] methodArgs)
     {
-        _instances.Add(
-            new UnturnedTestInstance(
-                this,
-                _test,
-                _testTypeInstance, 
-                _testMethodInstance,
-                _managedType,
-                _managedMethod,
-                args,
-                _instances.Count - startIndex,
-                argHash,
-                typeArgs,
-                methodArgs
-            )
+        UnturnedTestInstance instance = new UnturnedTestInstance(
+            this,
+            _test,
+            _testTypeInstance,
+            _testMethodInstance,
+            _managedType,
+            _managedMethod,
+            args,
+            _instances.Count - startIndex,
+            argHash,
+            typeArgs,
+            methodArgs
         );
+
+        if (TreeFilter != null && !FilterHelper.MatchesFilter(TreeFilter, in instance))
+            return false;
+
+        _instances.Add(instance);
+        return true;
     }
 
     private struct ParameterValuesInfo
@@ -1008,11 +1429,12 @@ internal class TestExpandProcessor
         return TaskAwaitableHelper.CreateTaskFromReturnValue(returnValue);
     }
 
-    internal void GetNames(in UnturnedTestInstance test, out string uid, out string displayName)
+    internal void GetNames(in UnturnedTestInstance test, out string uid, out string displayName, out string treePath)
     {
-        if (test.Arguments.Length == 0 && test.TypeArgs.Length == 0 && test.MethodTypeArgs.Length == 0)
+        if (!test.Test.Expandable)
         {
             uid = test.Test.Uid;
+            treePath = test.Test.TreePath;
         }
         else
         {
@@ -1028,15 +1450,46 @@ internal class TestExpandProcessor
             UnturnedTestUid tUid = UnturnedTestUid.Create(
                 test.ManagedType,
                 test.ManagedMethod,
+                test.HasParameters ? test.Index : -1,
                 typeArgs,
-                useIndex ? null : argList,
-                useIndex ? test.Index : null
+                useIndex ? null : argList
             );
 
             uid = tUid.Uid;
+
+            StringBuilder sb = StringBuilderPool.Rent().Append(test.Test.TreePath);
+            TreeNodeFilterWriter writer = new TreeNodeFilterWriter(sb);
+            if (test.TypeArgs.Length > 0)
+            {
+                foreach (Type type in test.TypeArgs)
+                    writer.WriteGenericParameter(ManagedIdentifier.GetManagedType(type));
+            }
+
+            if (test.MethodTypeArgs.Length > 0)
+            {
+                writer.WriteSeparator();
+                foreach (Type type in test.MethodTypeArgs)
+                    writer.WriteGenericParameter(ManagedIdentifier.GetManagedType(type));
+            }
+
+            if (test.HasParameters)
+            {
+                writer.WriteSeparator();
+                sb.Append(argList);
+                object?[] args = test.Arguments;
+                for (int i = 0; i < args.Length; ++i)
+                {
+                    writer.WriteParameterValue(
+                        ref args[i],
+                        static (ref object? arg, StringBuilder sb) => UnturnedTestUid.WriteParameterForTreeNode(arg, sb)
+                    );
+                }
+            }
+
+            treePath = sb.ToString();
+            StringBuilderPool.Return(sb);
         }
         
         displayName = TestDisplayNameFormatter.GetTestDisplayName(in test);
     }
-
 }

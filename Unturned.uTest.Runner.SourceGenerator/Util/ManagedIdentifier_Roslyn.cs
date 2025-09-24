@@ -5,14 +5,19 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using uTest.Util;
 
-namespace uTest.Util;
+#pragma warning disable IDE0130
 
-internal static class ManagedIdentifierRoslynFormatter
+namespace uTest;
+
+#pragma warning restore IDE0130
+
+partial class ManagedIdentifier
 {
     internal static readonly SymbolDisplayFormat ExplicitInterfaceImplementationFormat;
 
-    static ManagedIdentifierRoslynFormatter()
+    static ManagedIdentifier()
     {
         const string fieldName = "ExplicitInterfaceImplementationFormat";
 
@@ -108,7 +113,8 @@ internal static class ManagedIdentifierRoslynFormatter
 
     private static void AppendType(ref ManagedIdentifierBuilder builder, ITypeSymbol type, bool isByRef)
     {
-        ITypeSymbol elementType = ReduceElementType(type, out ElementTypeState elementTypeState);
+        ElementRoslynTypeState elementTypeState = default;
+        ITypeSymbol elementType = elementTypeState.ReduceElementType(type);
 
         if (elementType is ITypeParameterSymbol typeParameter)
         {
@@ -121,13 +127,13 @@ internal static class ManagedIdentifierRoslynFormatter
                 builder.AddTypeGenericParameterReference(typeParameter.Ordinal);
             }
 
-            AppendElementType(ref builder, isByRef, elementTypeState);
+            elementTypeState.AppendElementType(ref builder, isByRef, AddElementType);
             return;
         }
 
         Stack<INamespaceSymbol> namespaces = StackPool<INamespaceSymbol>.Rent();
 
-        for (INamespaceSymbol ns = type.ContainingNamespace; ns != null && !ns.IsGlobalNamespace; ns = ns.ContainingNamespace)
+        for (INamespaceSymbol ns = elementType.ContainingNamespace; ns != null && !ns.IsGlobalNamespace; ns = ns.ContainingNamespace)
         {
             namespaces.Push(ns);
         }
@@ -144,7 +150,7 @@ internal static class ManagedIdentifierRoslynFormatter
         Stack<ITypeSymbol> genericTypes = StackPool<ITypeSymbol>.Rent();
 
         bool anyOpenGenericTypes = false;
-        for (ITypeSymbol nestedType = type; nestedType != null; nestedType = nestedType.ContainingType)
+        for (ITypeSymbol nestedType = elementType; nestedType != null; nestedType = nestedType.ContainingType)
         {
             nestedTypes.Push(nestedType);
 
@@ -207,87 +213,23 @@ internal static class ManagedIdentifierRoslynFormatter
 
         StackPool<ITypeSymbol>.Return(genericTypes);
 
-        AppendElementType(ref builder, isByRef, elementTypeState);
+        elementTypeState.AppendElementType(ref builder, isByRef, AddElementType);
     }
 
-    private struct ElementTypeState
+    private static void AddElementType(ref ManagedIdentifierBuilder builder, ITypeSymbol type, bool isByRef)
     {
-        public ITypeSymbol? FirstElement;
-        public Stack<ITypeSymbol>? Stack;
-    }
-
-    private static ITypeSymbol ReduceElementType(ITypeSymbol type, out ElementTypeState types)
-    {
-        ITypeSymbol elementType = type;
-        types = default;
-        while (true)
+        switch (type)
         {
-            ITypeSymbol nextElementType;
-            switch (elementType)
-            {
-                case IArrayTypeSymbol arr:
-                    nextElementType = arr.ElementType;
-                    break;
+            case IArrayTypeSymbol arrType:
+                builder.MakeArrayType(arrType.IsSZArray ? 0 : arrType.Rank);
+                break;
 
-                case IPointerTypeSymbol ptr:
-                    nextElementType = ptr.PointedAtType;
-                    break;
-
-                default:
-                    if (types.Stack != null)
-                        types.FirstElement = null;
-                    return elementType;
-            }
-
-            if (types.FirstElement == null)
-                types.FirstElement = elementType;
-            else if (types.Stack == null)
-            {
-                types.Stack = StackPool<ITypeSymbol>.Rent();
-                types.Stack.Push(types.FirstElement);
-                types.Stack.Push(elementType);
-            }
-            else
-            {
-                types.Stack.Push(elementType);
-            }
-
-            elementType = nextElementType;
-        }
-    }
-
-    private static void AppendElementType(ref ManagedIdentifierBuilder builder, bool isByRef, in ElementTypeState elementTypeState)
-    {
-        if (elementTypeState.Stack != null)
-        {
-            while (elementTypeState.Stack.Count > 0)
-            {
-                AddElementType(ref builder, elementTypeState.Stack.Pop());
-            }
-
-            StackPool<ITypeSymbol>.Return(elementTypeState.Stack);
-        }
-        else if (elementTypeState.FirstElement != null)
-        {
-            AddElementType(ref builder, elementTypeState.FirstElement);
+            default:
+                builder.MakePointerType();
+                break;
         }
 
         if (isByRef)
             builder.MakeReferenceType();
-        return;
-
-        static void AddElementType(ref ManagedIdentifierBuilder builder, ITypeSymbol type)
-        {
-            switch (type)
-            {
-                case IArrayTypeSymbol arrType:
-                    builder.MakeArrayType(arrType.IsSZArray ? 0 : arrType.Rank);
-                    break;
-
-                default:
-                    builder.MakePointerType();
-                    break;
-            }
-        }
     }
 }

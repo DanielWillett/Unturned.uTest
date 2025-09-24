@@ -31,6 +31,7 @@ internal sealed record TestMethodInfo(
     string FilePath,
     string MethodMetadataName,
     string MethodName,
+    string TreeNodePath,
     EquatableList<TestParameterInfo>? Parameters,
     EquatableList<TestArgsAttributeInfo> ArgsAttributes,
     EquatableList<TestTypeParameterInfo>? TypeParameters,
@@ -107,14 +108,15 @@ internal record struct TestArgsAttributeInfo(
             return true;
         }
 
-        if (!attribute.ConstructorArguments.IsDefaultOrEmpty
-            && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Array } arg0)
-        {
-            attributeInfo = new TestArgsAttributeInfo(null, new EquatableObjectList(in arg0));
-            return true;
-        }
+        if (attribute.ConstructorArguments.IsDefaultOrEmpty)
+            return false;
 
-        return false;
+        TypedConstant array = attribute.ConstructorArguments[0];
+        if (array.Kind != TypedConstantKind.Array && !array.IsNull)
+            return false;
+
+        attributeInfo = new TestArgsAttributeInfo(null, new EquatableObjectList(in array));
+        return true;
     }
 }
 
@@ -134,13 +136,14 @@ internal record TestParameterSetAttributeInfo(
             return new TestParameterSetAttributeInfo(fromMember, null);
         }
 
-        if (!attribute.ConstructorArguments.IsDefaultOrEmpty
-            && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Array } arg0)
-        {
-            return new TestParameterSetAttributeInfo(null, new EquatableObjectList(in arg0, distinct: true));
-        }
+        if (attribute.ConstructorArguments.IsDefaultOrEmpty)
+            return null;
 
-        return null;
+        TypedConstant array = attribute.ConstructorArguments[0];
+        if (array.Kind != TypedConstantKind.Array && !array.IsNull)
+            return null;
+
+        return new TestParameterSetAttributeInfo(null, new EquatableObjectList(in array, distinct: true));
     }
 }
 

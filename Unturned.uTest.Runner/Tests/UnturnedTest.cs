@@ -18,7 +18,13 @@ public class UnturnedTest : ITypeParamsProvider
     public required string ManagedMethod { get; init; }
     public required string DisplayName { get; init; }
     public required string Uid { get; init; }
+    public required string TreePath { get; init; }
     public required MethodInfo Method { get; init; }
+
+    /// <summary>
+    /// Whether or not this test will have to be expanded into multiple tests (due to parameters, type parameters, etc).
+    /// </summary>
+    public required bool Expandable { get; init; }
     public string? ParentUid { get; init; }
     public required UnturnedTestParameter[] Parameters { get; init; }
     public required UnturnedTestArgs[] Args { get; init; }
@@ -28,7 +34,6 @@ public class UnturnedTest : ITypeParamsProvider
 
     public UnturnedTestParameter[]? TypeParameters { get; init; }
     public UnturnedTestArgs[]? TypeArgs { get; init; }
-
 
     /// <inheritdoc />
     public override string ToString() => Uid;

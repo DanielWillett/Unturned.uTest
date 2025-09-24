@@ -12,8 +12,9 @@
 
   <ItemGroup>
     <PackageReference Include="NUnit" Version="3.12.0" />
-    <PackageReference Include="NUnit3TestAdapter" Version="3.16.1" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.5.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="5.1.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <Reference Include="System.Web" Condition="'$(TargetFramework)' == 'net48'" />
 
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
     <ProjectReference Include="../Unturned.uTest.Runner/Unturned.uTest.Runner.csproj" />

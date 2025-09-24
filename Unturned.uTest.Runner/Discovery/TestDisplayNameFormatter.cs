@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 
@@ -10,21 +11,21 @@ internal static class TestDisplayNameFormatter
     /// </summary>
     public static string GetTestDisplayName(in UnturnedTestInstance test)
     {
-        if (test.Arguments.Length == 0 && test.TypeArgs.Length == 0 && test.MethodTypeArgs.Length == 0)
+        if (!test.Test.Expandable)
         {
             return test.Test.DisplayName;
         }
 
         StringBuilder stringBuilder = StringBuilderPool.Rent();
 
+        if (!string.IsNullOrEmpty(test.Type.Name))
+        {
+            ReadOnlySpan<char> withoutArity = ManagedIdentifier.TryRemoveArity(test.Type.Name.AsSpan());
+            ManagedIdentifier.AppendSpan(stringBuilder, withoutArity);
+        }
+
         if (test.TypeArgs.Length > 0)
         {
-            if (!string.IsNullOrEmpty(test.Type.Name))
-            {
-                ReadOnlySpan<char> withoutArity = ManagedIdentifier.TryRemoveArity(test.Type.Name);
-                ManagedIdentifier.AppendSpan(stringBuilder, withoutArity);
-            }
-
             stringBuilder.Append('<');
             for (int i = 0; i < test.TypeArgs.Length; ++i)
             {
@@ -34,6 +35,10 @@ internal static class TestDisplayNameFormatter
             }
 
             stringBuilder.Append(">.");
+        }
+        else if (!string.IsNullOrEmpty(test.Type.Name))
+        {
+            stringBuilder.Append('.');
         }
 
         stringBuilder.Append(test.Method.Name);
@@ -101,7 +106,8 @@ internal static class TestDisplayNameFormatter
                 sb.Append(refType).Append(' ');
         }
 
-        Type elementType = ManagedIdentifier.ReduceElementType(t, out ManagedIdentifier.ElementTypeState state);
+        ElementTypeState state = default;
+        Type elementType = state.ReduceElementType(t);
 
         string? keyword = TypeKeywordHelper.GetTypeKeyword(elementType);
         if (keyword != null)
@@ -114,7 +120,7 @@ internal static class TestDisplayNameFormatter
             if (!string.IsNullOrEmpty(@namespace))
                 sb.Append(@namespace).Append('.');
 
-            ReadOnlySpan<char> withoutArity = ManagedIdentifier.TryRemoveArity(elementType.Name);
+            ReadOnlySpan<char> withoutArity = ManagedIdentifier.TryRemoveArity(elementType.Name.AsSpan());
             ManagedIdentifier.AppendSpan(sb, withoutArity);
 
             if (elementType.IsGenericTypeDefinition)
@@ -139,7 +145,7 @@ internal static class TestDisplayNameFormatter
         AppendElementType(sb, in state);
     }
 
-    private static void AppendElementType(StringBuilder stringBuilder, in ManagedIdentifier.ElementTypeState elementTypeState)
+    private static void AppendElementType(StringBuilder stringBuilder, in ElementTypeState elementTypeState)
     {
         if (elementTypeState.Stack != null)
         {

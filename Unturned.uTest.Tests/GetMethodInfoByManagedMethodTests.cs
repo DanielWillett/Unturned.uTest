@@ -6,6 +6,7 @@ using System.Reflection;
 using uTest;
 using uTest.Runner.Util;
 using Assert = NUnit.Framework.Assert;
+#pragma warning disable CS8500 // This takes the address of, gets the size of, or declares a pointer to a managed type
 
 // ReSharper disable InconsistentNaming
 

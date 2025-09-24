@@ -93,6 +93,16 @@ public ref struct ManagedIdentifierTokenizer
     }
 
     /// <summary>
+    /// If the current value had escape sequences so isn't directly from the source text.
+    /// </summary>
+    public readonly bool IsEscaped => _contentIsInBuffer;
+
+    /// <summary>
+    /// If the current value was in quotes.
+    /// </summary>
+    public bool IsQuoted { get; private set; }
+
+    /// <summary>
     /// The arity of a the previous method or type.
     /// </summary>
     /// <exception cref="InvalidOperationException">The current token is not an arity token.</exception>
@@ -190,7 +200,7 @@ public ref struct ManagedIdentifierTokenizer
     /// Recursively checks if the given <paramref name="type"/> is the same as the type this tokenizer is currently on.
     /// </summary>
     /// <remarks>This method will advance the tokenizer until it reaches the next type.</remarks>
-    public bool IsSameTypeAs(Type type, StringBuilder? tempStringBuilder = null)
+    public bool IsSameTypeAs(Type type, StringBuilder? tempStringBuilder = null, bool typeDefinitionOnly = false)
     {
         // keep in sync with ManagedIdentifier.FullyQualifiedTypeNameEscaper
         ReadOnlySpan<char> escapedCharacters = [ '&', '*', '+', ',', '[', '\\', ']' ];
@@ -331,10 +341,16 @@ public ref struct ManagedIdentifierTokenizer
                             return false;
 
                         if (_tokenType != ManagedIdentifierTokenType.OpenTypeParameters)
-                            return !isGeneric;
+                            return typeDefinitionOnly || !isGeneric;
 
                         if (!isGeneric)
-                            return false;
+                            return typeDefinitionOnly;
+
+                        if (typeDefinitionOnly)
+                        {
+                            while (MoveNext() && _tokenType != ManagedIdentifierTokenType.CloseTypeParameters);
+                            return true;
+                        }
 
                         int startDepth = _typeParamDepth;
                         if (startDepth > (MaxGenericDepth <= 0 ? DefaultMaxGenericDepth : MaxGenericDepth))
@@ -479,6 +495,7 @@ public ref struct ManagedIdentifierTokenizer
         int endIndex;
         char next;
 
+        IsQuoted = false;
         switch (_tokenType)
         {
             // case ManagedMethodTokenType.Uninitialized:
@@ -934,6 +951,8 @@ public ref struct ManagedIdentifierTokenizer
         {
             throw new FormatException($"Unterminated escaped identifier at {firstTextIndex + 1}.");
         }
+
+        IsQuoted = true;
         if (_text[firstTextIndex] == '\'')
         {
             if (apply)

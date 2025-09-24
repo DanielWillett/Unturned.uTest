@@ -1,10 +1,9 @@
-using System.Collections;
-
 namespace uTest.Sandbox;
 
 [Test]
 [TypeArgs(typeof(long))]
-public class Tests : ITestClass
+[TypeArgs(typeof(int))]
+public class Tests<T> : ITestClass
 {
     [Test]
     [TestArgs(null)]
@@ -46,6 +45,20 @@ public class Tests : ITestClass
     [Test]
     [TestArgs(From = nameof(ParseNumberArgs))]
     public void ParameterizedTestFromMember(char testInt, int iterations)
+    {
+        Test.Fail();
+    }
+    
+    private static readonly Array ParseNumberArgs2 = new[]
+    {
+        new { arr = new string[] { "3", "5", "7" } },
+        new { arr = new string[] { "3", "4", "7" } },
+        new { arr = new string[] { "3", "3" } }
+    };
+
+    [Test]
+    [TestArgs(From = nameof(ParseNumberArgs2))]
+    public void ParameterizedTestFromMemberUnparsable(string[] arr)
     {
         Test.Fail();
     }

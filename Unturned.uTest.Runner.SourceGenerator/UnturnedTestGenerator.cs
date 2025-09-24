@@ -4,13 +4,10 @@ using Microsoft.CodeAnalysis.Text;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using uTest.Util;
-
 
 namespace uTest;
 
@@ -61,13 +58,14 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 if (loc.IsValid)
                 {
                     line = loc.StartLinePosition.Line;
+                    if (line == 0) line = 1;
                 }
 
                 if (ctx.TargetSymbol is INamedTypeSymbol namedType)
                 {
                     ImmutableArray<AttributeData> classAttributes = namedType.GetAttributes();
 
-                    managedType = ManagedIdentifierRoslynFormatter.GetManagedType(namedType, false);
+                    managedType = ManagedIdentifier.GetManagedType(namedType, false);
                     ImmutableArray<ISymbol> allMembers = namedType.GetMembers();
                     foreach (ISymbol symbol in allMembers)
                     {
@@ -80,7 +78,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             continue;
                         }
 
-                        string managedMethod = ManagedIdentifierRoslynFormatter.GetManagedMethod(method);
+                        string managedMethod = ManagedIdentifier.GetManagedMethod(method);
                         string uid = UnturnedTestUid.Create(managedType, managedMethod).Uid;
 
                         string fileName = string.Empty;
@@ -91,6 +89,10 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         if (syntaxRef != null)
                         {
                             GetMethodLocation(syntaxRef, ref lineStart, ref lineEnd, ref charStart, ref charEnd, ref fileName);
+                            if (lineStart == 0) lineStart = 1;
+                            if (lineEnd == 0) lineEnd = 1;
+                            if (charStart == 0) charStart = 1;
+                            if (charEnd == 0) charEnd = 1;
                         }
 
                         ImmutableArray<IParameterSymbol> parameters = method.Parameters;
@@ -177,6 +179,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 FilePath: fileName,
                                 MethodMetadataName: method.MetadataName,
                                 MethodName: method.Name,
+                                TreeNodePath: TreeNodeFilterHelper.GetMethodFilter(method, useWildcards: false),
                                 Parameters: parameterInfo,
                                 ArgsAttributes: argsInfo,
                                 ReturnTypeFullName: MetadataNameFormatter.GetFullName(ctx.SemanticModel.Compilation, method.ReturnType, method.ReturnsByRef || method.ReturnsByRefReadonly, method),
@@ -244,7 +247,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 ref TestClassInfo classInfo = ref input;
                 context.CancellationToken.ThrowIfCancellationRequested();
 
-                string fileName = classInfo.Namespace.Replace('.', '/') + "/" + classInfo.Name + ".cs";
+                string fileName = (string.IsNullOrEmpty(classInfo.Namespace) ? "[global]/" : (classInfo.Namespace.Replace('.', '/') + "/"))
+                                  + classInfo.Name + ".cs";
 
                 SourceStringBuilder bldr = new SourceStringBuilder(CultureInfo.InvariantCulture);
 
@@ -298,6 +302,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 List<(DelegateType, string)> createdTypes = new List<(DelegateType, string)>();
                 int ovlNum = 0;
                 string? ovlName = null;
+                bool expandableType = classInfo.TypeParameters is { Count: > 0 };
                 foreach (TestMethodInfo method in classInfo.Methods)
                 {
                     if (ovlName == null || !string.Equals(method.MethodName, ovlName, StringComparison.Ordinal))
@@ -376,6 +381,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     else
                         isFirst = false;
 
+                    bool expandableMethod = expandableType || method.TypeParameters is { Count: > 0 } || method.Parameters is { Count: > 0 };
+
                     string escManagedMethod = StringLiteralEscaper.Escape(method.ManagedMethod);
                     bldr.String("builder.Add(new global::uTest.Runner.UnturnedTest()")
                         .In().String("{").In()
@@ -397,7 +404,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         string list = string.Join("\", \"", method.Parameters.Select(p => StringLiteralEscaper.Escape(p.FullTypeName)));
                         bldr    .Build($"new string[] {{ \"{list}\" }},");
                     }
-                    
+
                     bldr        .Build($"\"{StringLiteralEscaper.Escape(method.ReturnTypeFullName)}\"").Out()
                             .String("),")
                             .Build($"LocationInfo = new global::Microsoft.Testing.Platform.Extensions.Messages.TestFileLocationProperty(").In()
@@ -407,8 +414,11 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                     .Build($"new global::Microsoft.Testing.Platform.Extensions.Messages.LinePosition({method.LineNumberEnd}, {method.ColumnNumberEnd})").Out()
                                 .String(")").Out()
                             .String("),")
+                            .Build($"Expandable = {(expandableMethod ? "true" : "false")},")
                             .Build($"DisplayName = \"{StringLiteralEscaper.Escape(method.DisplayName)}\",")
-                            .Build($"Uid = \"{StringLiteralEscaper.Escape(method.Uid)}\",");
+                            .Build($"Uid = \"{StringLiteralEscaper.Escape(method.Uid)}\",")
+                            .Build($"TreePath = \"{StringLiteralEscaper.Escape(method.TreeNodePath)}\",");
+
 
                     if (delegateType != null)
                     {

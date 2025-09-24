@@ -275,7 +275,7 @@ internal class UnturnedLauncher : IDisposable
 
             string settingsFile = GetSettingsFile();
 
-            string launchArgs = $"-batchmode -nogui -uTestSettings \"{settingsFile}\" -wait-for-managed-debugger +lanserver/uTest";
+            string launchArgs = $"-batchmode -nogui -uTestSettings \"{settingsFile}\" +lanserver/uTest";
 
             TaskCompletionSource<Process> startupTcs = new TaskCompletionSource<Process>();
             _task = startupTcs;
@@ -288,10 +288,15 @@ internal class UnturnedLauncher : IDisposable
                 ProcessStartInfo startInfo = new ProcessStartInfo(exe, launchArgs)
                 {
                     CreateNoWindow = false,
-                    UseShellExecute = true,
                     WorkingDirectory = installDir,
                     WindowStyle = ProcessWindowStyle.Minimized
                 };
+
+                try
+                {
+                    startInfo.UseShellExecute = true;
+                }
+                catch (NotSupportedException) { }
 
                 token.ThrowIfCancellationRequested();
 

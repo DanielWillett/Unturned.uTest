@@ -19,7 +19,7 @@ namespace uTest.Runner.Properties {
     // class via a tool like ResGen or Visual Studio.
     // To add or remove a member, edit your .ResX file then rerun ResGen
     // with the /str option, or rebuild your VS project.
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "17.0.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "18.0.0.0")]
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     internal class Resources {
@@ -156,6 +156,24 @@ namespace uTest.Runner.Properties {
         internal static string LogErrorReadingFromMember {
             get {
                 return ResourceManager.GetString("LogErrorReadingFromMember", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Test UID &quot;{0}&quot; could not be linked to a test variation, it will be skipped..
+        /// </summary>
+        internal static string LogErrorTestUidNotFound {
+            get {
+                return ResourceManager.GetString("LogErrorTestUidNotFound", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to {0}/{1} test UID(s) were not able to be linked to test variations..
+        /// </summary>
+        internal static string LogErrorTestUidsNotFound {
+            get {
+                return ResourceManager.GetString("LogErrorTestUidsNotFound", resourceCulture);
             }
         }
     }

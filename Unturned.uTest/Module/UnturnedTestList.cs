@@ -16,12 +16,6 @@ internal class UnturnedTestList
 
 internal class UnturnedTestReference
 {
-    public string TypeName { get; set; }
-
-    public string MethodName { get; set; }
-
-    public string[] ParameterTypeNames { get; set; }
-
     [JsonRequired]
     public string Uid { get; set; }
 
