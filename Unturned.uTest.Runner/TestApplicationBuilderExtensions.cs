@@ -46,6 +46,12 @@ public static class TestApplicationBuilderExtensions
         capabilities.Add(new BannerCapability(ext));
         capabilities.Add(new UnturnedTestFramework.GracefulStopCapability());
 
+        ITrxReportCapabilityImpl? trx = TrxSwitch.CreateTrxCapability();
+        if (trx != null)
+        {
+            capabilities.Add(trx);
+        }
+
         capabilities.Capacity = capabilities.Count;
 
         bldr.AddTreeNodeFilterService(ext);

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Reflection;
 
 namespace uTest;
@@ -34,9 +35,23 @@ public interface ITestContext
     CancellationToken CancellationToken { get; }
 
     /// <summary>
-    /// Logs a message to the test output.
+    /// The logger used for this test.
     /// </summary>
-    void Log(LogSeverity logSeverity, string message);
+    ILogger Logger { get; }
+
+    /// <summary>
+    /// Adds an artifact (basically an attachment) to this test.
+    /// </summary>
+    /// <param name="filePath">Path to a file.</param>
+    /// <param name="displayName">The display name of the file. Defaults to the file's name.</param>
+    /// <param name="description">A description of this file's meaning.</param>
+    void AddArtifact(string filePath, string? displayName = null, string? description = null);
+
+    /// <summary>
+    /// Simulates the console user typing into the server's terminal.
+    /// </summary>
+    /// <param name="command">The exact text to enter.</param>
+    void SendTerminalInput(string command);
 
     /// <summary>
     /// Cancels this test run programmatically, including tests that have yet to run.
@@ -76,6 +91,7 @@ public interface ITestContext
     /// <summary>
     /// Configure the testing environment for this test.
     /// </summary>
+    /// <exception cref="InvalidOperationException">Test has already started.</exception>
     void Configure(Action<ITestConfigurationBuilder> configure);
 }
 

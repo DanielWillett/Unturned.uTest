@@ -11,6 +11,7 @@ using Newtonsoft.Json;
 using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
+using System.Text;
 using uTest.Discovery;
 using uTest.Module;
 using uTest.Protocol;
@@ -172,7 +173,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         {
             await _logger.LogInformationAsync($"Discovering tests: {ctx.Request.Session.SessionUid.Value}.");
             
-            Debugger.Launch();
+            //Debugger.Launch();
 
             List<UnturnedTestInstance>? tests = await GetTests(r, token).ConfigureAwait(false);
             if (tests == null)
@@ -187,6 +188,8 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
             BitArray testReturnMask = new BitArray(tests.Count);
 
             List<Task> runningPublishTasks = new List<Task>();
+
+            JsonSerializer serializer = new JsonSerializer();
 
             using IDisposable resultHandler = _launcher.Client.AddMessageHandler<ReportTestResultMessage>(result =>
             {
@@ -211,6 +214,18 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                 TestNode testNode = test.CreateTestNode(out TestNodeUid? parentUid);
 
                 AddResultState(testNode, result.Result);
+
+                TestExecutionSummary? summary = null;
+                if (File.Exists(result.SummaryPath))
+                {
+                    using JsonTextReader reader = new JsonTextReader(new StreamReader(result.SummaryPath, Encoding.UTF8, true)) { CloseInput = true };
+                    summary = serializer.Deserialize<TestExecutionSummary>(reader);
+                }
+
+                if (summary != null)
+                {
+                    test.AddPropertiesFromSummary(summary, testNode.Properties);
+                }
 
                 lock (runningPublishTasks)
                 {
@@ -247,13 +262,13 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                 writer.Formatting = Formatting.None;
 #endif
 
-                JsonSerializer serializer = new JsonSerializer();
                 serializer.Serialize(writer, new UnturnedTestList
                 {
                     SessionUid = r.Session.SessionUid.Value,
                     Tests = exportedTests,
                     TestListTypeName = typeof(GeneratedTestRegistrationList).AssemblyQualifiedName,
-                    IsAllTests = r.Filter == null
+                    IsAllTests = r.Filter == null,
+                    CollectTrxProperties = TrxSwitch.HasTrx
                 });
             }
 

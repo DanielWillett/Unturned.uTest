@@ -50,6 +50,11 @@ internal class MainModule : MonoBehaviour, IDisposable
     /// The assembly that contains the running tests.
     /// </summary>
     public Assembly TestAssembly { get; private set; } = null!;
+    
+    /// <summary>
+    /// The directory this module is stored in.
+    /// </summary>
+    public string HomeDirectory { get; private set; } = null!;
 
     /// <summary>
     /// Entrypoint for module.
@@ -85,6 +90,8 @@ internal class MainModule : MonoBehaviour, IDisposable
             @"(?:Unturned\.uTest, Version=[\d\.]+, Culture=neutral, PublicKeyToken=null)|(netstandard, Version=2\.1\.0\.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51)",
             RegexOptions.Singleline
         );
+
+        HomeDirectory = Path.GetFullPath(module.config.DirectoryPath);
 
         TestAssembly = Array.Find(module.assemblies, x => !assemblies.IsMatch(x.FullName));
         if (TestAssembly == null)
@@ -259,6 +266,7 @@ internal class MainModule : MonoBehaviour, IDisposable
     /// <summary>
     /// Quits the game instantly with an exit code.
     /// </summary>
+    /// <exception cref="OperationCanceledException"/>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_0_OR_GREATER
     [DoesNotReturn]
 #endif
@@ -279,7 +287,7 @@ internal class MainModule : MonoBehaviour, IDisposable
         UnturnedLog.info($"uTest Quit game: {reason}. Exit code: {(int)exitCode} ({exitCode}).");
         Dispose();
         Application.Quit((int)exitCode);
-        throw new OperationCanceledException();
+        throw new QuitGameException();
     }
 }
 

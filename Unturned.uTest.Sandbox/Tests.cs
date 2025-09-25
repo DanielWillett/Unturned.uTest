@@ -1,3 +1,5 @@
+using SDG.Unturned;
+
 namespace uTest.Sandbox;
 
 [Test]
@@ -6,9 +8,17 @@ namespace uTest.Sandbox;
 public class Tests<T> : ITestClass
 {
     [Test]
-    [TestArgs(null)]
+    [TestArgs(null, 1)]
     [TypeArgs(typeof(string))]
-    public void TestGeneric<[Set(typeof(long), typeof(int))] T2>(T2[] t2)
+    public void TestGeneric<[Set(typeof(long), typeof(int))] T2>(T2[] t2, T num)
+    {
+        Test.Pass();
+    }
+
+    [Test]
+    [TestArgs(null, 1)]
+    [TypeArgs(typeof(string))]
+    public void TestGeneric<[Set(typeof(long), typeof(int))] T2>(T2[] t2, int num)
     {
         Test.Pass();
     }
@@ -75,6 +85,9 @@ public class Tests<T> : ITestClass
     [Test]
     public void FastTest()
     {
+        CommandWindow.Log("Test log from unturned");
+        Console.WriteLine("Test log from console.");
+        Thread.Sleep(10);
         Test.Fail();
     }
 

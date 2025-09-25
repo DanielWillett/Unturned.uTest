@@ -1,3 +1,4 @@
+using System;
 using System.IO.Pipes;
 using System.Security.Principal;
 
@@ -23,9 +24,43 @@ public class TestEnvironmentClient : TestEnvironmentBaseHost<NamedPipeClientStre
         );
     }
 
-    /// <inheritdoc />
-    protected override Task ConnectAsync(NamedPipeClientStream pipeStream, CancellationToken token = default)
+    protected override void StartReconnecting()
     {
-        return pipeStream.ConnectAsync(token);
+        _connectionTask = Task.Factory.StartNew(async () =>
+        {
+            await Semaphore.WaitAsync(TokenSource.Token);
+            try
+            {
+                NamedPipeClientStream? old = Interlocked.Exchange(
+                    ref PipeStream,
+                    CreateNewStream()
+                );
+
+                if (old != null)
+                {
+                    try
+                    {
+                        old.Dispose();
+                    }
+                    catch { /* ignored */ }
+                }
+
+                try
+                {
+                    await PipeStream!.ConnectAsync(TokenSource.Token);
+
+                    OnConnected();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex);
+                }
+            }
+            finally
+            {
+                Semaphore.Release();
+            }
+
+        }, TaskCreationOptions.LongRunning);
     }
 }

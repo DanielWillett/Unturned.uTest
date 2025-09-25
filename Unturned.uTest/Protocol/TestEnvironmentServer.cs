@@ -1,4 +1,7 @@
+using System;
+using System.IO;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 
 namespace uTest.Protocol;
 
@@ -23,8 +26,64 @@ internal class TestEnvironmentServer : TestEnvironmentBaseHost<NamedPipeServerSt
     }
 
     /// <inheritdoc />
-    protected override Task ConnectAsync(NamedPipeServerStream pipeStream, CancellationToken token = default)
+    protected override void StartReconnecting()
     {
-        return pipeStream.WaitForConnectionAsync(token);
+        Semaphore.Wait(TokenSource.Token);
+
+        try
+        {
+            NamedPipeServerStream? old = Interlocked.Exchange(
+                ref PipeStream,
+                CreateNewStream()
+            );
+
+            if (old != null)
+            {
+                try
+                {
+                    old.Dispose();
+                }
+                catch { /* ignored */ }
+            }
+        }
+        catch
+        {
+            Semaphore.Release();
+            throw;
+        }
+
+        NamedPipeServerStream? pipeStream = PipeStream;
+        if (pipeStream == null)
+        {
+            Semaphore.Release();
+            return;
+        }
+
+        ProbablyConnected = false;
+        pipeStream.BeginWaitForConnection(OnConnectionReady, pipeStream);
+    }
+
+    private void OnConnectionReady(IAsyncResult ar)
+    {
+        NamedPipeServerStream pipeStream = (NamedPipeServerStream)ar.AsyncState;
+        Semaphore.Release();
+
+        try
+        {
+            pipeStream.EndWaitForConnection(ar);
+            OnConnected();
+        }
+        catch (ObjectDisposedException)
+        {
+            ProbablyConnected = false;
+        }
+        catch (IOException)
+        {
+            ProbablyConnected = false;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Error connecting to pipe stream.", ex);
+        }
     }
 }

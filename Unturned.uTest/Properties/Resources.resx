@@ -162,6 +162,9 @@
   <data name="LogErrorMismatchedParameterType" xml:space="preserve">
     <value>Value {0} can not be converted to type {1} for parameter "{2}" in test {3}.</value>
   </data>
+  <data name="LogErrorMissingConstructor" xml:space="preserve">
+    <value>Failed to compile test '{0}', it's type ({1}) is missing a public parameterless constructor.</value>
+  </data>
   <data name="LogErrorMissingFromMember" xml:space="preserve">
     <value>Member referred to by 'From' property ({0}) does not exist in {1}.</value>
   </data>

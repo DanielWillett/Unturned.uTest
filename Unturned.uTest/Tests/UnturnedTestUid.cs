@@ -9,6 +9,7 @@ namespace uTest;
 // included in Unturned.uTest.Runner and Unturned.uTest.Runner.SourceGenerator
 
 /// <summary>
+/// <para>Use <see cref="UnturnedTestUid.Create"/> to construct an ID based on it's components.</para>
 /// A unique ID for a test formatted like so:
 /// <para>
 /// <code>
@@ -38,8 +39,16 @@ namespace uTest;
 /// </code>
 /// The space and last part can be omitted if there are no parameters.
 /// </para>
+/// <para>
+/// Other note: The managed type should include type parameters but the managed method should not.
+/// So, for example, type parameters should be represented using !n and !!n instead of the substituted type).
+/// This is intentional to avoid conflicts in the following scenerio:
+/// <code>
+/// void SomeMethod&lt;[Set(typeof(int))] T&gt;(T value);
+/// void SomeMethod(int value);
+/// </code>
+/// </para>
 /// </summary>
-/// <remarks>Use <see cref="UnturnedTestUid.Create"/> to construct an ID based on it's components.</remarks>
 public readonly struct UnturnedTestUid(string uid)
 {
     private static readonly object TrueBox = true;
@@ -1101,18 +1110,12 @@ public readonly struct UnturnedTestUid(string uid)
             return true;
         }
 
+        string[] values = new string[args.Length];
         argList = null!;
         for (int i = 0; i < args.Length; ++i)
         {
-            if (!CanConvert(args[i]))
-                return false;
-        }
-
-        string[] values = new string[args.Length];
-        for (int i = 0; i < args.Length; ++i)
-        {
             object? arg = args[i];
-            values[i] = arg switch
+            string? toString = arg switch
             {
                 string str           => $"\"{StringLiteralEscaper.Escape(str)}\"",
                 char c               => ((ushort)c).ToString(CultureInfo.InvariantCulture),
@@ -1127,8 +1130,15 @@ public readonly struct UnturnedTestUid(string uid)
                 Enum @enum           => @enum.ToString("D"),
                 IFormattable f       => f.ToString(null, CultureInfo.InvariantCulture),
                 IConvertible c       => $"\"{c.ToString(CultureInfo.InvariantCulture)}\"",
-                _                    => "null"
+                null                 => "null",
+                _ => null
             };
+            if (toString == null)
+            {
+                return false;
+            }
+
+            values[i] = toString;
         }
 
 #if NETCOREAPP2_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
@@ -1137,21 +1147,6 @@ public readonly struct UnturnedTestUid(string uid)
         argList = string.Join(",", values);
 #endif
         return true;
-
-        static bool CanConvert(object? arg)
-        {
-            return arg is null
-                or IConvertible
-                or DateTime
-                or DateTimeOffset
-                or TimeSpan
-                or IPAddress
-                or Version
-                or Guid
-                or Type
-                or IntPtr
-                or UIntPtr;
-        }
     }
 
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER

@@ -1,7 +1,8 @@
+using Newtonsoft.Json;
 using System;
-using System.Diagnostics;
-using System.Reflection;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text;
 using uTest.Discovery;
 using uTest.Protocol;
 
@@ -11,15 +12,33 @@ internal class TestRunner
 {
     private readonly MainModule _module;
     private readonly ILogger _logger;
+    private readonly string _testResultsFolder;
+    private readonly JsonSerializer _serializer;
 
     public TestRunner(MainModule module)
     {
         _module = module;
         _logger = module.Logger;
+        _testResultsFolder = Path.Combine(_module.HomeDirectory, "TestResults");
+        _serializer = JsonSerializer.Create(new JsonSerializerSettings
+        {
+#if DEBUG
+            Formatting = Formatting.Indented,
+#else
+            Formatting = Formatting.None,
+#endif
+            NullValueHandling = NullValueHandling.Ignore
+        });
     }
 
     public async Task<UnturnedTestExitCode> RunTestsAsync(CancellationToken token = default)
     {
+        if (Directory.Exists(_testResultsFolder))
+        {
+            Directory.Delete(_testResultsFolder, true);
+        }
+        Directory.CreateDirectory(_testResultsFolder);
+
         UnturnedTestList? testList = _module.TestList;
         if (testList == null || testList.Tests == null || testList.Tests.Count == 0)
             return UnturnedTestExitCode.Success;
@@ -28,7 +47,7 @@ internal class TestRunner
 
         Type listType = Type.GetType(testList.TestListTypeName, throwOnError: true, ignoreCase: false)!;
 
-        TestExecutionPipeline pipeline = new TestExecutionPipeline(this, _logger, token);
+        TestExecutionPipeline pipeline = new TestExecutionPipeline(this, _logger, testList, token);
 
         ITestRegistrationList list = (ITestRegistrationList)Activator.CreateInstance(listType, _module.TestAssembly);
 
@@ -53,14 +72,6 @@ internal class TestRunner
             int testIndex = testList.Tests.FindIndex(x => string.Equals(x.Uid, test.Uid, StringComparison.Ordinal));
             if (testIndex >= 0)
                 testList.Tests.RemoveAt(testIndex);
-
-            if (test.Test.Expandable)
-            {
-                _logger.LogInformation($"Skipping test \"{test.Uid}\"...");
-                await ReportTestResult(testList, test.Uid, TestResult.Fail);
-                allPass = false;
-                continue;
-            }
 
             await ReportTestResult(testList, test.Uid, TestResult.InProgress);
 
@@ -98,10 +109,20 @@ internal class TestRunner
 
     public ConfiguredTaskAwaitable ReportTestResult(UnturnedTestList testList, string uid, TestExecutionResult result)
     {
+        string? filePath = null;
+        if (result.Summary != null)
+        {
+            filePath = Path.Combine(_testResultsFolder, Guid.NewGuid().ToString("N") + ".json");
+            using JsonTextWriter writer = new JsonTextWriter(new StreamWriter(filePath, false, Encoding.UTF8)) { CloseOutput = true };
+
+            _serializer.Serialize(writer, result.Summary);
+            writer.Flush();
+        }
+
         ReportTestResultMessage msg = new ReportTestResultMessage
         {
             SessionUid = testList.SessionUid,
-            LogPath = result.ExecutionInfoFile ?? string.Empty,
+            SummaryPath = filePath ?? string.Empty,
             Result = result.Result,
             Uid = uid
         };

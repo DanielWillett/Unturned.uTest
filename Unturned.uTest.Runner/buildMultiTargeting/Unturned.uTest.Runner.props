@@ -49,6 +49,10 @@
     <DebugSymbols>True</DebugSymbols>
     <DebugType>portable</DebugType>
 
+		<!-- Extensions don't seem to get copied to output by default, this fixes it. -->
+		<!-- Unfortunately it also adds a lot of other files. -->
+	  <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsUnturnedTestProject)' == 'True'">

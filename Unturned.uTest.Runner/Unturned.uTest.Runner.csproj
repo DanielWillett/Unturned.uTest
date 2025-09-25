@@ -54,6 +54,7 @@
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
 
     <ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport.Abstractions" Version="$(MTPVersion)" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

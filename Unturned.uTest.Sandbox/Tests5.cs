@@ -2,8 +2,9 @@
 public class Tests5 : ITestClass
 {
     [Test]
-    public void Test1()
+    public async Task Test1()
     {
-
+        await Task.Delay(500);
+        Test.Fail();
     }
 }

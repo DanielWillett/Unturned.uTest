@@ -1,9 +1,11 @@
 using System;
 using System.Buffers;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+#if NETSTANDARD2_1_OR_GREATER
 using System.Net;
 using System.Numerics;
-using System.Runtime.CompilerServices;
+#endif
 
 namespace uTest.Messages;
 

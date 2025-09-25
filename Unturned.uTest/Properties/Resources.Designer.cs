@@ -196,6 +196,15 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Failed to compile test &apos;{0}&apos;, it&apos;s type ({1}) is missing a public parameterless constructor..
+        /// </summary>
+        internal static string LogErrorMissingConstructor {
+            get {
+                return ResourceManager.GetString("LogErrorMissingConstructor", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Member referred to by &apos;From&apos; property ({0}) does not exist in {1}..
         /// </summary>
         internal static string LogErrorMissingFromMember {

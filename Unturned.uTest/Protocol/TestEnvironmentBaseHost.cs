@@ -18,17 +18,17 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
     protected TPipeStream? PipeStream;
     protected readonly ILogger Logger;
 
-    private CancellationTokenSource _cts;
-    private readonly SemaphoreSlim _semaphore;
-    private Task? _connectionTask;
+    protected CancellationTokenSource TokenSource;
+    protected readonly SemaphoreSlim Semaphore;
+    protected Task? _connectionTask;
 
-    private bool _probablyConnected;
+    protected bool ProbablyConnected;
 
     private readonly byte[] _readBuffer;
 
     public bool IsServer { get; }
 
-    public bool IsConnected => _probablyConnected;
+    public bool IsConnected => ProbablyConnected;
 
     public event Action? Connected;
     public event Action? Disconnected;
@@ -41,19 +41,20 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
 
         _readBuffer = new byte[bufferSize];
 
-        _cts = new CancellationTokenSource();
-        _semaphore = new SemaphoreSlim(1, 1);
+        TokenSource = new CancellationTokenSource();
+        Semaphore = new SemaphoreSlim(1, 1);
 
-        _probablyConnected = false;
-
-        StartReconnecting();
+        ProbablyConnected = false;
 
         _handlers = new List<MessageHandler>(4);
+
+        // ReSharper disable once VirtualMemberCallInConstructor
+        StartReconnecting();
     }
 
     public void DisconnectGracefully(bool startReconnecting = false)
     {
-        CancellationTokenSource oldCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+        CancellationTokenSource oldCts = Interlocked.Exchange(ref TokenSource, new CancellationTokenSource());
         try
         {
             oldCts.Cancel();
@@ -72,26 +73,25 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
     }
 
     protected abstract TPipeStream CreateNewStream();
-    protected abstract Task ConnectAsync(TPipeStream pipeStream, CancellationToken token = default);
 
     public async Task SendAsync(ITransportMessage message, CancellationToken token = default)
     {
-        if (!_probablyConnected)
+        if (!ProbablyConnected)
         {
             if (_connectionTask is { IsCompleted: false })
                 await _connectionTask;
-            if (!_probablyConnected)
+            if (!ProbablyConnected)
             {
                 throw new InvalidOperationException("Failed to connect.");
             }
         }
 
-        await _semaphore.WaitAsync(token);
+        await Semaphore.WaitAsync(token);
         try
         {
             if (PipeStream == null || !PipeStream.IsConnected)
             {
-                _probablyConnected = false;
+                ProbablyConnected = false;
                 throw new InvalidOperationException("Disconnected.");
             }
 
@@ -112,58 +112,20 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
         }
         finally
         {
-            _semaphore.Release();
+            Semaphore.Release();
         }
 
-        if (!_probablyConnected)
+        if (!ProbablyConnected)
         {
             throw new InvalidOperationException("Disconnected.");
         }
     }
 
-    private void StartReconnecting()
+    protected abstract void StartReconnecting();
+
+    protected void OnConnected()
     {
-        _connectionTask = Task.Factory.StartNew(async () =>
-        {
-            await _semaphore.WaitAsync(_cts.Token);
-            try
-            {
-                TPipeStream? old = Interlocked.Exchange(
-                    ref PipeStream,
-                    CreateNewStream()
-                );
-
-                if (old != null)
-                {
-                    try
-                    {
-                        old.Dispose();
-                    }
-                    catch { /* ignored */ }
-                }
-
-                try
-                {
-                    await ConnectAsync(PipeStream!, _cts.Token);
-
-                    OnConnected();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex);
-                }
-            }
-            finally
-            {
-                _semaphore.Release();
-            }
-
-        }, TaskCreationOptions.LongRunning);
-    }
-
-    private void OnConnected()
-    {
-        _probablyConnected = true;
+        ProbablyConnected = true;
         Logger.LogInformation("Connected to test environment host.");
         TPipeStream? stream = PipeStream;
 
@@ -202,7 +164,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
         int bytesRead = stream.EndRead(ar);
         if (bytesRead == 0)
         {
-            _probablyConnected = false;
+            ProbablyConnected = false;
             Logger.LogInformation("Disconnected from test environment host.");
             try
             {
@@ -212,7 +174,10 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
             {
                 Logger.LogError("Error invoking Disconnected event.", ex);
             }
-            StartReconnecting();
+            if (!TokenSource.IsCancellationRequested)
+            {
+                StartReconnecting();
+            }
             return;
         }
 
@@ -348,7 +313,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
             Logger.LogError(null, ex);
         }
 
-        if (!_cts.IsCancellationRequested && PipeStream == stream)
+        if (!TokenSource.IsCancellationRequested && PipeStream == stream)
         {
             stream.BeginRead(_readBuffer, 0, _readBuffer.Length, OnRead, stream);
         }
@@ -356,14 +321,14 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
 
     protected virtual void Dispose(bool isDisposing)
     {
-        _semaphore.Wait();
+        Semaphore.Wait();
         try
         {
-            if (!_cts.IsCancellationRequested)
+            if (!TokenSource.IsCancellationRequested)
             {
                 try
                 {
-                    _cts.Cancel();
+                    TokenSource.Cancel();
                 }
                 catch { /* ignored */ }
             }
@@ -372,14 +337,14 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
         }
         finally
         {
-            _semaphore.Release();
-            _semaphore.Dispose();
+            Semaphore.Release();
+            Semaphore.Dispose();
         }
     }
 
     private void ClosePipeStream()
     {
-        _probablyConnected = false;
+        ProbablyConnected = false;
         TPipeStream? stream = Interlocked.Exchange(ref PipeStream, null);
         if (stream == null)
             return;

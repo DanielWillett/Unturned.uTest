@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using uTest.Discovery;
 
@@ -10,15 +9,20 @@ internal class TestExecutionPipeline
 {
     private readonly TestRunner _runner;
     private readonly ILogger _logger;
+    private readonly UnturnedTestList _testList;
     private readonly CancellationToken _token;
+
+    private readonly Stopwatch _stopwatch;
 
     internal UnturnedTestInstance CurrentTest;
 
-    public TestExecutionPipeline(TestRunner runner, ILogger logger, CancellationToken token)
+    public TestExecutionPipeline(TestRunner runner, ILogger logger, UnturnedTestList testList, CancellationToken token)
     {
         _runner = runner;
         _logger = logger;
+        _testList = testList;
         _token = token;
+        _stopwatch = new Stopwatch();
     }
 
     public void InitializeCurrentTest(UnturnedTestInstance test)
@@ -42,55 +46,94 @@ internal class TestExecutionPipeline
             return HandleTestError("Type Initializer", ex);
         }
 
-        object runner;
+        Exception? testException;
+        TestExecutionSummary summary;
+        TestContext context;
+
+        Task? task = TestAsyncStateMachine.TryRunTestAsync(in CurrentTest, _token, _logger, _stopwatch, _testList, out TestAsyncStateMachine machine);
         try
         {
-            runner = Activator.CreateInstance(CurrentTest.Type);
-        }
-        catch (Exception ex)
-        {
-            return HandleTestError("Runner Instance Creation", ex);
-        }
 
-        // todo: support better test binding
-        Action action;
-        try
-        {
-            action = (Action)CurrentTest.Method.CreateDelegate(typeof(Action), runner);
-        }
-        catch (Exception ex)
-        {
-            return HandleTestError("Bind Test Method", ex);
-        }
+            if (task == null)
+            {
+                return new TestExecutionResult(TestResult.Skipped, null);
+            }
 
-        Stopwatch sw = Stopwatch.StartNew();
+            testException = null;
 
-        try
-        {
-            action();
-        }
-        catch (Exception ex)
-        {
-            return ReportTestException(ex);
+            try
+            {
+                await task.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                testException = ex;
+            }
+
+            context = (TestContext)machine.Context;
+
+            TestTimingStep? invokeTimingStep = machine.TimingSteps.Find(x => x.Stage == TestRunStopwatchStage.Execute);
+
+            summary = new TestExecutionSummary
+            {
+                SessionUid = _testList.SessionUid,
+                Uid = CurrentTest.Uid,
+                Artifacts = context.Artifacts,
+                TimingSteps = machine.TimingSteps,
+                OutputMessages = context.Messages
+            };
+
+            if (invokeTimingStep != null)
+            {
+                summary.Duration = invokeTimingStep.Duration;
+                summary.StartTime = invokeTimingStep.StartTime;
+                summary.EndTime = invokeTimingStep.EndTime;
+            }
         }
         finally
         {
-            sw.Stop();
+            await GameThread.Switch();
+            if (machine.Context is IDisposable disposable)
+                disposable.Dispose();
         }
 
-        return new TestExecutionResult(TestResult.Pass, null);
+        summary.StandardOutput = context.StandardOutput?.ToString();
+        if (string.IsNullOrEmpty(summary.StandardOutput)) summary.StandardOutput = null;
+
+        summary.StandardError = context.StandardError?.ToString();
+        if (string.IsNullOrEmpty(summary.StandardError)) summary.StandardError = null;
+
+        if (testException == null)
+            return new TestExecutionResult(TestResult.Pass, summary);
+
+        if (context.Configuration.CollectTrxProperties)
+        {
+            summary.StackTrace = testException.StackTrace;
+            summary.ExceptionMessage = testException.Message;
+            summary.ExceptionType = testException.GetType().FullName;
+        }
+
+        return ReportTestException(testException, summary);
+
     }
 
-    private TestExecutionResult ReportTestException(Exception ex)
+    private TestExecutionResult ReportTestException(Exception ex, TestExecutionSummary summary)
     {
         _logger.LogError($"Test \"{CurrentTest.Uid}\" failed with exception.", ex);
-        // todo
-        return new TestExecutionResult(TestResult.Fail, null);
+
+        if (ex is ITestResultException testResultException)
+        {
+            return new TestExecutionResult(testResultException.Result, summary);
+        }
+        else
+        {
+            return new TestExecutionResult(TestResult.Fail, summary);
+        }
     }
 
     private TestExecutionResult HandleTestError(string context, Exception ex)
     {
-        _logger.LogError($"Error running test \"{CurrentTest.Uid}\".", ex);
+        _logger.LogError($"Error running test \"{CurrentTest.Uid}\" ({context}).", ex);
         // todo
         return new TestExecutionResult(TestResult.Fail, null);
     }

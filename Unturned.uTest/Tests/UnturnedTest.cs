@@ -19,6 +19,7 @@ public class UnturnedTest : ITypeParamsProvider
     public required string DisplayName { get; init; }
     public required string Uid { get; init; }
     public required string TreePath { get; init; }
+    public string[]? Categories { get; init; }
     public required MethodInfo Method { get; init; }
 
     /// <summary>

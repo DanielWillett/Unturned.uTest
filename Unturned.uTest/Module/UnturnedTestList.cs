@@ -17,6 +17,7 @@ internal class UnturnedTestList
     public string TestListTypeName { get; set; }
 
     public bool IsAllTests { get; set; }
+    public bool CollectTrxProperties { get; set; }
 }
 
 internal class UnturnedTestReference

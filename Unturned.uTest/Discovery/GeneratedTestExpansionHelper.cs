@@ -269,21 +269,6 @@ internal class TestExpandProcessor
             return default;
         }
 
-        ReadOnlyMemory<char> methodName = managedMethod;
-
-        if (isConstructedGenericType)
-        {
-            if (!ManagedIdentifier.TryGetMethodName(managedMethod.Span, out ReadOnlySpan<char> mtdName))
-            {
-                return default;
-            }
-
-            int index = managedMethod.Span.IndexOf(mtdName, StringComparison.Ordinal);
-            methodName = index < 0
-                ? mtdName.ToString().AsMemory()
-                : managedMethod.Slice(index, mtdName.Length);
-        }
-
         Type? testType = null;
         Type[]? typeArgs = null;
 
@@ -315,17 +300,7 @@ internal class TestExpandProcessor
             if (!managedTypeWithoutTypeArgs.Span.Equals(test.ManagedType.AsSpan(), StringComparison.Ordinal))
                 continue;
 
-            if (isConstructedGenericType)
-            {
-                // check method name without parameter types
-                // constructed types can replace parameters directly (ex. Type`1.Method(!0) -> Type`1<System.String>.Method(System.String) )
-                if (!ManagedIdentifier.TryGetMethodName(test.ManagedMethod.AsSpan(), out ReadOnlySpan<char> testMethodName)
-                    || !testMethodName.Equals(methodName.Span, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-            }     // check method name
-            else if (!managedMethod.Span.Equals(test.ManagedMethod.AsSpan(), StringComparison.Ordinal))
+            if (!managedMethod.Span.Equals(test.ManagedMethod.AsSpan(), StringComparison.Ordinal))
             {
                 continue;
             }
@@ -390,6 +365,7 @@ internal class TestExpandProcessor
                         }
 
                         typeArgs[i] = t;
+                        sb.Clear();
                     }
 
                     StringBuilderPool.Return(sb);
@@ -456,19 +432,11 @@ internal class TestExpandProcessor
             if (testMethod == null)
                 continue;
 
-            if (isConstructedGenericType)
-            {
-                // check method name with parameter types filled in
-                string thisTestManagedMethod = ManagedIdentifier.GetManagedMethod(testMethod);
-                if (!managedMethod.Span.Equals(thisTestManagedMethod.AsSpan(), StringComparison.Ordinal))
-                    continue;
-            }
-
             if (methodTypeArgs.Length > 0)
             {
                 try
                 {
-                    testMethod = test.Method.MakeGenericMethod(methodTypeArgs);
+                    testMethod = testMethod.MakeGenericMethod(methodTypeArgs);
                 }
                 catch (ArgumentException)
                 {
@@ -485,7 +453,7 @@ internal class TestExpandProcessor
                     type,
                     testMethod,
                     typeArgs.Length == 0 ? test.ManagedType : ManagedIdentifier.GetManagedType(type),
-                    typeArgs.Length == 0 ? test.ManagedMethod : ManagedIdentifier.GetManagedMethod(testMethod),
+                    test.ManagedMethod,
                     p,
                     variantIndex,
                     UnturnedTestInstance.CalculateArgumentHash(typeArgs, methodTypeArgs, p),
@@ -496,14 +464,6 @@ internal class TestExpandProcessor
                     continue;
 
                 return new ValueTask<UnturnedTestInstance?>(instance);
-            }
-
-            if (isConstructedGenericType)
-            {
-                if (!managedType.Span.Equals(ManagedIdentifier.GetManagedType(type), StringComparison.Ordinal))
-                    continue;
-                if (!managedMethod.Span.Equals(ManagedIdentifier.GetManagedMethod(testMethod), StringComparison.Ordinal))
-                    continue;
             }
 
             if (_expandedTestMethod != testMethod)
@@ -660,21 +620,11 @@ internal class TestExpandProcessor
         SetupExpandTest(test);
 
         // basic 0-arg test
-        if (_parameters.Length == 0 && _methodGenericArguments.Length == 0 && _typeGenericArguments.Length == 0)
+        if (!test.Expandable)
         {
-            _instances.Add(new UnturnedTestInstance(
-                this,
-                test,
-                _testType,
-                test.Method,
-                test.ManagedType,
-                test.ManagedMethod,
-                Array.Empty<object>(),
-                index: 0,
-                argHash: DefaultArgHash,
-                Type.EmptyTypes,
-                Type.EmptyTypes)
-            );
+            UnturnedTestInstance instance = new UnturnedTestInstance(test);
+            if (TreeFilter == null || TreeFilter.MatchesTreePathFilter(in instance, _treeFilterNeedsPropertyBag))
+                _instances.Add(instance);
             return default;
         }
 
@@ -953,9 +903,9 @@ internal class TestExpandProcessor
                 return;
         }
 
+        _managedMethod = _test.ManagedMethod;
         if (typeArguments.Length == 0)
         {
-            _managedMethod = _test.ManagedMethod;
             if (methodTypeArguments.Length == 0)
             {
                 _testMethodInstance = _test.Method;
@@ -974,7 +924,6 @@ internal class TestExpandProcessor
         }
         else if (MethodBase.GetMethodFromHandle(_test.Method.MethodHandle, _testTypeInstance.TypeHandle) is MethodInfo mtd)
         {
-            _managedMethod = ManagedIdentifier.GetManagedMethod(mtd);
             if (methodTypeArguments.Length == 0)
             {
                 _testMethodInstance = mtd;

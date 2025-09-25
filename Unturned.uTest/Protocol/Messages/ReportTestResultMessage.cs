@@ -13,7 +13,7 @@ public class ReportTestResultMessage : ITransportMessage
 {
     public string SessionUid { get; set; } = null!;
     public string Uid { get; set; } = null!;
-    public string LogPath { get; set; } = null!;
+    public string SummaryPath { get; set; } = null!;
     public TestResult Result { get; set; }
 
     public static ReportTestResultMessage InProgress(string sessionUid, string methodUid)
@@ -21,7 +21,7 @@ public class ReportTestResultMessage : ITransportMessage
         return new ReportTestResultMessage
         {
             SessionUid = sessionUid,
-            LogPath = string.Empty,
+            SummaryPath = string.Empty,
             Result = TestResult.InProgress,
             Uid = methodUid
         };
@@ -32,7 +32,7 @@ public class ReportTestResultMessage : ITransportMessage
     {
         ushort sessionIdLen = checked ( (ushort)Encoding.UTF8.GetByteCount(SessionUid) );
         ushort methodIdLen  = checked ( (ushort)Encoding.UTF8.GetByteCount(Uid) );
-        ushort logPathLen   = checked ( (ushort)Encoding.UTF8.GetByteCount(LogPath) );
+        ushort logPathLen   = checked ( (ushort)Encoding.UTF8.GetByteCount(SummaryPath) );
 
         int length = sessionIdLen + methodIdLen + logPathLen + 7;
 
@@ -57,7 +57,7 @@ public class ReportTestResultMessage : ITransportMessage
 
             Unsafe.WriteUnaligned(ref data[index], logPathLen);
             index += 2;
-            Encoding.UTF8.GetBytes(LogPath, 0, LogPath.Length, data, index);
+            Encoding.UTF8.GetBytes(SummaryPath, 0, SummaryPath.Length, data, index);
             index += logPathLen;
 
             await stream.WriteAsync(data, 0, index, token);
@@ -100,7 +100,7 @@ public class ReportTestResultMessage : ITransportMessage
         length = Unsafe.ReadUnaligned<ushort>(ref arr[offset]);
         offset += 2;
         AssertLength(offset, maxSize, length);
-        LogPath = Encoding.UTF8.GetString(arr, offset, length);
+        SummaryPath = Encoding.UTF8.GetString(arr, offset, length);
         offset += length;
 
         return offset;

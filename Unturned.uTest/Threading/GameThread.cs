@@ -492,6 +492,7 @@ public static class GameThread
             {
                 _action();
             }
+            catch (QuitGameException) { }
             catch (Exception ex)
             {
                 CommandWindow.LogError(string.Format(Properties.Resources.RunOnMainThreadError, _action.Method.DeclaringType));
@@ -511,6 +512,7 @@ public static class GameThread
             {
                 _action(_state);
             }
+            catch (QuitGameException) { }
             catch (Exception ex)
             {
                 CommandWindow.LogError(string.Format(Properties.Resources.RunOnMainThreadError, _action.Method.DeclaringType));

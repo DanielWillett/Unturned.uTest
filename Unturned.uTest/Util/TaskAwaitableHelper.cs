@@ -35,7 +35,82 @@ internal static class TaskAwaitableHelper
 
         Type returnType = obj.GetType();
 
-        AwaitableInfo info = AwaitableCache.GetOrAdd(returnType, returnType =>
+        AwaitableInfo info = GetAwaitableInfo(returnType);
+
+        if (!info.IsValidAwaitable)
+        {
+            return Task.FromResult<object?>(obj);
+        }
+        
+        object task = obj;
+        if (info.ConfigureAwaitMethod != null)
+        {
+            if (info.ConfigureAwaitMethod.ReturnType == typeof(void))
+                info.ConfigureAwaitMethod.Invoke(task, ConfigureAwaitArgs);
+            else
+                task = info.ConfigureAwaitMethod.Invoke(task, ConfigureAwaitArgs);
+        }
+
+        INotifyCompletion? awaiter = info.GetAwaiterMethod!.Invoke(task, Array.Empty<object>()) as INotifyCompletion;
+        if (awaiter == null)
+        {
+            return Task.FromResult<object?>(null);
+        }
+
+        // (awaiter.IsCompleted)
+        if ((bool)info.IsCompletedProperty!.GetValue(awaiter))
+        {
+            // return awaiter.GetResult()
+            try
+            {
+                object result = info.GetResultMethod!.Invoke(awaiter, Array.Empty<object>());
+                return Task.FromResult<object?>(result);
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            }
+        }
+
+        TaskCompletionSource<object?> taskSource = new TaskCompletionSource<object?>();
+
+        ExecutionContext? context = null;
+        Action callback = () =>
+        {
+            if (context != null)
+            {
+                MethodInfo getResultMethod = info.GetResultMethod!;
+                ExecutionContext.Run(
+                    context,
+                    _ => Invoke(getResultMethod, awaiter, taskSource),
+                    null
+                );
+            }
+            else
+            {
+                Invoke(info.GetResultMethod!, awaiter, taskSource);
+            }
+        };
+
+        if (awaiter is ICriticalNotifyCompletion unsafeNotifyCompletion)
+        {
+            unsafeNotifyCompletion.UnsafeOnCompleted(callback);
+        }
+        else
+        {
+            if (!ExecutionContext.IsFlowSuppressed())
+            {
+                context = ExecutionContext.Capture();
+            }
+            awaiter.OnCompleted(callback);
+        }
+
+        return taskSource.Task;
+    }
+
+    public static AwaitableInfo GetAwaitableInfo(Type returnType)
+    {
+        return AwaitableCache.GetOrAdd(returnType, returnType =>
         {
             AwaitableInfo info = default;
             info.IsValidAwaitable = true;
@@ -48,6 +123,12 @@ internal static class TaskAwaitableHelper
                     ConfigureAwaitTypeArgs,
                     null
                 );
+                ParameterInfo[]? p = info.ConfigureAwaitMethod?.GetParameters();
+                if (p != null)
+                {
+                    if (p.Length != 1 || p[0].ParameterType != typeof(bool))
+                        info.ConfigureAwaitMethod = null;
+                }
             }
             catch (AmbiguousMatchException)
             {
@@ -152,76 +233,6 @@ internal static class TaskAwaitableHelper
 
             return info;
         });
-
-        if (!info.IsValidAwaitable)
-        {
-            return Task.FromResult<object?>(obj);
-        }
-        
-        object task = obj;
-        if (info.ConfigureAwaitMethod != null)
-        {
-            if (info.ConfigureAwaitMethod.ReturnType == typeof(void))
-                info.ConfigureAwaitMethod.Invoke(task, ConfigureAwaitArgs);
-            else
-                task = info.ConfigureAwaitMethod.Invoke(task, ConfigureAwaitArgs);
-        }
-
-        INotifyCompletion? awaiter = info.GetAwaiterMethod!.Invoke(task, Array.Empty<object>()) as INotifyCompletion;
-        if (awaiter == null)
-        {
-            return Task.FromResult<object?>(null);
-        }
-
-        // (awaiter.IsCompleted)
-        if ((bool)info.IsCompletedProperty!.GetValue(awaiter))
-        {
-            // return awaiter.GetResult()
-            try
-            {
-                object result = info.GetResultMethod!.Invoke(awaiter, Array.Empty<object>());
-                return Task.FromResult<object?>(result);
-            }
-            catch (TargetInvocationException ex) when (ex.InnerException != null)
-            {
-                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-            }
-        }
-
-        TaskCompletionSource<object?> taskSource = new TaskCompletionSource<object?>();
-
-        ExecutionContext? context = null;
-        Action callback = () =>
-        {
-            if (context != null)
-            {
-                MethodInfo getResultMethod = info.GetResultMethod!;
-                ExecutionContext.Run(
-                    context,
-                    _ => Invoke(getResultMethod, awaiter, taskSource),
-                    null
-                );
-            }
-            else
-            {
-                Invoke(info.GetResultMethod!, awaiter, taskSource);
-            }
-        };
-
-        if (awaiter is ICriticalNotifyCompletion unsafeNotifyCompletion)
-        {
-            unsafeNotifyCompletion.UnsafeOnCompleted(callback);
-        }
-        else
-        {
-            if (!ExecutionContext.IsFlowSuppressed())
-            {
-                context = ExecutionContext.Capture();
-            }
-            awaiter.OnCompleted(callback);
-        }
-
-        return taskSource.Task;
     }
 
     private static void Invoke(MethodInfo getResultMethod, object awaiter, TaskCompletionSource<object?> taskSource)
@@ -241,7 +252,7 @@ internal static class TaskAwaitableHelper
         }
     }
 
-    private struct AwaitableInfo
+    public struct AwaitableInfo
     {
         public static readonly AwaitableInfo Invalid = default;
 
