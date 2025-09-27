@@ -123,10 +123,31 @@
   <data name="LogErrorAlreadyStarted" xml:space="preserve">
     <value>There is already a test session in progress (UID "{0}").</value>
   </data>
+  <data name="LogErrorCopyingFile" xml:space="preserve">
+    <value>Unable to copy a critical file or assembly needed for running tests: "{0}".</value>
+  </data>
   <data name="LogErrorCreatingRunner" xml:space="preserve">
     <value>Failed to create an instance of test class "{0}".</value>
   </data>
+  <data name="LogErrorDeletingUnusedFile" xml:space="preserve">
+    <value>An error was encountered trying to delete an unused file from the module folder: "{0}".</value>
+  </data>
+  <data name="LogErrorDeletingUnusedFiles" xml:space="preserve">
+    <value>An error was encountered trying to delete unused files from the module folder.</value>
+  </data>
+  <data name="LogErrorFindingAssemblyLocation" xml:space="preserve">
+    <value>Unable to find the location of a critical assembly needed for running tests: "{0}".</value>
+  </data>
   <data name="LogErrorNotStarted" xml:space="preserve">
     <value>This test session (UID "{0}") has already been closed.</value>
+  </data>
+  <data name="LogTraceCopiedFile" xml:space="preserve">
+    <value>Copied file "{0}" to module folder.</value>
+  </data>
+  <data name="LogTraceDeletedUnusedFile" xml:space="preserve">
+    <value>Deleted unused assembly in module folder: "{0}".</value>
+  </data>
+  <data name="LogTraceSkipCopyingFile" xml:space="preserve">
+    <value>Skipping copying file "{0}" because the newest version is already copied.</value>
   </data>
 </root>

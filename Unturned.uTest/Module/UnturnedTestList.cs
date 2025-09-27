@@ -16,6 +16,11 @@ internal class UnturnedTestList
     [JsonRequired]
     public string TestListTypeName { get; set; }
 
+    /// <summary>
+    /// Full name of the test assembly.
+    /// </summary>
+    public string TestAssembly { get; set; }
+
     public bool IsAllTests { get; set; }
     public bool CollectTrxProperties { get; set; }
 }

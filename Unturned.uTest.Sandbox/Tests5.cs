@@ -5,6 +5,6 @@ public class Tests5 : ITestClass
     public async Task Test1()
     {
         await Task.Delay(500);
-        Test.Fail();
+        Assert.Fail();
     }
 }

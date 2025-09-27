@@ -86,14 +86,9 @@ internal class MainModule : MonoBehaviour, IDisposable
             return;
         }
 
-        Regex assemblies = new Regex(
-            @"(?:Unturned\.uTest, Version=[\d\.]+, Culture=neutral, PublicKeyToken=null)|(netstandard, Version=2\.1\.0\.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51)",
-            RegexOptions.Singleline
-        );
-
         HomeDirectory = Path.GetFullPath(module.config.DirectoryPath);
 
-        TestAssembly = Array.Find(module.assemblies, x => !assemblies.IsMatch(x.FullName));
+        TestAssembly = Array.Find(module.assemblies, x => string.Equals(x.FullName, TestList!.TestAssembly));
         if (TestAssembly == null)
         {
             CommandWindow.LogError("Failed to find test assembly.");

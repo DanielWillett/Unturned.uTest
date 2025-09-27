@@ -92,7 +92,7 @@ public interface ITestContext
     /// Configure the testing environment for this test.
     /// </summary>
     /// <exception cref="InvalidOperationException">Test has already started.</exception>
-    void Configure(Action<ITestConfigurationBuilder> configure);
+    ValueTask ConfigureAsync(Action<ITestConfigurationBuilder> configure);
 }
 
 /// <summary>

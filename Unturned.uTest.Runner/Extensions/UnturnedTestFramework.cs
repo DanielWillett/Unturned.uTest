@@ -238,6 +238,9 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
             });
 
             string settingsFile = _launcher.GetSettingsFile();
+            string? dir = Path.GetDirectoryName(settingsFile);
+            if (dir != null)
+                Directory.CreateDirectory(dir);
 
             Assembly? testAssembly = null;
 
@@ -268,7 +271,8 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                     Tests = exportedTests,
                     TestListTypeName = typeof(GeneratedTestRegistrationList).AssemblyQualifiedName,
                     IsAllTests = r.Filter == null,
-                    CollectTrxProperties = TrxSwitch.HasTrx
+                    CollectTrxProperties = TrxSwitch.HasTrx,
+                    TestAssembly = testAssembly!.FullName
                 });
             }
 

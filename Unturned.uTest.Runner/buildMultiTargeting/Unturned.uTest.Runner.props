@@ -23,7 +23,7 @@
 
   </Choose>
 
-  <Target BeforeTargets="Build" Name="uTest_CheckValidTargetFramework" >
+  <Target BeforeTargets="Build" Name="uTest_CheckValidTargetFramework" Condition="'$(TargetFramework)' != ''">
 
     <Error Condition="'$(uTestMode)' == 'Unsupported'"
            Code="UNT900"
@@ -127,9 +127,7 @@
 
   <ItemGroup>
     <Using Include="uTest"/>
-    <Using Include="uTest.Assertions.NUnit" Condition="'$(AssertionStyle)' == 'NUnit'" />
-    <Using Include="uTest.Assertions.xUnit" Condition="'$(AssertionStyle)' == 'xUnit'" />
-    <Using Include="uTest.Assertions.MSTest" Condition="'$(AssertionStyle)' != 'NUnit' And '$(AssertionStyle)' != 'xUnit'" />
+    <Using Include="Xunit"/>
   </ItemGroup>
 
 </Project>

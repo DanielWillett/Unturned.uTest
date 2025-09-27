@@ -79,6 +79,15 @@ namespace uTest.Runner.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Unable to copy a critical file or assembly needed for running tests: &quot;{0}&quot;..
+        /// </summary>
+        internal static string LogErrorCopyingFile {
+            get {
+                return ResourceManager.GetString("LogErrorCopyingFile", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Failed to create an instance of test class &quot;{0}&quot;..
         /// </summary>
         internal static string LogErrorCreatingRunner {
@@ -88,11 +97,65 @@ namespace uTest.Runner.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to An error was encountered trying to delete an unused file from the module folder: &quot;{0}&quot;..
+        /// </summary>
+        internal static string LogErrorDeletingUnusedFile {
+            get {
+                return ResourceManager.GetString("LogErrorDeletingUnusedFile", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to An error was encountered trying to delete unused files from the module folder..
+        /// </summary>
+        internal static string LogErrorDeletingUnusedFiles {
+            get {
+                return ResourceManager.GetString("LogErrorDeletingUnusedFiles", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Unable to find the location of a critical assembly needed for running tests: &quot;{0}&quot;..
+        /// </summary>
+        internal static string LogErrorFindingAssemblyLocation {
+            get {
+                return ResourceManager.GetString("LogErrorFindingAssemblyLocation", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to This test session (UID &quot;{0}&quot;) has already been closed..
         /// </summary>
         internal static string LogErrorNotStarted {
             get {
                 return ResourceManager.GetString("LogErrorNotStarted", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Copied file &quot;{0}&quot; to module folder..
+        /// </summary>
+        internal static string LogTraceCopiedFile {
+            get {
+                return ResourceManager.GetString("LogTraceCopiedFile", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Deleted unused assembly in module folder: &quot;{0}&quot;..
+        /// </summary>
+        internal static string LogTraceDeletedUnusedFile {
+            get {
+                return ResourceManager.GetString("LogTraceDeletedUnusedFile", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Skipping copying file &quot;{0}&quot; because the newest version is already copied..
+        /// </summary>
+        internal static string LogTraceSkipCopyingFile {
+            get {
+                return ResourceManager.GetString("LogTraceSkipCopyingFile", resourceCulture);
             }
         }
     }

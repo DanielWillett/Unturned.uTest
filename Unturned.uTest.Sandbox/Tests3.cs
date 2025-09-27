@@ -14,20 +14,20 @@ public class Tests3 : ITestClass, ITestClassSetup, ITestClassTearDown
     /// <inheritdoc />
     public async ValueTask SetupAsync(ITestContext textContext, CancellationToken token)
     {
-        Assert.That(_setupRan1, Is.False);
+        Assert.False(_setupRan1);
         _setupRan1 = true;
         await Task.Delay(10, token);
-        Assert.That(_setupRan2, Is.False);
+        Assert.False(_setupRan2);
         _setupRan2 = true;
     }
 
     /// <inheritdoc />
     public async ValueTask TearDownAsync(CancellationToken token)
     {
-        Assert.That(_setupRan1, Is.True);
-        Assert.That(_setupRan2, Is.True);
+        Assert.True(_setupRan1);
+        Assert.True(_setupRan2);
         await Task.Delay(10, token);
-        Assert.That(_setupRan1, Is.True);
-        Assert.That(_setupRan2, Is.True);
+        Assert.True(_setupRan1);
+        Assert.True(_setupRan2);
     }
 }

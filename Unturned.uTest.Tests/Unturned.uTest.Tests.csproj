@@ -18,7 +18,6 @@
 
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
     <ProjectReference Include="../Unturned.uTest.Runner/Unturned.uTest.Runner.csproj" />
-    <!--<ProjectReference Include="../Unturned.uTest.VSTestAdapter/Unturned.uTest.VSTestAdapter.csproj" />-->
 
   </ItemGroup>
 

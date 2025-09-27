@@ -8,13 +8,13 @@ public class Tests2 : ITestClass, ITestClassSetup
     [Test]
     public void Test1()
     {
-        Assert.That(_setupRan);
+        Assert.True(_setupRan);
     }
 
     /// <inheritdoc />
     public ValueTask SetupAsync(ITestContext textContext, CancellationToken token)
     {
-        Assert.That(_setupRan, Is.False);
+        Assert.False(_setupRan);
         _setupRan = true;
         return default;
     }

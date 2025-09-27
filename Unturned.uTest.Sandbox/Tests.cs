@@ -1,5 +1,3 @@
-using SDG.Unturned;
-
 namespace uTest.Sandbox;
 
 [Test]
@@ -12,7 +10,7 @@ public class Tests<T> : ITestClass
     [TypeArgs(typeof(string))]
     public void TestGeneric<[Set(typeof(long), typeof(int))] T2>(T2[] t2, T num)
     {
-        Test.Pass();
+        Assert.Null(t2);
     }
 
     [Test]
@@ -20,7 +18,7 @@ public class Tests<T> : ITestClass
     [TypeArgs(typeof(string))]
     public void TestGeneric<[Set(typeof(long), typeof(int))] T2>(T2[] t2, int num)
     {
-        Test.Pass();
+        Assert.Null(t2);
     }
 
     //[Test]
@@ -56,7 +54,7 @@ public class Tests<T> : ITestClass
     [TestArgs(From = nameof(ParseNumberArgs))]
     public void ParameterizedTestFromMember(char testInt, int iterations)
     {
-        Test.Fail();
+        Assert.Equal('a', testInt);
     }
     
     private static readonly Array ParseNumberArgs2 = new[]
@@ -70,7 +68,7 @@ public class Tests<T> : ITestClass
     [TestArgs(From = nameof(ParseNumberArgs2))]
     public void ParameterizedTestFromMemberUnparsable(string[] arr)
     {
-        Test.Fail();
+        Assert.NotEmpty(arr);
     }
 
     [Test]
@@ -79,7 +77,7 @@ public class Tests<T> : ITestClass
     [TestArgs(3, "18")]
     public void ParameterizedTestFromArgs(char testInt, int iterations)
     {
-        Test.Fail();
+        Assert.NotEqual('\0', testInt);
     }
 
     [Test]
@@ -88,7 +86,7 @@ public class Tests<T> : ITestClass
         CommandWindow.Log("Test log from unturned");
         Console.WriteLine("Test log from console.");
         Thread.Sleep(10);
-        Test.Fail();
+        Assert.Fail();
     }
 
     [Test]

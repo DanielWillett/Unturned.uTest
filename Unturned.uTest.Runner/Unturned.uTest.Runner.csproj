@@ -54,10 +54,20 @@
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
 
     <ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" />
-    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport.Abstractions" Version="$(MTPVersion)" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport.Abstractions" Version="$(MTPVersion)" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="xunit.assert" Version="2.9.3" PrivateAssets="all" GeneratePathProperty="True" />
   </ItemGroup>
 
-  <ItemGroup>
+	<!-- Copy uTest dependencies to Modules folder -->
+	<Target BeforeTargets="BeforeBuild" Name="CopyDepedenciesToModule" Condition="'$(TargetFrameworks)' == '' OR $(TargetFrameworks.EndsWith($(TargetFramework)))">
+		<Copy SourceFiles="
+					$(Pkgxunit_assert)\lib\netstandard1.1\xunit.assert.dll;
+					$(PkgMicrosoft_Testing_Extensions_TrxReport_Abstractions)\lib\netstandard2.0\Microsoft.Testing.Extensions.TrxReport.Abstractions.dll
+					" SkipUnchangedFiles="true" DestinationFolder="./Module" />
+	</Target>
+
+
+	<ItemGroup>
 
     <!-- From Microsoft.Testing.Extensions.* csproj file -->
     <Content Include="buildMultiTargeting/**">
@@ -73,6 +83,14 @@
       <PackagePath>build/$(TargetFramework)</PackagePath>
     </TfmSpecificPackageFile>
 
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Module\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+	  <EmbeddedResource Include="Module\**" />
   </ItemGroup>
 
   <ItemGroup>

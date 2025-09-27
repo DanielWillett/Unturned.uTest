@@ -109,11 +109,15 @@ public class UidParseTests
         Assert.That(managedMethod.ToString(), Is.EqualTo(method));
 
         Assert.That(managedTypes.Length, Is.EqualTo(types.Length));
-        Assert.That(p, Is.Not.Null);
-        Assert.That(p!.Length, Is.EqualTo(parameters.Length));
 
         for (int i = 0; i < managedTypes.Length; ++i)
             Assert.That(managedTypes[i].ToString(), Is.EqualTo(types[i]));
+
+        Assert.That(p, parameters.Length == 0 ? Is.Null : Is.Not.Null);
+        if (parameters.Length == 0)
+            return;
+        
+        Assert.That(p!.Length, Is.EqualTo(parameters.Length));
 
         for (int i = 0; i < p.Length; ++i)
         {

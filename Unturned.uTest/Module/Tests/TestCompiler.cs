@@ -3,9 +3,11 @@ using System;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
+using uTest.Discovery;
+#if REFLECTION_TOOLS_DEBUG
 using DanielWillett.ReflectionTools;
 using DanielWillett.ReflectionTools.Emit;
-using uTest.Discovery;
+#endif
 
 namespace uTest.Module;
 

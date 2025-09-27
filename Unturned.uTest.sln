@@ -1,11 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36310.24
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.11018.127 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest", "Unturned.uTest\Unturned.uTest.csproj", "{3C666450-1525-453A-85B2-D1045774FD47}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.VSTestAdapter", "Unturned.uTest.VSTestAdapter\Unturned.uTest.VSTestAdapter.csproj", "{5228472C-F897-4FFD-B125-3ADF6124E05E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.Tests", "Unturned.uTest.Tests\Unturned.uTest.Tests.csproj", "{28E8AD36-CF10-4C41-96F7-B807F5E972F7}"
 EndProject
@@ -25,10 +23,6 @@ Global
 		{3C666450-1525-453A-85B2-D1045774FD47}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3C666450-1525-453A-85B2-D1045774FD47}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3C666450-1525-453A-85B2-D1045774FD47}.Release|Any CPU.Build.0 = Release|Any CPU
-		{5228472C-F897-4FFD-B125-3ADF6124E05E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5228472C-F897-4FFD-B125-3ADF6124E05E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5228472C-F897-4FFD-B125-3ADF6124E05E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5228472C-F897-4FFD-B125-3ADF6124E05E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{28E8AD36-CF10-4C41-96F7-B807F5E972F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{28E8AD36-CF10-4C41-96F7-B807F5E972F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{28E8AD36-CF10-4C41-96F7-B807F5E972F7}.Release|Any CPU.ActiveCfg = Release|Any CPU

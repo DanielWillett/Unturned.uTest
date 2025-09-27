@@ -79,12 +79,13 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     }
 
     /// <inheritdoc />
-    public void Configure(Action<ITestConfigurationBuilder> configure)
+    public ValueTask ConfigureAsync(Action<ITestConfigurationBuilder> configure)
     {
         if (HasStarted) throw new InvalidOperationException();
         
         ITestConfigurationBuilder builder = new TestConfigurationBuilder(this);
         configure(builder);
+        return default;
     }
 
     /// <inheritdoc />

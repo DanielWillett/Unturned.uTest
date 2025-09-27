@@ -21,15 +21,15 @@ internal class TreeNodeFilterHelperTests
     [NUnit.Framework.Test]
     [TestCase(typeof(decimal), "/{0}/System/Decimal/**")]
     [TestCase(typeof(object), "/{0}/System/Object/**")]
-    [TestCase(typeof(Environment.SpecialFolder), "/{0}/System/Environment%2bSpecialFolder/**")]
-    [TestCase(typeof(Nested1<>.Nested2<,>.Nested3), "/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTests%2bNested1<>%2bNested2<,>%2bNested3/**")]
-    [TestCase(typeof(Nested1<int>.Nested2<string, long>.Nested3), "/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTests%2bNested1<>%2bNested2<,>%2bNested3/*/<System.Int32,System.String,System.Int64>/**")]
+    [TestCase(typeof(Environment.SpecialFolder), "/{0}/System/Environment%2BSpecialFolder/**")]
+    [TestCase(typeof(Nested1<>.Nested2<,>.Nested3), "/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTests%2BNested1<>%2BNested2<,>%2BNested3/**")]
+    [TestCase(typeof(Nested1<int>.Nested2<string, long>.Nested3), "/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTests%2BNested1<>%2BNested2<,>%2BNested3/*/<System.Int32,System.String,System.Int64>/**")]
     [TestCase(typeof(string), "/{0}/System/String/**")]
-    [TestCase(typeof(int[]), "/{0}/System/Int32%5b%5d/**")]
-    [TestCase(typeof(int[][,]), "/{0}/System/Int32%5b%2c%5d%5b%5d/**")]
-    [TestCase(typeof(int[][,]*[,,,][]*), "/{0}/System/Int32%5b%2c%5d%5b%5d%2a%5b%5d%5b%2c%2c%2c%5d%2a/**")]
+    [TestCase(typeof(int[]), "/{0}/System/Int32%5B%5D/**")]
+    [TestCase(typeof(int[][,]), "/{0}/System/Int32%5B%2C%5D%5B%5D/**")]
+    [TestCase(typeof(int[][,]*[,,,][]*), "/{0}/System/Int32%5B%2C%5D%5B%5D%2A%5B%5D%5B%2C%2C%2C%5D%2A/**")]
     [TestCase(typeof(Version), "/{0}/System/Version/**")]
-    [TestCase(typeof(KeyValuePair<string, int[,][]>), "/{0}/System.Collections.Generic/KeyValuePair<,>/*/<System.String,System.Int32%5b%5d%5b%2c%5d>/**")]
+    [TestCase(typeof(KeyValuePair<string, int[,][]>), "/{0}/System.Collections.Generic/KeyValuePair<,>/*/<System.String,System.Int32%5B%5D%5B%2C%5D>/**")]
     public void TypeAsExpected(Type type, string expected)
     {
         // mscorlib is different on different platforms
@@ -283,7 +283,7 @@ internal class TreeNodeFilterHelperTests
 
         Console.WriteLine(name);
 
-        Assert.That(name, Is.EqualTo("/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTest_GenericClass<,>%2bNested<>/TestMethod1<,>/*/*"));
+        Assert.That(name, Is.EqualTo("/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTest_GenericClass<,>%2BNested<>/TestMethod1<,>/*/*"));
 
         Console.WriteLine(HttpUtility.UrlDecode(name));
     }
@@ -300,7 +300,7 @@ internal class TreeNodeFilterHelperTests
 
         Console.WriteLine(name);
 
-        Assert.That(name, Is.EqualTo("/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTest_GenericClass<,>%2bNested<>/TestMethod1<,>/<System.Int32,System.Int64,System.String>/*"));
+        Assert.That(name, Is.EqualTo("/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTest_GenericClass<,>%2BNested<>/TestMethod1<,>/<System.Int32,System.Int64,System.String>/*"));
 
         Console.WriteLine(HttpUtility.UrlDecode(name));
     }
@@ -318,7 +318,7 @@ internal class TreeNodeFilterHelperTests
 
         Console.WriteLine(name);
 
-        Assert.That(name, Is.EqualTo("/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTest_GenericClass<,>%2bNested<>/TestMethod1<,>/<System.Int32,System.Int64,System.String>/<System.Version,System.Type>"));
+        Assert.That(name, Is.EqualTo("/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTest_GenericClass<,>%2BNested<>/TestMethod1<,>/<System.Int32,System.Int64,System.String>/<System.Version,System.Type>"));
 
         Console.WriteLine(HttpUtility.UrlDecode(name));
     }
@@ -336,7 +336,7 @@ internal class TreeNodeFilterHelperTests
 
         Console.WriteLine(name);
 
-        Assert.That(name, Is.EqualTo("/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTest_GenericClass<,>%2bNested<>/TestMethod1<,>/*/<System.Version,System.Type>"));
+        Assert.That(name, Is.EqualTo("/Unturned.uTest.Tests/uTest_Test/TreeNodeFilterHelperTest_GenericClass<,>%2BNested<>/TestMethod1<,>/*/<System.Version,System.Type>"));
 
         Console.WriteLine(HttpUtility.UrlDecode(name));
     }

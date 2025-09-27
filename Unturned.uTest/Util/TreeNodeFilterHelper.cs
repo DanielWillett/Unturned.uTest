@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Web;
@@ -290,14 +291,14 @@ public static partial class TreeNodeFilterHelper
         if (!NeedsEscape(str.AsSpan()))
             return str;
 
-        string escaped = HttpUtility.UrlEncode(str);
+        string escaped = WebUtility.UrlEncode(str)!;
 
         if (escaped.AsSpan().IndexOfAny([ '*', '!', '(', ')' ]) < 0)
             return escaped;
 
         // it doesn't escape these for some reason
         return escaped
-            .Replace("*", "%2a")
+            .Replace("*", "%2A")
             .Replace("!", "%21")
             .Replace("(", "%28")
             .Replace(")", "%29");
@@ -312,7 +313,7 @@ public static partial class TreeNodeFilterHelper
         if (!NeedsEscape(str))
             return str;
 
-        return HttpUtility.UrlEncode(str.ToString()).Replace("*", "%2a");
+        return WebUtility.UrlEncode(str.ToString())!.Replace("*", "%2A");
     }
 }
 
@@ -401,7 +402,7 @@ public struct TreeNodeFilterWriter
                 Flush();
             }
 
-            _stringBuilder.Append("%2b" /* + */);
+            _stringBuilder.Append("%2B" /* + */);
         }
         else if (!_hasSlash) WriteSeparator();
 
@@ -424,7 +425,7 @@ public struct TreeNodeFilterWriter
         }
         else if (TreeNodeFilterHelper.NeedsEscape(withoutArity))
         {
-            _stringBuilder.Append(HttpUtility.UrlEncode(withoutArity.ToString()));
+            _stringBuilder.Append(WebUtility.UrlEncode(withoutArity.ToString()));
         }
         else
         {
@@ -452,16 +453,16 @@ public struct TreeNodeFilterWriter
             case < 0:
                 throw new ArgumentOutOfRangeException(nameof(rank));
             case 0:
-                _stringBuilder.Append("%5b%5d" /* [] */);
+                _stringBuilder.Append("%5B%5D" /* [] */);
                 break;
             case 1:
-                _stringBuilder.Append("%5b%2a%5d" /* [*] */);
+                _stringBuilder.Append("%5B%2A%5D" /* [*] */);
                 break;
             default:
-                _stringBuilder.Append("%5b" /* [ */);
+                _stringBuilder.Append("%5B" /* [ */);
                 for (int i = 1; i < rank; ++i)
-                    _stringBuilder.Append("%5d" /* , */);
-                _stringBuilder.Append("%5d");
+                    _stringBuilder.Append("%5D" /* , */);
+                _stringBuilder.Append("%5D");
                 break;
         }
     }
@@ -471,7 +472,7 @@ public struct TreeNodeFilterWriter
         if (_hasSlash)
             throw new InvalidOperationException();
 
-        _stringBuilder.Append("%2a" /* * */);
+        _stringBuilder.Append("%2A" /* * */);
     }
 
     public void WriteReferenceSpecifier()

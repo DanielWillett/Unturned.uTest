@@ -1,0 +1,2 @@
+Assemblies will be wiped from this folder occasionally if they're not added by uTest.
+This is done to allow removing assemblies from uTest's dependencies in the future.

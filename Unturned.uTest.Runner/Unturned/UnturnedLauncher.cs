@@ -13,7 +13,6 @@ internal class UnturnedLauncher : IDisposable
 {
     private readonly bool _u3ds;
     private readonly ILogger _logger;
-    private readonly object _sync = new object();
 
     private readonly InstallDirUtility _unturnedInstallDir;
 
@@ -53,13 +52,13 @@ internal class UnturnedLauncher : IDisposable
         Client = new TestEnvironmentClient(logger);
     }
 
-    private void DisableModule(string installDir)
+    private void DisableModule(string installDir, Assembly testAssembly)
     {
         string moduleRoot = Path.Combine(installDir, "Modules", "uTest");
 
-        if (Directory.Exists(moduleRoot))
+        if (!ModuleFiles.DisableModule(moduleRoot, _logger, testAssembly))
         {
-            TryWriteModuleDirectoryOrSetEnabled(installDir, null, enabled: false, disableOnly: true);
+            throw new NotSupportedException("Unable to disable test module.");
         }
     }
 
@@ -68,164 +67,9 @@ internal class UnturnedLauncher : IDisposable
     {
         string moduleRoot = Path.Combine(installDir, "Modules", "uTest");
 
-        Directory.CreateDirectory(moduleRoot);
-        string moduleFile = Path.Combine(moduleRoot, "uTest.module");
-
-        string? json = null;
-
-        Assembly uTestAssembly = typeof(Assert).Assembly;
-
-        string uTestDllLocation;
-        try
+        if (!ModuleFiles.WriteModuleFiles(moduleRoot, _logger, testAssembly))
         {
-            uTestDllLocation = uTestAssembly.Location;
-        }
-        catch (Exception ex)
-        {
-            throw new NotSupportedException("Unable to locate the Unturned.uTest DLL.", ex);
-        }
-        string thisDllLocation;
-        try
-        {
-            thisDllLocation = Assembly.GetExecutingAssembly().Location;
-        }
-        catch (Exception ex)
-        {
-            throw new NotSupportedException("Unable to locate the Unturned.uTest.Runner DLL.", ex);
-        }
-
-        Assembly mtpAssembly = typeof(ITestFramework).Assembly;
-        string mtpDllLocation;
-        try
-        {
-            mtpDllLocation = mtpAssembly.Location;
-        }
-        catch (Exception ex)
-        {
-            throw new NotSupportedException("Unable to locate the Unturned.uTest.Runner DLL.", ex);
-        }
-
-        string? assemblyLocation = null;
-        if (!disableOnly && testAssembly != null)
-        {
-            try
-            {
-                string location = testAssembly.Location;
-                if (!string.IsNullOrEmpty(location))
-                    assemblyLocation = Path.GetFullPath(location);
-            }
-            catch
-            {
-                _logger.LogWarning($"Unable to find location of assembly {testAssembly.FullName}.");
-            }
-        }
-
-        if (string.IsNullOrEmpty(uTestDllLocation) || !File.Exists(uTestDllLocation))
-        {
-            throw new NotSupportedException("Unable to locate the Unturned.uTest DLL.");
-        }
-        if (string.IsNullOrEmpty(thisDllLocation) || !File.Exists(thisDllLocation))
-        {
-            throw new NotSupportedException("Unable to locate the Unturned.uTest.Runner DLL.");
-        }
-
-        using (Stream? stream = uTestAssembly.GetManifestResourceStream("uTest.Module.ModuleConfig.json"))
-        {
-            if (stream != null)
-            {
-                json = new StreamReader(stream).ReadToEnd();
-            }
-        }
-
-        if (json == null)
-        {
-            throw new InvalidProgramException("Unable to find embedded resource for ModuleConfig.json.");
-        }
-
-        if (!disableOnly)
-        {
-            string netstandardDllFile = Path.Combine(moduleRoot, "netstandard.dll");
-            // is .NETStandard 2.X target
-            if (uTestAssembly
-                .GetReferencedAssemblies()
-                .Any(x => x.FullName.StartsWith("netstandard, Version=2.")))
-            {
-                CopyDll("netstandard.dll", moduleRoot, uTestAssembly);
-            }
-            else if (File.Exists(netstandardDllFile))
-            {
-                File.Delete(netstandardDllFile);
-            }
-
-            CopyDll("System.Runtime.CompilerServices.Unsafe.dll", moduleRoot, uTestAssembly);
-            CopyDll("System.Runtime.dll", moduleRoot, uTestAssembly);
-        }
-
-        json = json
-            .Replace("\"$enabled$\"", enabled ? "true" : "false")
-            .Replace("$version$", uTestAssembly.GetName().Version.ToString(4))
-            .Replace("$testAssembly$", assemblyLocation == null ? string.Empty : Path.GetFileName(assemblyLocation));
-
-        lock (_sync)
-        {
-            // write module file and copy this DLL to the module root.
-            try
-            {
-                File.WriteAllText(moduleFile, json);
-                if (disableOnly)
-                    return;
-
-                File.Copy(uTestDllLocation, Path.Combine(moduleRoot, "Unturned.uTest.dll"), true);
-                File.Copy(thisDllLocation, Path.Combine(moduleRoot, "Unturned.uTest.Runner.dll"), true);
-                File.Copy(mtpDllLocation, Path.Combine(moduleRoot, "Microsoft.Testing.Platform.dll"), true);
-                if (assemblyLocation != null)
-                {
-                    string location = assemblyLocation;
-                    assemblyLocation = Path.GetFileName(location);
-                    File.Copy(location, Path.Combine(moduleRoot, assemblyLocation), true);
-                }
-
-                foreach (string file in Directory.EnumerateFiles(moduleRoot, "*.dll", SearchOption.TopDirectoryOnly))
-                {
-                    string fileName = Path.GetFileName(file);
-                    if (string.Equals(fileName, "Unturned.uTest.dll", StringComparison.Ordinal)
-                        || string.Equals(fileName, "Unturned.uTest.Runner.dll", StringComparison.Ordinal)
-                        || string.Equals(fileName, "System.Runtime.CompilerServices.Unsafe.dll", StringComparison.Ordinal)
-                        || string.Equals(fileName, "System.Runtime.dll", StringComparison.Ordinal)
-                        || string.Equals(fileName, "netstandard.dll", StringComparison.Ordinal)
-                        || string.Equals(fileName, "Microsoft.Testing.Platform.dll", StringComparison.Ordinal)
-                        || string.Equals(fileName, assemblyLocation, StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        File.Delete(file);
-                    }
-                    catch (SystemException ex)
-                    {
-                        _logger.LogError("Failed to delete extra test assembly.", ex);
-                    }
-                }
-            }
-            catch (SystemException ex)
-            {
-                throw new Exception($"Unable to create uTest module in Unturned installation at \"{moduleRoot}\".", ex);
-            }
-        }
-
-        return;
-
-        static void CopyDll(string name, string moduleRoot, Assembly uTestAssembly)
-        {
-            string dllFile = Path.Combine(moduleRoot, name);
-            using Stream? stream = uTestAssembly.GetManifestResourceStream("uTest.Module." + name);
-            if (stream != null)
-            {
-                using FileStream fs = new FileStream(dllFile, FileMode.Create, FileAccess.Write, FileShare.Read);
-                stream.CopyTo(fs);
-            }
+            throw new NotSupportedException("Unable to write test module.");
         }
     }
 
@@ -284,7 +128,7 @@ internal class UnturnedLauncher : IDisposable
 
             string settingsFile = GetSettingsFile();
 
-            string launchArgs = $"-batchmode -nogui -uTestSettings \"{settingsFile}\" +lanserver/uTest";
+            string launchArgs = $"-batchmode -nogui -uTestSettings \"{settingsFile}\" -LogAssemblyResolve +lanserver/uTest";
 
             TaskCompletionSource<Process> startupTcs = new TaskCompletionSource<Process>();
             _task = startupTcs;
@@ -401,7 +245,7 @@ internal class UnturnedLauncher : IDisposable
                     _logger.LogInformation("Initial connection established.");
 
                     disabledModule = true;
-                    DisableModule(installDir);
+                    DisableModule(installDir, testAssembly);
 
                     completionSource = new TaskCompletionSource<int>();
 
@@ -452,7 +296,7 @@ internal class UnturnedLauncher : IDisposable
             catch (Exception ex)
             {
                 if (!disabledModule)
-                    DisableModule(installDir);
+                    DisableModule(installDir, testAssembly);
                 try
                 {
                     process?.Kill();
