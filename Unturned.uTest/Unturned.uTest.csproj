@@ -52,14 +52,13 @@
     <UnturnedReference Include="com.rlabrecque.steamworks.net" />
 
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="3.1.0" PrivateAssets="all" />
     <!--<PackageReference Include="DanielWillett.ReflectionTools" Version="*" />-->
 
 		<PackageReference Include="xunit.assert" Version="2.9.3" PrivateAssets="none" />
-    <PackageReference Include="xunit.analyzers" Version="1.24.0">
-	    <PrivateAssets>none</PrivateAssets>
-	    <ExcludeAssets>all</ExcludeAssets>
-    </PackageReference>
+    <PackageReference Include="xunit.analyzers" Version="1.24.0" PrivateAssets="none" ExcludeAssets="all" />
+    <PackageReference Include="Lib.Harmony" Version="[2.3.3,3.0)" PrivateAssets="all" />
 
     <None Include="..\README.md" Pack="true" PackagePath="/" />
 

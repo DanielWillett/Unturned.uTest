@@ -223,6 +223,15 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Patching {0} failed: &apos;{1}&apos;..
+        /// </summary>
+        internal static string LogErrorPatchFailed {
+            get {
+                return ResourceManager.GetString("LogErrorPatchFailed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Exception encountered accessing member referred to by &apos;From&apos; property ({0}) in {1}..
         /// </summary>
         internal static string LogErrorReadingFromMember {
@@ -246,6 +255,24 @@ namespace uTest.Properties {
         internal static string LogErrorUnresolvedTestUids {
             get {
                 return ResourceManager.GetString("LogErrorUnresolvedTestUids", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Loading asset {0}..
+        /// </summary>
+        internal static string LogTraceLoadingAsset {
+            get {
+                return ResourceManager.GetString("LogTraceLoadingAsset", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Skipping asset {0}..
+        /// </summary>
+        internal static string LogTraceSkippingAsset {
+            get {
+                return ResourceManager.GetString("LogTraceSkippingAsset", resourceCulture);
             }
         }
         

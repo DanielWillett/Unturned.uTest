@@ -1,5 +1,6 @@
 namespace uTest.Sandbox;
 
+
 [Test]
 [TypeArgs(typeof(long))]
 [TypeArgs(typeof(int))]
@@ -81,6 +82,7 @@ public class Tests<T> : ITestClass
     }
 
     [Test]
+    //[RequiredAssets(RequiredAssetsAttribute.Source.Core, "Items/**")]
     public void FastTest()
     {
         CommandWindow.Log("Test log from unturned");

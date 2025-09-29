@@ -4,7 +4,7 @@
     <TargetFrameworks>net471;netstandard2.1</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <OutputType>Exe</OutputType>
+	  <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <RootNamespace>uTest.Runner</RootNamespace>
     <LangVersion>13.0</LangVersion>
 
@@ -55,14 +55,18 @@
 
     <ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" />
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport.Abstractions" Version="$(MTPVersion)" PrivateAssets="all" GeneratePathProperty="True" />
-    <PackageReference Include="xunit.assert" Version="2.9.3" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="Lib.Harmony" Version="*" PrivateAssets="all" ExcludeAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.*" PrivateAssets="all" ExcludeAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="xunit.assert" Version="*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
   </ItemGroup>
 
 	<!-- Copy uTest dependencies to Modules folder -->
 	<Target BeforeTargets="BeforeBuild" Name="CopyDepedenciesToModule" Condition="'$(TargetFrameworks)' == '' OR $(TargetFrameworks.EndsWith($(TargetFramework)))">
 		<Copy SourceFiles="
 					$(Pkgxunit_assert)\lib\netstandard1.1\xunit.assert.dll;
-					$(PkgMicrosoft_Testing_Extensions_TrxReport_Abstractions)\lib\netstandard2.0\Microsoft.Testing.Extensions.TrxReport.Abstractions.dll
+					$(PkgMicrosoft_Testing_Extensions_TrxReport_Abstractions)\lib\netstandard2.0\Microsoft.Testing.Extensions.TrxReport.Abstractions.dll;
+					$(PkgLib_Harmony)\lib\net48\0Harmony.dll;
+					$(PkgMicrosoft_Extensions_FileSystemGlobbing)\lib\netstandard2.0\Microsoft.Extensions.FileSystemGlobbing.dll
 					" SkipUnchangedFiles="true" DestinationFolder="./Module" />
 	</Target>
 

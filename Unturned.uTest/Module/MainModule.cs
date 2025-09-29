@@ -1,3 +1,4 @@
+using HarmonyLib;
 using Newtonsoft.Json;
 using SDG.Framework.IO;
 using SDG.Framework.Modules;
@@ -5,7 +6,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
+using uTest.Discovery;
 using uTest.Protocol;
 using Component = UnityEngine.Component;
 
@@ -19,17 +20,30 @@ internal class MainModule : MonoBehaviour, IDisposable
     private const string TestFileCommandLine = "-uTestSettings";
 
     private bool _hasQuit;
+    private Harmony? _harmony;
 
     private bool _nextFrameLevelIsLoaded;
     private bool _hasReceivedRunTests;
     private float _sentLevelLoadedRealtime;
+    private Task? _discoverTestsTask;
+    private CancellationTokenSource? _cancellationTokenSource;
 
     private readonly CommandLineString _clTestFile = new CommandLineString(TestFileCommandLine);
+
+#nullable disable
+    internal static MainModule Instance { get; private set; }
+
+#nullable restore
 
     /// <summary>
     /// If startup ran into an error.
     /// </summary>
     public bool IsFaulted { get; private set; }
+
+    /// <summary>
+    /// A token that will be triggered when this test run is cancelled.
+    /// </summary>
+    public CancellationToken CancellationToken { get; private set; }
 
     /// <summary>
     /// List of all tests to be ran.
@@ -57,11 +71,39 @@ internal class MainModule : MonoBehaviour, IDisposable
     public string HomeDirectory { get; private set; } = null!;
 
     /// <summary>
+    /// Defines which assets are loaded.
+    /// </summary>
+    /// <remarks>If this property is null it means all assets should be loaded.</remarks>
+    public AssetLoadModel? AssetLoadModel
+    {
+        get
+        {
+            if (_discoverTestsTask == null)
+                return field;
+
+            lock (this)
+            {
+                _discoverTestsTask?.Wait();
+                return field;
+            }
+        }
+        private set;
+    }
+
+    /// <summary>
+    /// List of tests to be ran.
+    /// </summary>
+    public UnturnedTestInstance[] Tests { get; private set; } = Array.Empty<UnturnedTestInstance>();
+
+    /// <summary>
     /// Entrypoint for module.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
     internal void Initialize()
     {
+        Instance = this;
+        _cancellationTokenSource = new CancellationTokenSource();
+
         GameThread.Setup();
 
         bool failedToParse = false;
@@ -88,7 +130,7 @@ internal class MainModule : MonoBehaviour, IDisposable
 
         HomeDirectory = Path.GetFullPath(module.config.DirectoryPath);
 
-        TestAssembly = Array.Find(module.assemblies, x => string.Equals(x.FullName, TestList!.TestAssembly));
+        TestAssembly = Array.Find(module.assemblies, x => string.Equals(x.FullName, TestList.TestAssembly));
         if (TestAssembly == null)
         {
             CommandWindow.LogError("Failed to find test assembly.");
@@ -101,9 +143,10 @@ internal class MainModule : MonoBehaviour, IDisposable
         // todo: docs
         string log = $"""
                       Launching uTest v{version} on Unturned v{Provider.APP_VERSION} by DanielWillett (@danielwillett on Discord).
-                      - GitHub           : https://github.com/DanielWillett/Unturned.uTest
-                      - Docs             : 
-                      - Report a problem : https://github.com/DanielWillett/Unturned.uTest/issues
+                      - GitHub            : https://github.com/DanielWillett/Unturned.uTest
+                      - Docs              : 
+                      - Report a problem  : https://github.com/DanielWillett/Unturned.uTest/issues
+                      - Request a feature : https://github.com/DanielWillett/Unturned.uTest/discussions
                       = uTest is licensed under GPL-3.0
                       |  Unturned.uTest  Copyright (C) {DateTime.Now.Year}  Daniel Willett
                       |  This program comes with ABSOLUTELY NO WARRANTY.
@@ -113,6 +156,19 @@ internal class MainModule : MonoBehaviour, IDisposable
                       """;
 
         CommandWindow.Log(log);
+
+        Task t = DiscoverTestsAsync(TestList);
+        if (!t.IsCompleted)
+        {
+            _discoverTestsTask = t;
+        }
+
+        // Patches
+        {
+            _harmony = new Harmony("uTest");
+
+            Patches.SkipAddFoundAssetIfNotRequired.TryPatch(_harmony, Logger);
+        }
 
         Environment = new TestEnvironmentServer(Logger);
         Environment.Disconnected += () =>
@@ -145,8 +201,12 @@ internal class MainModule : MonoBehaviour, IDisposable
                 UnturnedTestExitCode exitCode;
                 try
                 {
-                    exitCode = await runner.RunTestsAsync();
+                    if (_discoverTestsTask != null)
+                        await _discoverTestsTask;
+                    
+                    exitCode = await runner.RunTestsAsync(CancellationToken);
                 }
+                catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
                 catch (Exception ex)
                 {
                     await Logger.LogErrorAsync("Error running tests.", ex);
@@ -157,7 +217,7 @@ internal class MainModule : MonoBehaviour, IDisposable
                     exitCode,
                     exitCode => ForceQuitGame("Test run completed.", exitCode)
                 );
-            });
+            }, CancellationToken);
 
             return true;
         });
@@ -170,6 +230,45 @@ internal class MainModule : MonoBehaviour, IDisposable
             });
             return true;
         });
+    }
+
+    [MemberNotNull(nameof(Tests))]
+    private async Task DiscoverTestsAsync(UnturnedTestList testList)
+    {
+        if (testList.Tests == null || testList.Tests.Count == 0)
+        {
+            Tests = Array.Empty<UnturnedTestInstance>();
+            return;
+        }
+
+        Type listType = Type.GetType(testList.TestListTypeName, throwOnError: true, ignoreCase: false)!;
+
+        ITestRegistrationList list = (ITestRegistrationList)Activator.CreateInstance(listType, TestAssembly);
+
+        ITestFilter? filter = null;
+        if (!testList.IsAllTests)
+        {
+            string[] uids = new string[testList.Tests.Count];
+            for (int i = 0; i < testList.Tests.Count; ++i)
+                uids[i] = testList.Tests[i].Uid;
+
+            filter = new UidListFilter(uids);
+        }
+
+        Logger.LogInformation($"Discovering tests in \"{TestAssembly.GetName().FullName}\" ...");
+
+        List<UnturnedTestInstance> tests = await list.GetMatchingTestsAsync(Logger, filter, CancellationToken).ConfigureAwait(false);
+
+        Logger.LogInformation($"Found {tests.Count} test(s).");
+
+        lock (this)
+        {
+            Tests = tests.ToArray();
+
+            AssetLoadModel = AssetLoadModel.Create(this, true);
+
+            _discoverTestsTask = null;
+        }
     }
 
     private void OnPostLevelLoaded(int level)
@@ -185,9 +284,10 @@ internal class MainModule : MonoBehaviour, IDisposable
     {
         Task.Run(async () =>
         {
-            await Environment.SendAsync(new LevelLoadedMessage());
+            await Environment.SendAsync(new LevelLoadedMessage(), CancellationToken);
             await Logger.LogInformationAsync("Sent level loaded");
-        });
+        }, CancellationToken);
+
         _sentLevelLoadedRealtime = Time.realtimeSinceStartup;
     }
 
@@ -210,8 +310,25 @@ internal class MainModule : MonoBehaviour, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        try
+        {
+            _cancellationTokenSource?.Cancel();
+            _cancellationTokenSource?.Dispose();
+        }
+        catch { /* ignored */ }
+
+        Instance = null;
+
         if (_hasQuit)
             return;
+
+        if (_harmony != null)
+        {
+            Patches.SkipAddFoundAssetIfNotRequired.TryUnpatch(_harmony);
+
+            _harmony.UnpatchAll(_harmony.Id);
+            _harmony = null;
+        }
 
         GameThread.FlushRunAndWaits();
 
@@ -221,6 +338,7 @@ internal class MainModule : MonoBehaviour, IDisposable
         Environment = null!;
     }
 
+    [MemberNotNullWhen(true, nameof(TestList))]
     public bool TryRefreshTestFile(out bool failedToParse)
     {
         failedToParse = false;

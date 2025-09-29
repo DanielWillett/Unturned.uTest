@@ -171,6 +171,9 @@
   <data name="LogErrorParametersMissingValues" xml:space="preserve">
     <value>Not all parameters on test {0} in {1} have value sets or ranges. This could also be caused by a range containing too many elements, as a test can not have more than {2} variations.</value>
   </data>
+  <data name="LogErrorPatchFailed" xml:space="preserve">
+    <value>Patching {0} failed: '{1}'.</value>
+  </data>
   <data name="LogErrorReadingFromMember" xml:space="preserve">
     <value>Exception encountered accessing member referred to by 'From' property ({0}) in {1}.</value>
   </data>
@@ -179,6 +182,12 @@
   </data>
   <data name="LogErrorUnresolvedTestUids" xml:space="preserve">
     <value>{0}/{1} test UID(s) were not able to be linked to test variations.</value>
+  </data>
+  <data name="LogTraceLoadingAsset" xml:space="preserve">
+    <value>Loading asset {0}.</value>
+  </data>
+  <data name="LogTraceSkippingAsset" xml:space="preserve">
+    <value>Skipping asset {0}.</value>
   </data>
   <data name="NotSupportedExceptionNullActor" xml:space="preserve">
     <value>Operations are not supported on the NullActor.</value>

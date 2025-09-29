@@ -1,36 +1,36 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
+	<PropertyGroup>
 
-    <RootNamespace>uTest.Sandbox</RootNamespace>
-    <TargetFrameworks>netstandard2.1;net481</TargetFrameworks>
+		<RootNamespace>uTest.Sandbox</RootNamespace>
+		<TargetFrameworks>netstandard2.1;net481</TargetFrameworks>
 
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
 
-    <LangVersion>preview</LangVersion>
+		<LangVersion>preview</LangVersion>
 
-    <IsUnturnedTestProject>True</IsUnturnedTestProject>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<IsUnturnedTestProject>True</IsUnturnedTestProject>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-  </PropertyGroup>
+	</PropertyGroup>
 
-  <ItemGroup>
+	<ItemGroup>
 
-    <UnturnedReference Include="Assembly-CSharp"/>
+		<UnturnedReference Include="Assembly-CSharp"/>
 
-	  <PackageReference Include="Unturned.MSBuild" Version="1.0.0-test4">
-		  <PrivateAssets>all</PrivateAssets>
-		  <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-	  </PackageReference>
-    <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
-    <ProjectReference Include="../Unturned.uTest.Runner/Unturned.uTest.Runner.csproj" />
-    <ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
+		<PackageReference Include="Unturned.MSBuild" Version="1.0.0-test4">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+		</PackageReference>
+		<ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
+		<ProjectReference Include="../Unturned.uTest.Runner/Unturned.uTest.Runner.csproj" />
+		<ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
 
-    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="$(MTPVersion)" />
+		<PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="$(MTPVersion)" />
 
 	</ItemGroup>
 
-  <Import Project="../Unturned.uTest.Runner/buildMultiTargeting/Unturned.uTest.Runner.props" />
+	<Import Project="../Unturned.uTest.Runner/buildMultiTargeting/Unturned.uTest.Runner.props" />
 
 </Project>

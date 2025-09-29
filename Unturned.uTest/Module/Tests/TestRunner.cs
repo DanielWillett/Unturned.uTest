@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using uTest.Discovery;
@@ -39,39 +40,18 @@ internal class TestRunner
         }
         Directory.CreateDirectory(_testResultsFolder);
 
-        UnturnedTestList? testList = _module.TestList;
-        if (testList == null || testList.Tests == null || testList.Tests.Count == 0)
-            return UnturnedTestExitCode.Success;
-
         bool allPass = true;
 
-        Type listType = Type.GetType(testList.TestListTypeName, throwOnError: true, ignoreCase: false)!;
-
+        UnturnedTestList testList = _module.TestList!;
         TestExecutionPipeline pipeline = new TestExecutionPipeline(this, _logger, testList, token);
 
-        ITestRegistrationList list = (ITestRegistrationList)Activator.CreateInstance(listType, _module.TestAssembly);
+        List<UnturnedTestReference> testUids = testList.Tests.ToList();
 
-        ITestFilter? filter = null;
-        if (!testList.IsAllTests)
+        foreach (UnturnedTestInstance test in _module.Tests)
         {
-            string[] uids = new string[testList.Tests.Count];
-            for (int i = 0; i < testList.Tests.Count; ++i)
-                uids[i] = testList.Tests[i].Uid;
-
-            filter = new UidListFilter(uids);
-        }
-
-        _logger.LogInformation($"Discovering tests in \"{_module.TestAssembly.GetName().FullName}\" ...");
-
-        List<UnturnedTestInstance> tests = await list.GetMatchingTestsAsync(_logger, filter, token).ConfigureAwait(false);
-
-        _logger.LogInformation($"Found {tests.Count} test(s).");
-
-        foreach (UnturnedTestInstance test in tests)
-        {
-            int testIndex = testList.Tests.FindIndex(x => string.Equals(x.Uid, test.Uid, StringComparison.Ordinal));
+            int testIndex = testUids.FindIndex(x => string.Equals(x.Uid, test.Uid, StringComparison.Ordinal));
             if (testIndex >= 0)
-                testList.Tests.RemoveAt(testIndex);
+                testUids.RemoveAt(testIndex);
 
             await ReportTestResult(testList, test.Uid, TestResult.InProgress);
 
@@ -92,11 +72,14 @@ internal class TestRunner
             _logger.LogInformation($"Test result: {execution.Result}");
             _logger.LogInformation("================================");
             _logger.LogInformation(string.Empty);
+
+            if (execution.Result != TestResult.Pass)
+                allPass = false;
         }
 
-        if (testList.Tests.Count > 0)
+        if (testUids.Count > 0)
         {
-            foreach (UnturnedTestReference testRef in testList.Tests)
+            foreach (UnturnedTestReference testRef in testUids)
             {
                 await ReportTestResult(testList, testRef.Uid, TestResult.Skipped);
             }
