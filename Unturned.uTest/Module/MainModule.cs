@@ -7,6 +7,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using uTest.Discovery;
+using uTest.Dummies;
 using uTest.Protocol;
 using Component = UnityEngine.Component;
 
@@ -21,6 +22,7 @@ internal class MainModule : MonoBehaviour, IDisposable
 
     private bool _hasQuit;
     private Harmony? _harmony;
+    private List<Func<Harmony, bool>> _unpatches = null!;
 
     private bool _nextFrameLevelIsLoaded;
     private bool _hasReceivedRunTests;
@@ -58,7 +60,7 @@ internal class MainModule : MonoBehaviour, IDisposable
     /// <summary>
     /// The Unturned logger.
     /// </summary>
-    public ILogger Logger => CommandWindowLogger.Instance;
+    public ILogger Logger => DefaultLogger.Logger;
 
     /// <summary>
     /// The assembly that contains the running tests.
@@ -69,6 +71,11 @@ internal class MainModule : MonoBehaviour, IDisposable
     /// The directory this module is stored in.
     /// </summary>
     public string HomeDirectory { get; private set; } = null!;
+
+    /// <summary>
+    /// Manages dummies for tests run on a server.
+    /// </summary>
+    public DummyManager Dummies { get; private set; } = null!;
 
     /// <summary>
     /// Defines which assets are loaded.
@@ -163,11 +170,15 @@ internal class MainModule : MonoBehaviour, IDisposable
             _discoverTestsTask = t;
         }
 
+        Dummies = new DummyManager();
+
         // Patches
         {
-            _harmony = new Harmony("uTest");
+            _harmony = new Harmony("DanielWillett.uTest");
+            _unpatches = new List<Func<Harmony, bool>>(8);
 
-            Patches.SkipAddFoundAssetIfNotRequired.TryPatch(_harmony, Logger);
+            RegisterPatch(Patches.SkipAddFoundAssetIfNotRequired.TryPatch, Patches.SkipAddFoundAssetIfNotRequired.TryUnpatch);
+            RegisterPatch(Patches.ListenServerAddDummies.TryPatch, Patches.ListenServerAddDummies.TryUnpatch);
         }
 
         Environment = new TestEnvironmentServer(Logger);
@@ -201,8 +212,9 @@ internal class MainModule : MonoBehaviour, IDisposable
                 UnturnedTestExitCode exitCode;
                 try
                 {
-                    if (_discoverTestsTask != null)
-                        await _discoverTestsTask;
+                    Task? t = _discoverTestsTask;
+                    if (t != null)
+                        await t;
                     
                     exitCode = await runner.RunTestsAsync(CancellationToken);
                 }
@@ -230,6 +242,12 @@ internal class MainModule : MonoBehaviour, IDisposable
             });
             return true;
         });
+    }
+
+    private void RegisterPatch(Func<Harmony, ILogger, bool> tryPatch, Func<Harmony, bool> tryUnpatch)
+    {
+        if (tryPatch(_harmony!, Logger))
+            _unpatches.Add(tryUnpatch);
     }
 
     [MemberNotNull(nameof(Tests))]
@@ -260,6 +278,8 @@ internal class MainModule : MonoBehaviour, IDisposable
         List<UnturnedTestInstance> tests = await list.GetMatchingTestsAsync(Logger, filter, CancellationToken).ConfigureAwait(false);
 
         Logger.LogInformation($"Found {tests.Count} test(s).");
+
+        await Dummies.StartDummiesForTestsAsync(Tests);
 
         lock (this)
         {
@@ -299,12 +319,12 @@ internal class MainModule : MonoBehaviour, IDisposable
             OnLevelLoaded();
         }
 
+        GameThread.RunContinuations();
+
         if (!_hasReceivedRunTests && _sentLevelLoadedRealtime - Time.realtimeSinceStartup > 2)
         {
             ForceQuitGame("Timed out waiting for RunTests message from runner.", UnturnedTestExitCode.StartupFailure);
         }
-
-        GameThread.RunContinuations();
     }
 
     /// <inheritdoc />
@@ -324,7 +344,8 @@ internal class MainModule : MonoBehaviour, IDisposable
 
         if (_harmony != null)
         {
-            Patches.SkipAddFoundAssetIfNotRequired.TryUnpatch(_harmony);
+            foreach (Func<Harmony, bool> unpatch in _unpatches)
+                unpatch(_harmony);
 
             _harmony.UnpatchAll(_harmony.Id);
             _harmony = null;

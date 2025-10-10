@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net471</TargetFramework>
+    <Nullable>enable</Nullable>
+		<LangVersion>preview</LangVersion>
+		<RootNamespace>uTest.Dummies.Host</RootNamespace>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<Using Include="System.ComponentModel" />
+		<Using Include="System.Diagnostics.CodeAnalysis" />
+		<Using Include="uTest.Logging.ILogger" Alias="ILogger" />
+		<Using Include="uTest.Logging" />
+	</ItemGroup>
+
+	<ItemGroup>
+
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease22,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
+    <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" Aliases="JBA" />
+
+    <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj"/>
+
+    <PackageReference Include="Unturned.MSBuild" Version="1.0.0-test4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+
+    <PackageReference Include="Lib.Harmony" Version="[2.3.3,3.0)" PrivateAssets="all" />
+
+	</ItemGroup>
+
+	<ItemGroup>
+
+		<UnturnedReference Include="Assembly-CSharp" />
+		<UnturnedReference Include="UnityEngine" />
+		<UnturnedReference Include="UnityEngine.CoreModule" />
+
+	</ItemGroup>
+
+</Project>

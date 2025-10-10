@@ -6,3 +6,4 @@ using System.Runtime.InteropServices;
 
 [assembly: InternalsVisibleTo("Unturned.uTest.Tests")]
 [assembly: InternalsVisibleTo("Unturned.uTest.Runner")]
+[assembly: InternalsVisibleTo("Unturned.uTest.DummyPlayerHost")]

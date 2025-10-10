@@ -12,7 +12,7 @@ public class Tests3 : ITestClass, ITestClassSetup, ITestClassTearDown
     }
 
     /// <inheritdoc />
-    public async ValueTask SetupAsync(ITestContext textContext, CancellationToken token)
+    public async ValueTask SetupAsync(ITestContext testContext, CancellationToken token)
     {
         Assert.False(_setupRan1);
         _setupRan1 = true;

@@ -1,5 +1,7 @@
-using JetBrains.Annotations;
+extern alias JBA;
+using JBA::JetBrains.Annotations;
 using System;
+using System.Text;
 
 namespace uTest;
 
@@ -8,6 +10,8 @@ namespace uTest;
 /// </summary>
 public readonly struct ActorMask : IEquatable<ActorMask>
 {
+    private static string[]? _masks;
+
     /// <summary>
     /// All layers are enabled.
     /// </summary>
@@ -46,14 +50,101 @@ public readonly struct ActorMask : IEquatable<ActorMask>
     [ValueProvider("SDG.Unturned.RayMasks")]
     public int RayMask { get; }
 
+    /// <summary>
+    /// Create an <see cref="ActorMask"/> from a ray mask.
+    /// </summary>
     public ActorMask([ValueProvider("SDG.Unturned.RayMasks")] int rayMask)
     {
         RayMask = rayMask;
     }
 
+    /// <summary>
+    /// Create an <see cref="ActorMask"/> from a ray mask.
+    /// </summary>
     public ActorMask(ERayMask rayMask)
     {
         RayMask = (int)rayMask;
+    }
+
+    /// <summary>
+    /// Create an <see cref="ActorMask"/> from a single layer.
+    /// </summary>
+    public ActorMask(ELayerMask layer)
+    {
+        RayMask = 1 << (int)layer;
+    }
+
+    /// <summary>
+    /// Check if the mask includes <paramref name="layer"/>.
+    /// </summary>
+    public bool Includes(ELayerMask layer)
+    {
+        return (RayMask & (1 << (int)layer)) != 0;
+    }
+
+    /// <summary>
+    /// Check if the mask excludes <paramref name="layer"/>.
+    /// </summary>
+    public bool Excludes(ELayerMask layer)
+    {
+        return (RayMask & (1 << (int)layer)) == 0;
+    }
+
+    /// <summary>
+    /// Check if the mask includes all layers in <paramref name="mask"/>.
+    /// </summary>
+    public bool Includes(int mask)
+    {
+        return (RayMask & mask) == mask;
+    }
+
+    /// <summary>
+    /// Check if the mask excludes any layers in <paramref name="mask"/>.
+    /// </summary>
+    public bool Excludes(int mask)
+    {
+        return (RayMask & mask) != mask;
+    }
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        if (this == All)
+            return "*";
+
+        if (this == None)
+            return "NONE";
+
+        if (_masks == null)
+            FillMasks();
+
+        StringBuilder sb = StringBuilderPool.Rent();
+        int mask = RayMask;
+        for (int i = 0; i < 32; ++i)
+        {
+            int m = 1 << i;
+            if ((mask & m) == 0)
+                continue;
+            if (sb.Length != 0)
+                sb.Append(" | ");
+            sb.Append(_masks[i]);
+        }
+
+        string str = sb.ToString();
+        StringBuilderPool.Return(sb);
+        return str;
+    }
+
+    [MemberNotNull(nameof(_masks))]
+    private static void FillMasks()
+    {
+        string[] array = new string[32];
+        for (int i = 0; i < 32; ++i)
+        {
+            array[i] = ((ELayerMask)i).ToString();
+        }
+
+        _masks = array;
     }
 
     public static ActorMask Build(Action<IActorMaskBuilder> maskBuilder)
@@ -136,6 +227,13 @@ public readonly struct ActorMask : IEquatable<ActorMask>
         }
 
         /// <inheritdoc />
+        public IActorMaskBuilder Add(ELayerMask layer)
+        {
+            _value |= 1 << (int)layer;
+            return this;
+        }
+
+        /// <inheritdoc />
         public IActorMaskBuilder Remove([ValueProvider("SDG.Unturned.RayMasks")] int rayMask)
         {
             _value &= ~rayMask;
@@ -146,6 +244,13 @@ public readonly struct ActorMask : IEquatable<ActorMask>
         public IActorMaskBuilder Remove(ERayMask rayMask)
         {
             _value &= ~(int)rayMask;
+            return this;
+        }
+
+        /// <inheritdoc />
+        public IActorMaskBuilder Remove(ELayerMask layer)
+        {
+            _value &= ~(1 << (int)layer);
             return this;
         }
     }
@@ -196,8 +301,10 @@ public interface IActorMaskBuilder
     ActorMask Mask { get; }
     IActorMaskBuilder Add([ValueProvider("SDG.Unturned.RayMasks")] int rayMask);
     IActorMaskBuilder Add(ERayMask rayMask);
+    IActorMaskBuilder Add(ELayerMask layer);
     IActorMaskBuilder Remove([ValueProvider("SDG.Unturned.RayMasks")] int rayMask);
     IActorMaskBuilder Remove(ERayMask rayMask);
+    IActorMaskBuilder Remove(ELayerMask layer);
 }
 
 public static class ActorMaskBuilderExtensions

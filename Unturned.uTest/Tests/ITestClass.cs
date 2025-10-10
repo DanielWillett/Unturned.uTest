@@ -13,7 +13,7 @@ public interface ITestClassSetup : ITestClass
     /// <summary>
     /// Allows a test class to define a setup procedure which is shared for all test methods in this class.
     /// </summary>
-    ValueTask SetupAsync(ITestContext textContext, CancellationToken token);
+    ValueTask SetupAsync(ITestContext testContext, CancellationToken token);
 }
 
 /// <summary>

@@ -2,9 +2,8 @@
 using System;
 using System.IO;
 using System.Reflection;
-using uTest.Module;
 
-namespace uTest.Patches;
+namespace uTest.Dummies.Host.Patches;
 
 /// <summary>
 /// Patches "SDG.Unturned.AssetsWorker.WorkerThreadState.AddFoundAsset" to skip assets that aren't supposed to be loaded.
@@ -80,7 +79,7 @@ internal static class SkipAddFoundAssetIfNotRequired
         if (!File.Exists(filePath))
             return false;
 
-        MainModule mainModule = MainModule.Instance;
+        DummyPlayerHost mainModule = DummyPlayerHost.Instance;
         if (mainModule == null)
             return true;
 

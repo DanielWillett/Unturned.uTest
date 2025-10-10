@@ -25,6 +25,7 @@
     <NoWarn>CS1591;CS1573</NoWarn>
 
     <DefineConstants>$(DefineConstants);JETBRAINS_ANNOTATIONS</DefineConstants>
+	  <PublicizerClearCacheOnClean>true</PublicizerClearCacheOnClean>
 
   </PropertyGroup> 
 
@@ -50,6 +51,13 @@
     <UnturnedReference Include="UnityEngine.CoreModule" />
     <UnturnedReference Include="UnityEngine.PhysicsModule" />
     <UnturnedReference Include="com.rlabrecque.steamworks.net" />
+    <UnturnedReference Include="SDG.NetTransport" />
+    <UnturnedReference Include="SystemEx" />
+
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease22,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
+    <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" Aliases="JBA" />
 
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" PrivateAssets="all" />
@@ -60,9 +68,22 @@
     <PackageReference Include="xunit.analyzers" Version="1.24.0" PrivateAssets="none" ExcludeAssets="all" />
     <PackageReference Include="Lib.Harmony" Version="[2.3.3,3.0)" PrivateAssets="all" />
 
+    <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
+	    <PrivateAssets>all</PrivateAssets>
+	    <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+
     <None Include="..\README.md" Pack="true" PackagePath="/" />
 
   </ItemGroup>
+
+	<ItemGroup>
+
+		<Publicize Include="Assembly-CSharp:SDG.Unturned.ServerMessageHandler_GetWorkshopFiles" />
+		<Publicize Include="Assembly-CSharp:SDG.Unturned.NetMessages" />
+		<Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.buffer" />
+
+	</ItemGroup>
 
   <!-- net471 -->
   <ItemGroup Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETFramework'">

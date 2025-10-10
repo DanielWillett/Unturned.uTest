@@ -171,7 +171,7 @@ internal class RaycastResult<THitInfo> : RaycastResult, IRaycastResult<THitInfo>
                     SteamPlayer = player.channel.owner,
                     Limb = DamageTool.getLimb(t)
                 });
-                Actor = new PlayerActor(player);
+                Actor = PlayerActor.Create(player);
                 RootTransform = player.transform;
             }
         }

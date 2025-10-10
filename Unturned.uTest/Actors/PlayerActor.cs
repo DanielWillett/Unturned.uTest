@@ -1,8 +1,10 @@
 using System;
+using uTest.Dummies;
+using uTest.Module;
 
 namespace uTest;
 
-internal class PlayerActor : ITestPlayer
+public class PlayerActor : ITestPlayer
 {
     internal const float ReachDistance = 4;
 
@@ -14,7 +16,17 @@ internal class PlayerActor : ITestPlayer
     public ITestPlayerLook Look { get; }
     public ITestPlayerInventory Inventory { get; }
 
-    public PlayerActor(Player player)
+    public static PlayerActor Create(Player player)
+    {
+        if (MainModule.Instance.Dummies.TryGetDummy(player, out DummyPlayerActor? dummy))
+        {
+            return dummy;
+        }
+
+        return new PlayerActor(player);
+    }
+
+    private protected PlayerActor(Player player)
     {
         _player = player;
         _steam64 = _player.channel.owner.playerID.steamID;

@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.FileSystemGlobbing;
 using System;
-using System.Globalization;
 using System.IO;
 using System.Reflection;
 using uTest.Discovery;
@@ -10,7 +9,7 @@ namespace uTest;
 
 internal class AssetLoadModel
 {
-    private record struct IdEntry(ushort Id, EAssetType Type);
+    internal record struct IdEntry(ushort Id, EAssetType Type);
 
     private readonly HashSet<Guid>? _guidsToLoad;
     private readonly HashSet<IdEntry>? _idsToLoad;
@@ -21,7 +20,7 @@ internal class AssetLoadModel
     private readonly string _sandboxPath;
     private readonly string _mapsPath;
 
-    private AssetLoadModel()
+    internal AssetLoadModel()
     {
         _requiresAll = true;
         _corePath = Path.Combine(UnturnedPaths.RootDirectory.FullName, "Bundles");
@@ -29,7 +28,7 @@ internal class AssetLoadModel
         _mapsPath = Path.Combine(UnturnedPaths.RootDirectory.FullName, "Maps");
     }
 
-    private AssetLoadModel(HashSet<Guid> guidsToLoad, HashSet<IdEntry> idsToLoad, FileGlobPattern[] fileGlobs) : this()
+    internal AssetLoadModel(HashSet<Guid> guidsToLoad, HashSet<IdEntry> idsToLoad, FileGlobPattern[] fileGlobs) : this()
     {
         _requiresAll = false; // overrides other ctor, dont remove
         _guidsToLoad = guidsToLoad;
@@ -158,15 +157,7 @@ internal class AssetLoadModel
         // note: may not be on main thread
         UnturnedTestInstance[] tests = module.Tests;
 
-#if NET472_OR_GREATER || NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_0_OR_GREATER
-        HashSet<Assembly> asmCache = new HashSet<Assembly>(1);
-        HashSet<System.Reflection.Module> moduleCache = new HashSet<System.Reflection.Module>(1);
-        HashSet<Type> typeCache = new HashSet<Type>(tests.Length / 10 + 4);
-#else
-        HashSet<Assembly> asmCache = new HashSet<Assembly>();
-        HashSet<System.Reflection.Module> moduleCache = new HashSet<System.Reflection.Module>();
-        HashSet<Type> typeCache = new HashSet<Type>();
-#endif
+        List<IRequiredAssetContributorAttribute> tempAttributeList = new List<IRequiredAssetContributorAttribute>(16);
 
         for (int i = 0; i < tests.Length && !hasAny; ++i)
         {
@@ -174,41 +165,9 @@ internal class AssetLoadModel
 
             MethodInfo method = inst.Method;
 
-            System.Reflection.Module reflModule = method.Module;
-
-            Assembly asm = reflModule.Assembly;
-
-            IRequiredAssetContributorAttribute[] tempAttributes;
-
-            if (asmCache.Add(asm))
-            {
-                IRequiredAssetContributorAttribute[] attributes
-                    = (IRequiredAssetContributorAttribute[])asm.GetCustomAttributes(typeof(IRequiredAssetContributorAttribute), true);
-
-                hasAny |= CheckAttributes(attributes, patterns, guids, ids);
-            }
-
-            if (moduleCache.Add(reflModule))
-            {
-                IRequiredAssetContributorAttribute[] attributes
-                    = (IRequiredAssetContributorAttribute[])reflModule.GetCustomAttributes(typeof(IRequiredAssetContributorAttribute), true);
-
-                hasAny |= CheckAttributes(attributes, patterns, guids, ids);
-            }
-
-            Type? type = method.DeclaringType;
-            if (type != null && typeCache.Add(type))
-            {
-                IRequiredAssetContributorAttribute[] attributes
-                    = (IRequiredAssetContributorAttribute[])type.GetCustomAttributes(typeof(IRequiredAssetContributorAttribute), true);
-
-                hasAny |= CheckAttributes(attributes, patterns, guids, ids);
-            }
-
-            IRequiredAssetContributorAttribute[] methodAttributes =
-                (IRequiredAssetContributorAttribute[])method.GetCustomAttributes(typeof(IRequiredAssetContributorAttribute), true);
-
-            hasAny |= CheckAttributes(methodAttributes, patterns, guids, ids);
+            TestAttributeHelper<IRequiredAssetContributorAttribute>.GetAttributes(method, tempAttributeList, inherit: true);
+            hasAny |= CheckAttributes(tempAttributeList, patterns, guids, ids);
+            tempAttributeList.Clear();
         }
 
         if (includeDefaultAssets)
@@ -218,7 +177,7 @@ internal class AssetLoadModel
 
         return hasAny ? new AssetLoadModel() : new AssetLoadModel(guids, ids, patterns.ToArray());
 
-        static bool CheckAttributes(IRequiredAssetContributorAttribute[] attributes, List<FileGlobPattern> patterns, HashSet<Guid> guids, HashSet<IdEntry> ids)
+        static bool CheckAttributes(List<IRequiredAssetContributorAttribute> attributes, List<FileGlobPattern> patterns, HashSet<Guid> guids, HashSet<IdEntry> ids)
         {
             foreach (IRequiredAssetContributorAttribute attribute in attributes)
             {
@@ -288,7 +247,7 @@ internal class AssetLoadModel
         }
     }
 
-    private class FileGlobPattern
+    internal class FileGlobPattern
     {
         public readonly Matcher Matcher;
         public readonly string? MapName;

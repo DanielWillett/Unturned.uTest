@@ -52,8 +52,8 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
-
     <ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" />
+    
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport.Abstractions" Version="$(MTPVersion)" PrivateAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="Lib.Harmony" Version="*" PrivateAssets="all" ExcludeAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.*" PrivateAssets="all" ExcludeAssets="all" GeneratePathProperty="True" />

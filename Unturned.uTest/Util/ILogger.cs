@@ -2,6 +2,7 @@ using System;
 using System.Text;
 
 #pragma warning disable IDE0130
+// ReSharper disable once CheckNamespace
 
 namespace uTest.Logging;
 
@@ -23,6 +24,20 @@ public enum LogLevel
     Error = 4,
     Critical = 5,
     None = 6,
+}
+
+public static class DefaultLogger
+{
+    public static ILogger Logger { get; }
+
+    static DefaultLogger()
+    {
+        // client doesn't need to log to the command window
+        if (Dedicator.isStandaloneDedicatedServer)
+            Logger = CommandWindowLogger.Instance;
+        else
+            Logger = UnturnedLogLogger.Instance;
+    }
 }
 
 public sealed class ConsoleLogger : ILogger
@@ -107,7 +122,7 @@ public static class LoggingExtensions
         => logger.LogAsync(LogLevel.Error, message, ex, Formatter);
 
     public static Task LogErrorAsync(this ILogger logger, Exception ex)
-        => logger.LogAsync(LogLevel.Error, ex.ToString(), null, Formatter);
+        => logger.LogAsync(LogLevel.Error, string.Empty, ex, Formatter);
 
     public static Task LogCriticalAsync(this ILogger logger, string message)
         => logger.LogAsync(LogLevel.Critical, message, null, Formatter);
@@ -131,7 +146,7 @@ public static class LoggingExtensions
         => logger.Log(LogLevel.Error, message, ex, Formatter);
 
     public static void LogError(this ILogger logger, Exception ex)
-        => logger.Log(LogLevel.Error, ex.ToString(), null, Formatter);
+        => logger.Log(LogLevel.Error, string.Empty, ex, Formatter);
 
     public static void LogCritical(this ILogger logger, string message)
         => logger.Log(LogLevel.Critical, message, null, Formatter);
@@ -197,6 +212,109 @@ public sealed class CommandWindowLogger : ILogger
             LogLevel.Warning                    => GameThread.RunAndWaitAsync<object>(message, CommandWindow.LogWarning),
             LogLevel.Error or LogLevel.Critical => GameThread.RunAndWaitAsync<object>(message, CommandWindow.LogError),
             _                                   => GameThread.RunAndWaitAsync<object>(message, CommandWindow.Log)
+        };
+    }
+
+    /// <inheritdoc />
+    public Task LogAsync<TState>(LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        string message = formatter(state, null);
+        if (exception == null)
+        {
+            return WriteAsync(message, logLevel);
+        }
+
+        StringBuilder sb = StringBuilderPool.Rent();
+
+        sb.Append(message).Append(System.Environment.NewLine).Append(exception);
+        Task t = WriteAsync(sb.ToString(), logLevel);
+
+        StringBuilderPool.Return(sb);
+        return t;
+    }
+
+    /// <inheritdoc />
+    public void Log<TState>(LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        string message = formatter(state, null);
+        if (exception == null)
+        {
+            Write(message, logLevel);
+            return;
+        }
+
+        StringBuilder sb = StringBuilderPool.Rent();
+
+        sb.Append(message).Append(System.Environment.NewLine).Append(exception);
+        Write(sb.ToString(), logLevel);
+
+        StringBuilderPool.Return(sb);
+    }
+
+    /// <inheritdoc />
+    public bool IsEnabled(LogLevel logLevel) => true;
+}
+
+public sealed class UnturnedLogLogger : ILogger
+{
+    public static readonly UnturnedLogLogger Instance = new UnturnedLogLogger();
+
+    private UnturnedLogLogger() { }
+    static UnturnedLogLogger() { }
+
+    private static void Write(string message, LogLevel severity)
+    {
+        switch (severity)
+        {
+            default:
+                if (GameThread.IsCurrent)
+                {
+                    UnturnedLog.info(message);
+                }
+                else
+                {
+                    GameThread.Run(message, UnturnedLog.info);
+                }
+                break;
+
+            case LogLevel.Warning:
+                if (GameThread.IsCurrent)
+                {
+                    UnturnedLog.warn(message);
+                }
+                else
+                {
+                    GameThread.Run(message, UnturnedLog.warn);
+                }
+                break;
+
+            case LogLevel.Error:
+            case LogLevel.Critical:
+                if (GameThread.IsCurrent)
+                {
+                    UnturnedLog.error(message);
+                }
+                else
+                {
+                    GameThread.Run(message, UnturnedLog.error);
+                }
+                break;
+        }
+    }
+
+    private static Task WriteAsync(string message, LogLevel severity)
+    {
+        if (GameThread.IsCurrent)
+        {
+            Write(message, severity);
+            return Task.CompletedTask;
+        }
+
+        return severity switch
+        {
+            LogLevel.Warning                    => GameThread.RunAndWaitAsync(message, UnturnedLog.warn),
+            LogLevel.Error or LogLevel.Critical => GameThread.RunAndWaitAsync(message, UnturnedLog.error),
+            _                                   => GameThread.RunAndWaitAsync(message, UnturnedLog.info)
         };
     }
 
