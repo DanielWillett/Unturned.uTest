@@ -189,7 +189,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
             List<Task> runningPublishTasks = new List<Task>();
 
-            JsonSerializer serializer = new JsonSerializer();
+            JsonSerializer serializer = JsonSerializer.CreateDefault();
 
             using IDisposable resultHandler = _launcher.Client.AddMessageHandler<ReportTestResultMessage>(result =>
             {

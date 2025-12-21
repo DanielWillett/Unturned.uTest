@@ -10,7 +10,7 @@
 
 
     <!-- Update build file as well -->
-    <MTPVersion>2.0.0-preview.25415.9</MTPVersion>
+    <MTPVersion>2.0.1</MTPVersion>
 
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 
@@ -48,26 +48,33 @@
     <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.14.0" />
     <PackageReference Include="Microsoft.Testing.Platform" Version="$(MTPVersion)" />
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" Version="$(MTPVersion)" />
-    <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
     <ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../Unturned.uTest.DummyPlayerHost/Unturned.uTest.DummyPlayerHost.csproj" ReferenceOutputAssembly="false" NoWarn="NU1702" />
     
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport.Abstractions" Version="$(MTPVersion)" PrivateAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="Lib.Harmony" Version="*" PrivateAssets="all" ExcludeAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.*" PrivateAssets="all" ExcludeAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="xunit.assert" Version="*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease23, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
   </ItemGroup>
 
 	<!-- Copy uTest dependencies to Modules folder -->
 	<Target BeforeTargets="BeforeBuild" Name="CopyDepedenciesToModule" Condition="'$(TargetFrameworks)' == '' OR $(TargetFrameworks.EndsWith($(TargetFramework)))">
 		<Copy SourceFiles="
-					$(Pkgxunit_assert)\lib\netstandard1.1\xunit.assert.dll;
-					$(PkgMicrosoft_Testing_Extensions_TrxReport_Abstractions)\lib\netstandard2.0\Microsoft.Testing.Extensions.TrxReport.Abstractions.dll;
-					$(PkgLib_Harmony)\lib\net48\0Harmony.dll;
-					$(PkgMicrosoft_Extensions_FileSystemGlobbing)\lib\netstandard2.0\Microsoft.Extensions.FileSystemGlobbing.dll
-					" SkipUnchangedFiles="true" DestinationFolder="./Module" />
+          $(Pkgxunit_assert)\lib\netstandard1.1\xunit.assert.dll;
+          $(PkgDanielWillett_ModularRpcs_NamedPipes)\lib\netstandard2.1\ModularRpcs.NamedPipes.dll;
+          $(PkgDanielWillett_ModularRpcs_Unity)\lib\netstandard2.1\ModularRpcs.Unity.dll;
+          $(PkgDanielWillett_ModularRpcs)\lib\netstandard2.1\ModularRpcs.dll;
+          $(PkgMicrosoft_Testing_Extensions_TrxReport_Abstractions)\lib\netstandard2.0\Microsoft.Testing.Extensions.TrxReport.Abstractions.dll;
+          $(PkgLib_Harmony)\lib\net48\0Harmony.dll;
+          $(PkgMicrosoft_Extensions_FileSystemGlobbing)\lib\netstandard2.0\Microsoft.Extensions.FileSystemGlobbing.dll
+        "
+        SkipUnchangedFiles="true" DestinationFolder="./Module" />
 	</Target>
 
 
@@ -95,6 +102,7 @@
 
   <ItemGroup>
 	  <EmbeddedResource Include="Module\**" />
+    <EmbeddedResource Include="..\Unturned.uTest.DummyPlayerHost\bin\$(Configuration)\net471\Unturned.uTest.DummyPlayerHost.dll" Link="Module/Unturned.uTest.DummyPlayerHost.dll" />
   </ItemGroup>
 
   <ItemGroup>

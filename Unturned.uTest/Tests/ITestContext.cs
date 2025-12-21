@@ -1,13 +1,14 @@
 using System;
-using System.IO;
 using System.Reflection;
+using JetBrains.Annotations;
 
 namespace uTest;
 
 /// <summary>
 /// Contains context about the current test being ran.
 /// </summary>
-public interface ITestContext
+/// <remarks>Base interface of <see cref="ITestContext"/> with reduced options available in <see cref="ITestContext.ConfigureAsync"/>.</remarks>
+public interface IUnconfiguredTestContext
 {
     /// <summary>
     /// The type that contains the tests being ran.
@@ -22,7 +23,7 @@ public interface ITestContext
     /// <summary>
     /// Unique ID referring to the test method being ran.
     /// </summary>
-    string TestId { get; }
+    UnturnedTestUid TestId { get; }
 
     /// <summary>
     /// The object used to run the tests.
@@ -46,6 +47,18 @@ public interface ITestContext
     /// <param name="displayName">The display name of the file. Defaults to the file's name.</param>
     /// <param name="description">A description of this file's meaning.</param>
     void AddArtifact(string filePath, string? displayName = null, string? description = null);
+}
+
+/// <summary>
+/// Contains context about the current test being ran.
+/// </summary>
+public interface ITestContext : IUnconfiguredTestContext
+{
+    /// <summary>
+    /// Configure the testing environment for this test.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Test has already started.</exception>
+    ValueTask ConfigureAsync([InstantHandle] Action<ITestConfigurationBuilder> configure);
 
     /// <summary>
     /// Simulates the console user typing into the server's terminal.
@@ -89,10 +102,19 @@ public interface ITestContext
     void MarkFailure();
 
     /// <summary>
-    /// Configure the testing environment for this test.
+    /// Notifies all allocated players that it's time to join the server and waits for them to fully spawn in and initialize.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Test has already started.</exception>
-    ValueTask ConfigureAsync(Action<ITestConfigurationBuilder> configure);
+    /// <remarks>If no players are configured this method will do nothing.</remarks>
+    ValueTask SpawnAllPlayersAsync();
+
+    /// <summary>
+    /// Notifies the given players that it's time to join the server and waits for them to fully spawn in and initialize.
+    /// </summary>
+    /// <remarks>If <paramref name="players"/> is empty this method will do nothing.</remarks>
+    /// <param name="players">The players to spawn. Duplicates are ignored.</param>
+    /// <exception cref="ArgumentNullException"/>
+    /// <exception cref="ActorDestroyedException">One or more elements in <paramref name="players"/> no longer exists.</exception>
+    ValueTask SpawnPlayersAsync(params IServersideTestPlayer[] players);
 }
 
 /// <summary>

@@ -17,7 +17,7 @@ public class TestEnvironmentClient : TestEnvironmentBaseHost<NamedPipeClientStre
     {
         return new NamedPipeClientStream(
             ".",
-            PipeName,
+            RunnerPipeName,
             PipeDirection.InOut,
             PipeOptions.Asynchronous,
             TokenImpersonationLevel.None

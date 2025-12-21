@@ -17,7 +17,7 @@ internal class TestEnvironmentServer : TestEnvironmentBaseHost<NamedPipeServerSt
     protected override NamedPipeServerStream CreateNewStream()
     {
         return new NamedPipeServerStream(
-            PipeName,
+            RunnerPipeName,
             PipeDirection.InOut,
             NamedPipeServerStream.MaxAllowedServerInstances,
             PipeTransmissionMode.Byte,

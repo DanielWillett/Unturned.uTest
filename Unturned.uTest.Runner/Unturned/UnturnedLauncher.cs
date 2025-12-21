@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using Microsoft.Testing.Platform.Extensions.TestFramework;
 using uTest.Logging;
 using uTest.Module;
 using uTest.Protocol;
@@ -63,7 +62,7 @@ internal class UnturnedLauncher : IDisposable
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private void TryWriteModuleDirectoryOrSetEnabled(string installDir, Assembly? testAssembly, bool enabled = false, bool disableOnly = false)
+    private void TryWriteModuleDirectoryOrSetEnabled(string installDir, Assembly? testAssembly)
     {
         string moduleRoot = Path.Combine(installDir, "Modules", "uTest");
 
@@ -117,18 +116,17 @@ internal class UnturnedLauncher : IDisposable
             }
         }
 
-        string installDir = _unturnedInstallDir.InstallDirectory;
-
         alreadyLaunched = false;
-        return Core(installDir, token);
+        return Core(_unturnedInstallDir, token);
 
-        async Task<Process> Core(string installDir, CancellationToken token)
+        async Task<Process> Core(InstallDirUtility installDirUtil, CancellationToken token)
         {
-            string exe = Path.Combine(installDir, GetExecutableRelativePath());
+            string installDir = installDirUtil.InstallDirectory;
+            string exe = Path.Combine(installDir, installDirUtil.GetExecutableRelativePath());
 
             string settingsFile = GetSettingsFile();
 
-            string launchArgs = $"-batchmode -nogui -uTestSettings \"{settingsFile}\" -LogAssemblyResolve +lanserver/uTest";
+            string launchArgs = $"-batchmode -nogui -uTestSettings \"{settingsFile}\" -NetTransport SystemSockets -LogAssemblyResolve +lanserver/uTest";
 
             TaskCompletionSource<Process> startupTcs = new TaskCompletionSource<Process>();
             _task = startupTcs;
@@ -154,7 +152,7 @@ internal class UnturnedLauncher : IDisposable
                 token.ThrowIfCancellationRequested();
 
                 disabledModule = false;
-                TryWriteModuleDirectoryOrSetEnabled(installDir, testAssembly, enabled: true);
+                TryWriteModuleDirectoryOrSetEnabled(installDir, testAssembly);
 
                 if (_task != startupTcs)
                 {
@@ -313,21 +311,6 @@ internal class UnturnedLauncher : IDisposable
     public string GetSettingsFile()
     {
         return Path.Combine(_unturnedInstallDir.InstallDirectory, "Modules", "uTest", "test-settings.json");
-    }
-
-    private string GetExecutableRelativePath()
-    {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            return "Unturned.exe";
-        }
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            return "Unturned.app/Contents/MacOS/Unturned";
-        }
-        
-        return _u3ds ? "Unturned_Headless.x86_64" : "Unturned.x86_64";
     }
 
     /// <inheritdoc />

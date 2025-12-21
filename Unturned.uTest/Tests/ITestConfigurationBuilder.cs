@@ -13,5 +13,5 @@ public interface ITestConfigurationBuilder
     /// <summary>
     /// The context of the test being ran.
     /// </summary>
-    ITestContext TestContext { get; }
+    IUnconfiguredTestContext TestContext { get; }
 }

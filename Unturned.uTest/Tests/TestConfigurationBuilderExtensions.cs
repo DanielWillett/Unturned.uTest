@@ -11,19 +11,6 @@ public static class TestConfigurationBuilderExtensions
     extension(ITestConfigurationBuilder builder)
     {
         /// <summary>
-        /// Spawns a given amount of dummy players.
-        /// </summary>
-        /// <remarks>All other players will be kicked prior to the test beginning.</remarks>
-        public ITestConfigurationBuilder WithPlayers(int playerCount)
-        {
-            if (playerCount is < 0 or > byte.MaxValue)
-                throw new ArgumentOutOfRangeException(nameof(playerCount));
-
-            builder.TestEnvironment.PlayerCount = playerCount;
-            return builder;
-        }
-
-        /// <summary>
         /// Configures the time of day in HH:MM:SS (24 hour time).
         /// </summary>
         /// <exception cref="ArgumentOutOfRangeException">Invalid time values.</exception>

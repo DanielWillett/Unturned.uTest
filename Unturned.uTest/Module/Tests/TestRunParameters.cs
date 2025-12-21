@@ -14,6 +14,7 @@ internal sealed class TestRunParameters
 
     internal TestAsyncStateMachine StateMachine;
     internal UnturnedTestList Configuration;
+    internal MainModule Module;
 
     // created by compiled test
     internal TestContext? Context;
@@ -24,6 +25,7 @@ internal sealed class TestRunParameters
         ILogger logger,
         TestAsyncStateMachine stateMachine,
         UnturnedTestList configuration,
+        MainModule module,
         Action<TestRunParameters, TestRunStopwatchStage>? signalStart = null,
         Action<TestRunParameters, TestRunStopwatchStage>? signalEnd = null)
     {
@@ -32,6 +34,7 @@ internal sealed class TestRunParameters
         Logger = logger;
         StateMachine = stateMachine;
         Configuration = configuration;
+        Module = module;
         SignalStart = signalStart;
         SignalEnd = signalEnd;
     }

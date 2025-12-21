@@ -88,6 +88,24 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Unable to find an actor with this ID..
+        /// </summary>
+        internal static string ActorNotFoundExceptionDefaultMessage {
+            get {
+                return ResourceManager.GetString("ActorNotFoundExceptionDefaultMessage", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Unable to find an actor with the identifier &apos;{0}&apos;..
+        /// </summary>
+        internal static string ActorNotFoundExceptionMessageWithId {
+            get {
+                return ResourceManager.GetString("ActorNotFoundExceptionMessageWithId", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Unable to modify &quot;{0}&quot;, this actor is out of bounds of the world..
         /// </summary>
         internal static string ActorOutOfBoundsExceptionDefaultMessage {

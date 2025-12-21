@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using DanielWillett.ReflectionTools;
 
 #pragma warning disable IDE0130
 // ReSharper disable once CheckNamespace
@@ -255,7 +256,7 @@ public sealed class CommandWindowLogger : ILogger
     public bool IsEnabled(LogLevel logLevel) => true;
 }
 
-public sealed class UnturnedLogLogger : ILogger
+public sealed class UnturnedLogLogger : ILogger, IReflectionToolsLogger
 {
     public static readonly UnturnedLogLogger Instance = new UnturnedLogLogger();
 
@@ -354,6 +355,36 @@ public sealed class UnturnedLogLogger : ILogger
         StringBuilderPool.Return(sb);
     }
 
-    /// <inheritdoc />
     public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void LogDebug(string source, string message)
+    {
+        this.LogDebug(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
+    }
+
+    public void LogInfo(string source, string message)
+    {
+        this.LogInformation(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
+    }
+
+    public void LogWarning(string source, string message)
+    {
+        this.LogWarning(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
+    }
+
+    public void LogError(string source, Exception? ex, string? message)
+    {
+        if (ex != null)
+        {
+            if (message == null)
+                this.LogError(ex);
+            else
+                this.LogError(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}", ex);
+        }
+        else
+        {
+            if (message != null)
+                this.LogError(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
+        }
+    }
 }

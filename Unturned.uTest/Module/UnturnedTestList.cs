@@ -23,10 +23,34 @@ internal class UnturnedTestList
 
     public bool IsAllTests { get; set; }
     public bool CollectTrxProperties { get; set; }
+    public SteamIdGenerationStyle SteamIdGenerationStyle { get; set; }
+    public string ClientInstallDir { get; set; }
 }
 
 internal class UnturnedTestReference
 {
     [JsonRequired]
     public string Uid { get; set; }
+}
+
+/// <summary>
+/// Used to determine how steam IDs are generated.
+/// <see cref="DevUniverse"/> is ideal but some plugins may not be compatible.
+/// </summary>
+public enum SteamIdGenerationStyle
+{
+    /// <summary>
+    /// Creates SteamIDs in the 'Dev' universe.
+    /// </summary>
+    DevUniverse,
+    
+    /// <summary>
+    /// Creates SteamIDs with the 'account instance' bits set to a larger number than the default (1).
+    /// </summary>
+    Instance,
+
+    /// <summary>
+    /// Creates SteamIDs with a very large random account number.
+    /// </summary>
+    Random
 }

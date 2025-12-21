@@ -1,5 +1,4 @@
-extern alias JBA;
-using JBA::JetBrains.Annotations;
+using JetBrains.Annotations;
 using System;
 
 namespace uTest;

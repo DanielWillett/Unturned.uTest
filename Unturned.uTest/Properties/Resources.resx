@@ -126,6 +126,12 @@
   <data name="ActorMissingAuthorityExceptionVehicleDriven" xml:space="preserve">
     <value>Unable to modify "{0}", it's currently being driven.</value>
   </data>
+  <data name="ActorNotFoundExceptionDefaultMessage" xml:space="preserve">
+    <value>Unable to find an actor with this ID.</value>
+  </data>
+  <data name="ActorNotFoundExceptionMessageWithId" xml:space="preserve">
+    <value>Unable to find an actor with the identifier '{0}'.</value>
+  </data>
   <data name="ActorOutOfBoundsExceptionDefaultMessage" xml:space="preserve">
     <value>Unable to modify "{0}", this actor is out of bounds of the world.</value>
   </data>

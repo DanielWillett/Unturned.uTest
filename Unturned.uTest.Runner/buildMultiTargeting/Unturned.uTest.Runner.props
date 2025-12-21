@@ -35,7 +35,7 @@
   <PropertyGroup>
 
     <!-- Update csproj as well -->
-    <MTPVersion>2.0.0-preview.25415.9</MTPVersion>
+    <MTPVersion>2.0.1</MTPVersion>
 
     <!-- Treats the 'generator failed to generate source' warnings as errors. -->
     <WarningsAsErrors>CS8785</WarningsAsErrors>

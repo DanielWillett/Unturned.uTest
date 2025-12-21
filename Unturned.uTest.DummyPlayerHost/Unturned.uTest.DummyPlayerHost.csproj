@@ -16,25 +16,50 @@
 
 	<ItemGroup>
 
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease22,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease23,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" Aliases="JBA" />
 
-    <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj"/>
+    <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
 
-    <PackageReference Include="Unturned.MSBuild" Version="1.0.0-test4">
+    <PackageReference Include="Unturned.MSBuild" Version="1.0.0-test6">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
 
     <PackageReference Include="Lib.Harmony" Version="[2.3.3,3.0)" PrivateAssets="all" />
+    <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
 
 	</ItemGroup>
 
-	<ItemGroup>
+  <ItemGroup>
+
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.provider" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.client" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.personaStateChange" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.gameServerChangeRequested" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.gameRichPresenceJoinRequested" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.newUrlLaunchParametersCallback" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider._user" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider._client" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider._clientHash" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider._clientName" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider._isPro" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.language" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.LocalWorkshopSettings.instance" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Assets.AddClientUgcSearchLocations" />
+    <Publicize Include="Assembly-CSharp:SDG.Provider.TempSteamworksWorkshop.downloadServerItems" />
+
+  </ItemGroup>
+
+  <ItemGroup>
 
 		<UnturnedReference Include="Assembly-CSharp" />
+    <UnturnedReference Include="com.rlabrecque.steamworks.net" />
 		<UnturnedReference Include="UnityEngine" />
 		<UnturnedReference Include="UnityEngine.CoreModule" />
 

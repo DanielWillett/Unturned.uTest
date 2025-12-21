@@ -6,12 +6,6 @@ namespace uTest;
 public interface IConfigurableTestEnvironment
 {
     /// <summary>
-    /// The number of players to spawn.
-    /// </summary>
-    /// <remarks>Defaults to 0.</remarks>
-    int PlayerCount { get; set; }
-
-    /// <summary>
     /// Whether or not time should tick during the test.
     /// </summary>
     /// <remarks>Defaults to <see langword="true"/>.</remarks>

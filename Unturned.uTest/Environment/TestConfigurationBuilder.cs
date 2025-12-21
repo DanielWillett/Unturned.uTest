@@ -2,8 +2,8 @@
 
 namespace uTest.Environment;
 
-internal class TestConfigurationBuilder(ITestContext context) : ITestConfigurationBuilder
+internal class TestConfigurationBuilder(IUnconfiguredTestContext context) : ITestConfigurationBuilder
 {
-    public ITestContext TestContext { get; } = context;
+    public IUnconfiguredTestContext TestContext { get; } = context;
     public IConfigurableTestEnvironment TestEnvironment => throw new NotImplementedException();
 }

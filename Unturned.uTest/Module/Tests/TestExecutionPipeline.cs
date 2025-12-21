@@ -10,17 +10,19 @@ internal class TestExecutionPipeline
     private readonly TestRunner _runner;
     private readonly ILogger _logger;
     private readonly UnturnedTestList _testList;
+    private readonly MainModule _module;
     private readonly CancellationToken _token;
 
     private readonly Stopwatch _stopwatch;
 
     internal UnturnedTestInstance CurrentTest;
 
-    public TestExecutionPipeline(TestRunner runner, ILogger logger, UnturnedTestList testList, CancellationToken token)
+    public TestExecutionPipeline(TestRunner runner, ILogger logger, UnturnedTestList testList, MainModule module, CancellationToken token)
     {
         _runner = runner;
         _logger = logger;
         _testList = testList;
+        _module = module;
         _token = token;
         _stopwatch = new Stopwatch();
     }
@@ -50,7 +52,7 @@ internal class TestExecutionPipeline
         TestExecutionSummary summary;
         TestContext context;
 
-        Task? task = TestAsyncStateMachine.TryRunTestAsync(in CurrentTest, _token, _logger, _stopwatch, _testList, out TestAsyncStateMachine machine);
+        Task? task = TestAsyncStateMachine.TryRunTestAsync(in CurrentTest, _token, _logger, _stopwatch, _testList, _module, out TestAsyncStateMachine machine);
         try
         {
 

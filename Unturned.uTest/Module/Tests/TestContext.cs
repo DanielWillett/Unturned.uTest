@@ -2,6 +2,7 @@
 using System.IO;
 using System.Reflection;
 using System.Text;
+using JetBrains.Annotations;
 using uTest.Environment;
 
 namespace uTest.Module;
@@ -15,6 +16,8 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     internal StringBuilder? StandardOutput;
     internal StringBuilder? StandardError;
     internal List<TestOutputMessage>? Messages;
+
+    private readonly UnturnedTestUid _uid;
     private readonly TextWriter _prevStdOut, _prevStdErr;
 
     public UnturnedTestList Configuration => _parameters.Configuration;
@@ -25,15 +28,18 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
 
     public MethodInfo TestMethod => _parameters.Test.Method;
 
-    public string TestId => _parameters.Test.Uid;
+    public UnturnedTestUid TestId => _uid;
 
     public CancellationToken CancellationToken => _parameters.Token;
 
     public ILogger Logger => CommandWindowLogger.Instance;
 
+    // invoked by TestCompiler's generated code before the test starts
+    [UsedImplicitly]
     internal TestContext(TestRunParameters parameters, ITestClass runner)
     {
         _parameters = parameters;
+        _uid = new UnturnedTestUid(parameters.Test.Uid);
         Runner = runner;
 
         CommandWindowSynchronizationHelper.FlushCommandWindow();
@@ -158,6 +164,34 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     public void MarkFailure()
     {
         throw new TestResultException(TestResult.Fail);
+    }
+
+    /// <inheritdoc />
+    public ValueTask SpawnAllPlayersAsync()
+    {
+        return _parameters.Module.Dummies.SpawnPlayersAsync(null, CancellationToken);
+    }
+
+    /// <inheritdoc />
+    public ValueTask SpawnPlayersAsync(params IServersideTestPlayer[] players)
+    {
+        if (players == null)
+            throw new ArgumentNullException(nameof(players));
+
+        if (players.Length == 0)
+            return default;
+
+        List<ulong> ids = new List<ulong>(players.Length);
+        foreach (IServersideTestPlayer pl in players)
+        {
+            ulong id = pl.Steam64.m_SteamID;
+            if (ids.Contains(id))
+                continue;
+
+            ids.Add(id);
+        }
+
+        return _parameters.Module.Dummies.SpawnPlayersAsync(ids, CancellationToken);
     }
 
     /// <inheritdoc />

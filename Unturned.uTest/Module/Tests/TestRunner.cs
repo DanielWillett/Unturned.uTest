@@ -43,9 +43,11 @@ internal class TestRunner
         bool allPass = true;
 
         UnturnedTestList testList = _module.TestList!;
-        TestExecutionPipeline pipeline = new TestExecutionPipeline(this, _logger, testList, token);
+        TestExecutionPipeline pipeline = new TestExecutionPipeline(this, _logger, testList, _module, token);
 
         List<UnturnedTestReference> testUids = testList.Tests.ToList();
+
+        _logger.LogDebug($"Starting test run: {testUids.Count} test variation(s). Discovered {_module.Tests.Length} test(s).");
 
         foreach (UnturnedTestInstance test in _module.Tests)
         {

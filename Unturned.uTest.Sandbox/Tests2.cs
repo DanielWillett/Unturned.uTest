@@ -20,7 +20,7 @@ public class Tests2 : ITestClass, ITestClassSetup
     {
         testContext.ConfigureAsync(env =>
         {
-            env.WithPlayers(4);
+
         });
         return default;
     }

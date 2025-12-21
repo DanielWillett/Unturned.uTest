@@ -42,7 +42,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Unturned.MSBuild" Version="1.0.0-test4">
+    <PackageReference Include="Unturned.MSBuild" Version="1.0.0-test6">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
@@ -54,10 +54,10 @@
     <UnturnedReference Include="SDG.NetTransport" />
     <UnturnedReference Include="SystemEx" />
 
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease22,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease23,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
-    <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" Aliases="JBA" />
+    <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" ExcludeAssets="all" />
 
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" PrivateAssets="all" />
@@ -82,6 +82,7 @@
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.ServerMessageHandler_GetWorkshopFiles" />
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.NetMessages" />
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.buffer" />
+		<Publicize Include="Assembly-CSharp:SDG.Unturned.DedicatedUGC.itemsToDownload" />
 
 	</ItemGroup>
 

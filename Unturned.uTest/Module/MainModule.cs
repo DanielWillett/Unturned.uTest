@@ -164,13 +164,18 @@ internal class MainModule : MonoBehaviour, IDisposable
 
         CommandWindow.Log(log);
 
+        Dummies = new DummyManager(this);
+
         Task t = DiscoverTestsAsync(TestList);
         if (!t.IsCompleted)
         {
             _discoverTestsTask = t;
         }
-
-        Dummies = new DummyManager();
+        else
+        {
+            // throw any exceptions
+            t.GetAwaiter().GetResult();
+        }
 
         // Patches
         {
@@ -215,7 +220,7 @@ internal class MainModule : MonoBehaviour, IDisposable
                     Task? t = _discoverTestsTask;
                     if (t != null)
                         await t;
-                    
+
                     exitCode = await runner.RunTestsAsync(CancellationToken);
                 }
                 catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested) { throw; }
@@ -279,11 +284,16 @@ internal class MainModule : MonoBehaviour, IDisposable
 
         Logger.LogInformation($"Found {tests.Count} test(s).");
 
-        await Dummies.StartDummiesForTestsAsync(Tests);
+        UnturnedTestInstance[] testArray = tests.ToArray();
+
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            await Dummies.InitializeDummiesAsync(testArray);
+        }
 
         lock (this)
         {
-            Tests = tests.ToArray();
+            Tests = testArray;
 
             AssetLoadModel = AssetLoadModel.Create(this, true);
 

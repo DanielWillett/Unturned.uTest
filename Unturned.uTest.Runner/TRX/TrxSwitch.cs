@@ -14,7 +14,15 @@ internal static class TrxSwitch
     /// <summary>
     /// True when the TRX abstractions DLL is available.
     /// </summary>
-    internal static bool HasTrx { [MethodImpl(MethodImplOptions.NoInlining)] get; } = Type.GetType("Microsoft.Testing.Extensions.TrxReport.Abstractions.ITrxReportCapability, Microsoft.Testing.Extensions.TrxReport.Abstractions", throwOnError: false, ignoreCase: false) != null;
+    internal static bool HasTrx
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        get;
+    } = Type.GetType(
+            "Microsoft.Testing.Extensions.TrxReport.Abstractions.ITrxReportCapability, Microsoft.Testing.Extensions.TrxReport.Abstractions",
+            throwOnError: false,
+            ignoreCase: false
+        ) != null;
 
     internal static ITrxReportCapabilityImpl? CreateTrxCapability()
     {

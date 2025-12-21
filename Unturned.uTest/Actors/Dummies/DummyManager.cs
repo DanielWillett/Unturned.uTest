@@ -1,34 +1,135 @@
 ﻿using System;
-using DanielWillett.ReflectionTools;
+using System.Globalization;
+using System.Linq;
 using uTest.Discovery;
+using uTest.Module;
 
 namespace uTest.Dummies;
 
 // 'Dummy' players are inspired by DiFFoZ's Dummy plugin: https://github.com/EvolutionPlugins/Dummy 
-internal class DummyManager
+internal class DummyManager : IDummyPlayerController
 {
-    private readonly Dictionary<ulong, DummyPlayerActor> _dummies = new Dictionary<ulong, DummyPlayerActor>();
+    private readonly MainModule _module;
+    private readonly Dictionary<ulong, SimulatedDummyPlayerActor> _simulatedDummies = new Dictionary<ulong, SimulatedDummyPlayerActor>();
 
-    public async Task StartDummiesForTestsAsync(UnturnedTestInstance[] tests)
+    private DummyPlayerLauncher? _remoteDummyLauncher;
+
+    private PlayerSimulationMode _simMode = PlayerSimulationMode.Dummy;
+
+    internal IDummyPlayerController? Controller => _remoteDummyLauncher;
+
+    public DummyManager(MainModule module)
     {
-        bool needsDummies = false;
+        _module = module;
+    }
+
+    public Task InitializeDummiesAsync(UnturnedTestInstance[] tests)
+    {
         bool needsFullPlayers = false;
+        int minDummies = 0;
+        List<PlayerCountAttribute> playerCountListTemp = new List<PlayerCountAttribute>();
+        List<PlayerSimulationModeAttribute> playerModeListTemp = new List<PlayerSimulationModeAttribute>();
         for (int i = 0; i < tests.Length; ++i)
         {
             ref UnturnedTestInstance test = ref tests[i];
 
+            if (!needsFullPlayers)
+            {
+                TestAttributeHelper<PlayerSimulationModeAttribute>.GetAttributes(test.Method, playerModeListTemp);
+                if (playerModeListTemp.Count > 0)
+                {
+                    if (playerModeListTemp.Exists(x => x.Mode == PlayerSimulationMode.Full))
+                        needsFullPlayers = true;
 
+                    playerModeListTemp.Clear();
+                }
+            }
+
+            TestAttributeHelper<PlayerCountAttribute>.GetAttributes(test.Method, playerCountListTemp);
+            if (playerCountListTemp.Count == 0)
+                continue;
+
+            PlayerCountAttribute max = playerCountListTemp.Aggregate((a, max) => a.PlayerCount > max.PlayerCount ? a : max);
+            minDummies = Math.Max(max.PlayerCount, minDummies);
+            
+            playerCountListTemp.Clear();
         }
+
+        if (minDummies <= 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (!needsFullPlayers)
+            return Task.CompletedTask;
+
+        _simMode = PlayerSimulationMode.Full;
+        _remoteDummyLauncher ??= new DummyPlayerLauncher(_module, _module.Logger);
+        return _remoteDummyLauncher.StartDummiesAsync(minDummies);
     }
 
-    public bool TryGetDummy(Player player, [MaybeNullWhen(false)] out DummyPlayerActor dummy)
+    internal ValueTask SpawnPlayersAsync(List<ulong>? idsOrNull, CancellationToken token)
     {
-        return _dummies.TryGetValue(player.channel.owner.playerID.steamID.m_SteamID, out dummy);
+        if (_simMode == PlayerSimulationMode.Full)
+        {
+            return _remoteDummyLauncher!.ConnectDummyPlayersAsync(idsOrNull, token);
+        }
+        
+        if (_simulatedDummies.Count > 0)
+        {
+            return new ValueTask(ConnectDummyPlayersAsync(idsOrNull, token));
+        }
+
+        return default;
+    }
+
+    private async Task ConnectDummyPlayersAsync(List<ulong>? idsOrNull, CancellationToken token)
+    {
+        List<SimulatedDummyPlayerActor> playersToConnect = new List<SimulatedDummyPlayerActor>();
+        if (idsOrNull == null)
+            playersToConnect.AddRange(_simulatedDummies.Values);
+        else
+        {
+            foreach (ulong pl in idsOrNull)
+            {
+                if (!_simulatedDummies.TryGetValue(pl, out SimulatedDummyPlayerActor simPl))
+                {
+                    throw new ActorNotFoundException(pl.ToString("D17", CultureInfo.InvariantCulture));
+                }
+
+                playersToConnect.Add(simPl);
+            }
+        }
+
+        // todo: BeginDummyConnect()
+    }
+
+    public bool TryGetDummy(Player player, [MaybeNullWhen(false)] out BaseServersidePlayerActor dummy)
+    {
+        return TryGetDummy(player.channel.owner.playerID.steamID.m_SteamID, out dummy);
+    }
+
+    public bool TryGetDummy(ulong steam64, [MaybeNullWhen(false)] out BaseServersidePlayerActor dummy)
+    {
+        if (_simulatedDummies.TryGetValue(steam64, out SimulatedDummyPlayerActor simDummy))
+        {
+            dummy = simDummy;
+            return true;
+        }
+
+        if (_remoteDummyLauncher != null && _remoteDummyLauncher.TryGetRemoteDummy(steam64, out RemoteDummyPlayerActor? remDummy))
+        {
+            dummy = remDummy;
+            return true;
+        }
+
+        dummy = null;
+        return false;
     }
 
     internal void ListenOnServer()
     {
-        foreach (DummyPlayerActor dummy in _dummies.Values)
+        foreach (SimulatedDummyPlayerActor dummy in _simulatedDummies.Values)
         {
             while (dummy.ClientTransportIntl.TryDequeueOutgoingMessage(Provider.buffer, out long size))
             {
@@ -39,7 +140,7 @@ internal class DummyManager
 
     internal void ListenOnDummies()
     {
-        foreach (DummyPlayerActor dummy in _dummies.Values)
+        foreach (SimulatedDummyPlayerActor dummy in _simulatedDummies.Values)
         {
             while (dummy.ClientTransportIntl.Receive(Provider.buffer, out long size))
             {
@@ -57,12 +158,12 @@ internal class DummyManager
         return result;
     }
 
-    public static void SendMessageToServer(EServerMessage index, ENetReliability reliability, NetMessages.ClientWriteHandler callback, DummyPlayerActor actor)
+    public static void SendMessageToServer(EServerMessage index, ENetReliability reliability, NetMessages.ClientWriteHandler callback, SimulatedDummyPlayerActor actor)
     {
 
     }
 
-    public DummyPlayerActor EndDummyConnect(IAsyncResult result)
+    public SimulatedDummyPlayerActor EndDummyConnect(IAsyncResult result)
     {
         if (result is not DummyConnectionState state)
             throw new ArgumentException("IAsyncResult did not come from BeginDummyConnect.", nameof(result));
@@ -100,7 +201,7 @@ internal class DummyConnectionState : IAsyncResult
 
     internal ConnectionStage Stage;
     internal Exception? Exception;
-    internal DummyPlayerActor? Actor;
+    internal SimulatedDummyPlayerActor? Actor;
 
     public bool IsCompleted { [MemberNotNullWhen(true, nameof(Actor))] get; internal set; }
 

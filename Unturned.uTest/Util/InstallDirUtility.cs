@@ -19,6 +19,21 @@ public class InstallDirUtility
     private string GameId => _u3ds ? "1110390" : "304930";
     private string GameName => _u3ds ? "U3DS" : "Unturned";
 
+    public string GetExecutableRelativePath()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return "Unturned.exe";
+        }
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return "Unturned.app/Contents/MacOS/Unturned";
+        }
+
+        return _u3ds ? "Unturned_Headless.x86_64" : "Unturned.x86_64";
+    }
+
     public string GetCache()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))

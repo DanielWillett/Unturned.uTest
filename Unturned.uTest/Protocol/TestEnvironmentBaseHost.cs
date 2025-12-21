@@ -11,7 +11,7 @@ namespace uTest.Protocol;
 /// </summary>
 public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where TPipeStream : PipeStream
 {
-    public const string PipeName = "Unturned.uTest.Runner";
+    public const string RunnerPipeName = "Unturned.uTest.Runner";
 
     private readonly List<MessageHandler> _handlers;
 

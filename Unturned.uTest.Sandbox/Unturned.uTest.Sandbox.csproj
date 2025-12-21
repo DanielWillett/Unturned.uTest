@@ -19,7 +19,7 @@
 
 		<UnturnedReference Include="Assembly-CSharp"/>
 
-		<PackageReference Include="Unturned.MSBuild" Version="1.0.0-test4">
+		<PackageReference Include="Unturned.MSBuild" Version="1.0.0-test6">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
 		</PackageReference>
@@ -31,6 +31,13 @@
 
 	</ItemGroup>
 
-	<Import Project="../Unturned.uTest.Runner/buildMultiTargeting/Unturned.uTest.Runner.props" />
+  <!-- Required for .NET Framework projects. -->
+  <ItemGroup Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETFramework'">
+
+    <Reference Include="netstandard" Private="True" />
+
+  </ItemGroup>
+
+  <Import Project="../Unturned.uTest.Runner/buildMultiTargeting/Unturned.uTest.Runner.props" />
 
 </Project>

@@ -1,4 +1,6 @@
 ﻿using DanielWillett.ModularRpcs;
+using DanielWillett.ModularRpcs.Annotations;
+using DanielWillett.ModularRpcs.Async;
 using DanielWillett.ModularRpcs.DependencyInjection;
 using DanielWillett.ModularRpcs.NamedPipes;
 using DanielWillett.ModularRpcs.Reflection;
@@ -7,14 +9,22 @@ using DanielWillett.ModularRpcs.Serialization;
 using HarmonyLib;
 using SDG.Framework.Modules;
 using System;
+using System.ComponentModel.Design;
+using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using uTest.Dummies.Host.Facades;
 using uTest.Module;
 using uTest.Protocol.DummyPlayerHost;
 
 namespace uTest.Dummies.Host;
 
-internal class DummyPlayerHost : IServiceProvider, IDisposable
+/// <summary>
+/// DummyPlayerHost is used to host one or more real players on an instance of the Unturned client.
+/// </summary>
+[GenerateRpcSource]
+internal partial class DummyPlayerHost : IDisposable
 {
     public Harmony Harmony { get; } = new Harmony("DanielWillett.uTest.Dummies");
 
@@ -28,32 +38,57 @@ internal class DummyPlayerHost : IServiceProvider, IDisposable
     private IRpcConnectionLifetime _rpcConnectionLifetime;
     private NamedPipeEndpoint _rpcEndpoint;
 
+    private readonly CommandLineString _steamIdArg = new CommandLineString("-uTestSteamId");
+    private readonly CommandLineString _configArg = new CommandLineString("-uTestConfig");
+
     public static DummyPlayerHost Instance { get; private set; }
 
     public AssetLoadModel AssetLoadModel { get; private set; }
 
-#nullable restore
+    public CSteamID SteamId { get; private set; }
 
-    object? IServiceProvider.GetService(Type serviceType)
-    {
-        return null;
-    }
+    public string TemporaryDataPath { get; private set; }
+
+    public ulong[] WorkshopItems { get; private set; }
+
+#nullable restore
 
     internal void Initialize()
     {
+        if (!ulong.TryParse(_steamIdArg.value, NumberStyles.None, CultureInfo.InvariantCulture, out ulong steamId))
+        {
+            throw new InvalidOperationException($"Missing \"{_steamIdArg.key}\" command line arg.");
+        }
+
+        SteamId = new CSteamID(steamId);
+        if (SteamId.GetEAccountType() != EAccountType.k_EAccountTypeIndividual)
+        {
+            throw new InvalidOperationException($"Invalid SteamID {steamId} in \"{_steamIdArg.key}\" command line arg.");
+        }
+
         Instance = this;
 
-        ProxyGenerator.Instance.SetLogger(Log);
+        ProxyGenerator.Instance.SetLogger(UnturnedLogLogger.Instance);
 
         AssetLoadModel = new AssetLoadModel();
 
         Patches.SkipAddFoundAssetIfNotRequired.TryPatch(Harmony, ConsoleLogger.Instance);
 
-        _rpcConnectionLifetime = new ClientRpcConnectionLifetime();
+        ServiceContainer cont = new ServiceContainer();
+
+        ClientRpcConnectionLifetime lifetime = new ClientRpcConnectionLifetime();
+        _rpcConnectionLifetime = lifetime;
         _rpcSerializer = new DefaultSerializer();
 
-        DependencyInjectionRpcRouter rpcRouter = new DependencyInjectionRpcRouter(this, _rpcSerializer, _rpcConnectionLifetime, ProxyGenerator.Instance);
-        rpcRouter.SetLogger(Log);
+        lifetime.SetLogger(UnturnedLogLogger.Instance);
+
+        cont.AddService(typeof(ProxyGenerator), ProxyGenerator.Instance);
+        cont.AddService(typeof(IRpcConnectionLifetime), lifetime);
+        cont.AddService(typeof(IRpcSerializer), _rpcSerializer);
+
+        DependencyInjectionRpcRouter rpcRouter = new DependencyInjectionRpcRouter(cont);
+        cont.AddService(typeof(IRpcRouter), rpcRouter);
+        rpcRouter.SetLogger(UnturnedLogLogger.Instance);
 
         _rpcEndpoint = NamedPipeEndpoint.AsClient(NamedPipe.PipeName);
 
@@ -61,59 +96,55 @@ internal class DummyPlayerHost : IServiceProvider, IDisposable
 
         Task<NamedPipeClientsideRemoteRpcConnection> connectTask
             = _rpcEndpoint.RequestConnectionAsync(_rpcRouter, _rpcConnectionLifetime, _rpcSerializer, TimeSpan.FromMinutes(1d));
-        if (!connectTask.Wait(TimeSpan.FromMinutes(1.01d)))
+        if (!connectTask.Wait(TimeSpan.FromSeconds(61d)))
             throw new TimeoutException("Timed out connecting.");
         _rpcConnection = connectTask.Result;
 
         CommandWindow.Log("Connected.");
 
         _rpcRouter = rpcRouter;
+
+        LocalWorkshopSettings.instance = new DummyLocalWorkshopSettings(this);
+
+        DummyProvider.ShutdownOldProviderServices(Provider.provider);
+        Provider.provider = new DummyProvider(this);
+
+
+        try
+        {
+            Task.Run(async () =>
+            {
+                await SendStatusNotification(SteamId.m_SteamID, DummyReadyStatus.StartedUp);
+            }).Wait(TimeSpan.FromSeconds(3));
+        }
+        catch (Exception ex)
+        {
+            UnturnedLogLogger.Instance.LogError("Error communicating with server.", ex);
+            DummyPlayerHostModule.InstantShutdown(
+                "Error communicating with server.",
+                UnturnedTestExitCode.StartupFailure,
+                () => ((IDisposable)this).Dispose()
+            );
+        }
     }
 
-    private static void Log(Type sourceType, DanielWillett.ModularRpcs.LogSeverity severity, Exception? exception, string? message)
+    [RpcSend(typeof(DummyPlayerLauncher), "ReceiveStatusNotification")]
+    [RpcTimeout(2 * Timeouts.Seconds)]
+    private partial RpcTask SendStatusNotification(ulong id, DummyReadyStatus status);
+
+    [RpcReceive]
+    private void ReceiveWorkshopItemsUpdate(ulong[] workshopItems)
     {
-        if (exception != null)
+        GameThread.Run(workshopItems, workshopItems =>
         {
-            switch (severity)
-            {
-                default:
-                    CommandWindow.Log($"[INF] [{sourceType.Name}] {message}{System.Environment.NewLine}{exception}");
-                    break;
+            WorkshopItems = workshopItems;
+        });
+    }
 
-                case DanielWillett.ModularRpcs.LogSeverity.Debug:
-                    CommandWindow.Log($"[DBG] [{sourceType.Name}] {message}{System.Environment.NewLine}{exception}");
-                    break;
+    [RpcReceive]
+    private void ReceiveConnectRequest(string ipAddress, ulong connectCode, ushort port, string password)
+    {
 
-                case DanielWillett.ModularRpcs.LogSeverity.Warning:
-                    CommandWindow.LogWarning($"[WRN] [{sourceType.Name}] {message}{System.Environment.NewLine}{exception}");
-                    break;
-
-                case DanielWillett.ModularRpcs.LogSeverity.Error:
-                    CommandWindow.LogError($"[ERR] [{sourceType.Name}] {message}{System.Environment.NewLine}{exception}");
-                    break;
-            }
-        }
-        else
-        {
-            switch (severity)
-            {
-                default:
-                    CommandWindow.Log($"[INF] [{sourceType.Name}] {message}");
-                    break;
-
-                case DanielWillett.ModularRpcs.LogSeverity.Debug:
-                    CommandWindow.Log($"[DBG] [{sourceType.Name}] {message}");
-                    break;
-
-                case DanielWillett.ModularRpcs.LogSeverity.Warning:
-                    CommandWindow.LogWarning($"[WRN] [{sourceType.Name}] {message}");
-                    break;
-
-                case DanielWillett.ModularRpcs.LogSeverity.Error:
-                    CommandWindow.LogError($"[ERR] [{sourceType.Name}] {message}");
-                    break;
-            }
-        }
     }
 
     /// <inheritdoc />
