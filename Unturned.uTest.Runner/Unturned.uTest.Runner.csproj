@@ -51,28 +51,44 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
+    <ProjectReference Include="../Unturned.uTest.Bootstrapper/Unturned.uTest.Bootstrapper.csproj" ReferenceOutputAssembly="false" NoWarn="NU1702" />
     <ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../Unturned.uTest.DummyPlayerHost/Unturned.uTest.DummyPlayerHost.csproj" ReferenceOutputAssembly="false" NoWarn="NU1702" />
-    
+
+    <!-- Update ModuleLibraryHelper if any of the versions of the fallback assemblies change. -->
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport.Abstractions" Version="$(MTPVersion)" PrivateAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="Lib.Harmony" Version="*" PrivateAssets="all" ExcludeAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="9.*" PrivateAssets="all" ExcludeAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="xunit.assert" Version="*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease23, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease25, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="DanielWillett.SpeedBytes" Version="1.*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="DanielWillett.ReflectionTools" Version="*" GeneratePathProperty="True" />
+    <PackageReference Include="DanielWillett.ReflectionTools.Harmony" Version="*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="9.*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
   </ItemGroup>
 
 	<!-- Copy uTest dependencies to Modules folder -->
 	<Target BeforeTargets="BeforeBuild" Name="CopyDepedenciesToModule" Condition="'$(TargetFrameworks)' == '' OR $(TargetFrameworks.EndsWith($(TargetFramework)))">
 		<Copy SourceFiles="
-          $(Pkgxunit_assert)\lib\netstandard1.1\xunit.assert.dll;
-          $(PkgDanielWillett_ModularRpcs_NamedPipes)\lib\netstandard2.1\ModularRpcs.NamedPipes.dll;
-          $(PkgDanielWillett_ModularRpcs_Unity)\lib\netstandard2.1\ModularRpcs.Unity.dll;
-          $(PkgDanielWillett_ModularRpcs)\lib\netstandard2.1\ModularRpcs.dll;
-          $(PkgMicrosoft_Testing_Extensions_TrxReport_Abstractions)\lib\netstandard2.0\Microsoft.Testing.Extensions.TrxReport.Abstractions.dll;
-          $(PkgLib_Harmony)\lib\net48\0Harmony.dll;
-          $(PkgMicrosoft_Extensions_FileSystemGlobbing)\lib\netstandard2.0\Microsoft.Extensions.FileSystemGlobbing.dll
+          $(Pkgxunit_assert)\lib\netstandard1.1\xunit.assert.dll
+         ;$(PkgDanielWillett_ModularRpcs_NamedPipes)\lib\netstandard2.1\ModularRpcs.NamedPipes.dll
+         ;$(PkgDanielWillett_ModularRpcs_Unity)\lib\netstandard2.1\ModularRpcs.Unity.dll
+         ;$(PkgDanielWillett_ModularRpcs)\lib\netstandard2.1\ModularRpcs.dll
+         ;$(PkgDanielWillett_SpeedBytes)\lib\netstandard2.1\DanielWillett.SpeedBytes.dll
+         ;$(PkgMicrosoft_Testing_Extensions_TrxReport_Abstractions)\lib\netstandard2.0\Microsoft.Testing.Extensions.TrxReport.Abstractions.dll
+         ;$(PkgLib_Harmony)\lib\net48\0Harmony.dll
+         ;$(PkgMicrosoft_Extensions_FileSystemGlobbing)\lib\netstandard2.0\Microsoft.Extensions.FileSystemGlobbing.dll
+         ;$(PkgDanielWillett_ReflectionTools)\lib\netstandard2.1\ReflectionTools.dll
+         ;$(PkgDanielWillett_ReflectionTools_Harmony)\lib\netstandard2.1\ReflectionTools.Harmony.dll
+         ;$(PkgMicrosoft_Extensions_DependencyInjection_Abstractions)\lib\netstandard2.0\Microsoft.Extensions.DependencyInjection.Abstractions.dll
+         ;$(PkgMicrosoft_Extensions_Logging_Abstractions)\lib\netstandard2.0\Microsoft.Extensions.Logging.Abstractions.dll
+         ;$(PkgSystem_Diagnostics_DiagnosticSource)\lib\netstandard2.0\System.Diagnostics.DiagnosticSource.dll
+         ;$(PkgMicrosoft_Bcl_AsyncInterfaces)\lib\netstandard2.1\Microsoft.Bcl.AsyncInterfaces.dll
         "
         SkipUnchangedFiles="true" DestinationFolder="./Module" />
 	</Target>
@@ -103,6 +119,8 @@
   <ItemGroup>
 	  <EmbeddedResource Include="Module\**" />
     <EmbeddedResource Include="..\Unturned.uTest.DummyPlayerHost\bin\$(Configuration)\net471\Unturned.uTest.DummyPlayerHost.dll" Link="Module/Unturned.uTest.DummyPlayerHost.dll" />
+    <EmbeddedResource Include="..\Unturned.uTest.Bootstrapper\bin\$(Configuration)\net471\Unturned.uTest.Bootstrapper.dll" Link="Module/Unturned.uTest.Bootstrapper.dll" />
+    <EmbeddedResource Include="..\README.md" Link="Module/README.md" />
   </ItemGroup>
 
   <ItemGroup>

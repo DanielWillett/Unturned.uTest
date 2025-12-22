@@ -23,48 +23,61 @@ internal static class ModuleFiles
 
     internal static ModuleFile[] Files { get; } =
     [
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.Bootstrapper.dll",                            "uTest.Bootstrapper.dll"),
+        new BootstrapperModuleConfigFile(),
+        
+        new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, MTPAssembly,                                                                "Microsoft.Testing.Platform.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ReflectionTools.dll",                                        "ReflectionTools.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.DanielWillett.SpeedBytes.dll",                               "DanielWillett.SpeedBytes.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ModularRpcs.dll",                                            "ModularRpcs.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ModularRpcs.NamedPipes.dll",                                 "ModularRpcs.NamedPipes.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ModularRpcs.Unity.dll",                                      "ModularRpcs.Unity.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Testing.Extensions.TrxReport.Abstractions.dll",    "Microsoft.Testing.Extensions.TrxReport.Abstractions.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Threading.Tasks.Extensions.dll",                      "System.Threading.Tasks.Extensions.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        
+
         // note: all these weird libraries are used by xunit cause they still target .net standard 1.1
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.netstandard.dll", "netstandard.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, MTPAssembly, "Microsoft.Testing.Platform.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ModularRpcs.dll", "ModularRpcs.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ModularRpcs.NamedPipes.dll", "ModularRpcs.NamedPipes.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ModularRpcs.Unity.dll", "ModularRpcs.Unity.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Testing.Extensions.TrxReport.Abstractions.dll", "Microsoft.Testing.Extensions.TrxReport.Abstractions.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.NetStandard, "uTest.Runner.Module.System.Runtime.CompilerServices.Unsafe.dll", "System.Runtime.CompilerServices.Unsafe.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.NetFramework, "uTest.Runner.Module.System.Runtime.CompilerServices.Unsafe (.NET Framework).dll", "System.Runtime.CompilerServices.Unsafe (.NET Framework).dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Threading.Tasks.Extensions.dll", "System.Threading.Tasks.Extensions.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.NetFramework, "uTest.Runner.Module.System.Buffers.dll", "System.Buffers.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Threading.Tasks.dll", "System.Threading.Tasks.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Collections.dll", "System.Collections.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Collections.Concurrent.dll", "System.Collections.Concurrent.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Reflection.dll", "System.Reflection.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Reflection.Extensions.dll", "System.Reflection.Extensions.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.ObjectModel.dll", "System.ObjectModel.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Globalization.dll", "System.Globalization.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Diagnostics.Debug.dll", "System.Diagnostics.Debug.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Diagnostics.Tools.dll", "System.Diagnostics.Tools.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Linq.dll", "System.Linq.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Runtime.dll", "System.Runtime.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Runtime.Extensions.dll", "System.Runtime.Extensions.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Text.RegularExpressions.dll", "System.Text.RegularExpressions.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Memory.dll", "System.Memory.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Extensions.FileSystemGlobbing.dll", "Microsoft.Extensions.FileSystemGlobbing.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.xunit.assert.dll", "xunit.assert.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.0Harmony.dll", "0Harmony.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.xunit.assert (License).txt", "xunit.assert (License).txt"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System+Microsoft .NET Libraries (License).txt", "System+Microsoft .NET Libraries (License).txt"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Mono Class Libraries (License).txt", "Mono Class Libraries (License).txt"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Testing.Platform (License).txt", "Microsoft.Testing.Platform (License).txt"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.0Harmony (License).txt", "0Harmony (License).txt"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ModularRpcs (License).txt", "ModularRpcs (License).txt"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.AssemblyDeletionWarning.txt", "!! DONT PUT DLLs IN HERE !!.txt"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.DummyPlayerHost", "Unturned.uTest.DummyPlayerHost.dll") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
-        new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, uTestAssembly, "uTest.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
-        new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, uTestRunnerAssembly, "uTest.Runner.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
+
+        new EmbeddedModuleFile(SupportedTargetFramework.NetFramework, "uTest.Runner.Module.System.Buffers.dll",                                 "System.Buffers.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Threading.Tasks.dll",                                 "System.Threading.Tasks.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Collections.Concurrent.dll",                          "System.Collections.Concurrent.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Reflection.dll",                                      "System.Reflection.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Reflection.Extensions.dll",                           "System.Reflection.Extensions.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.ObjectModel.dll",                                     "System.ObjectModel.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Globalization.dll",                                   "System.Globalization.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Diagnostics.Debug.dll",                               "System.Diagnostics.Debug.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Diagnostics.Tools.dll",                               "System.Diagnostics.Tools.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Linq.dll",                                            "System.Linq.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Text.RegularExpressions.dll",                         "System.Text.RegularExpressions.exe"),
+        
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Diagnostics.DiagnosticSource.dll",                    "System.Diagnostics.DiagnosticSource.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Bcl.AsyncInterfaces.dll",                          "Microsoft.Bcl.AsyncInterfaces.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Extensions.FileSystemGlobbing.dll",                "Microsoft.Extensions.FileSystemGlobbing.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Extensions.DependencyInjection.Abstractions.dll",  "Microsoft.Extensions.DependencyInjection.Abstractions.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Extensions.Logging.Abstractions.dll",              "Microsoft.Extensions.Logging.Abstractions.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.xunit.assert.dll",                                           "xunit.assert.dll"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.0Harmony.dll",                                               "0Harmony.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.xunit.assert (License).txt",                                 "xunit.assert (License).txt"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System+Microsoft .NET Libraries (License).txt",              "System+Microsoft .NET Libraries (License).txt"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Mono Class Libraries (License).txt",                         "Mono Class Libraries (License).txt"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Testing.Platform (License).txt",                   "Microsoft.Testing.Platform (License).txt"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.0Harmony (License).txt",                                     "0Harmony (License).txt"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ModularRpcs (License).txt",                                  "ModularRpcs (License).txt"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ReflectionTools (License).txt",                              "ReflectionTools (License).txt"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.AssemblyDeletionWarning.txt",                                "!! DONT PUT FILES IN HERE !!.txt"),
+        
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.README.md",                                                  "README.md"),
+        
+        new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, uTestAssembly,                                                              "uTest.dll") { ModuleReferenceMode = ModuleFileReferenceMode.Both },
+        new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, uTestRunnerAssembly,                                                        "uTest.Runner.dll"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.DummyPlayerHost.dll",                         "uTest.DummyPlayerHost.dll") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        
         new ModuleConfigFile()
     ];
 
     private static readonly ModuleConfigFile DisabledModule = new ModuleConfigFile { IsEnabled = false };
+    private static readonly BootstrapperModuleConfigFile DisabledBootstrapperModule = new BootstrapperModuleConfigFile { IsEnabled = false };
 
     private static readonly HashSet<string> ExpectedFiles;
 
@@ -125,7 +138,8 @@ internal static class ModuleFiles
             return true;
         }
 
-        return DisabledModule.TryWrite(moduleFolder, logger, out _, testAssemblyFile);
+        return DisabledModule.TryWrite(moduleFolder, logger, out _, testAssemblyFile)
+               && DisabledBootstrapperModule.TryWrite(moduleFolder, logger, out _, testAssemblyFile);
     }
 
     internal static bool IsServer { get; set; }
@@ -170,8 +184,12 @@ internal static class ModuleFiles
 
         try
         {
-            foreach (string file in Directory.EnumerateFiles(moduleFolder, "*.dll", SearchOption.TopDirectoryOnly))
+            foreach (string file in Directory.EnumerateFiles(moduleFolder, "*", SearchOption.TopDirectoryOnly))
             {
+                string ext = Path.GetExtension(file);
+                if (!ext.Equals(".dll", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 string fileName = Path.GetFileName(file);
                 if (FileHelper.FileNameComparer.Equals(file, testAssemblyLocation) || IsFileExpected(fileName))
                     continue;
@@ -209,6 +227,7 @@ internal abstract class ModuleFile
     internal SupportedTargetFramework Framework { get; }
     internal string FileName { get; }
     internal ModuleFileReferenceMode ModuleReferenceMode { get; init; }
+    internal bool LoadFromFile { get; set; }
 
     protected ModuleFile(SupportedTargetFramework framework, string fileName)
     {
@@ -233,7 +252,7 @@ internal abstract class ModuleFile
 
         return dt == FileNotExistsWriteTimeReturnValue ? defaultValue : dt;
     }
-
+    
     public abstract bool TryWrite(string baseFolder, ILogger logger, [MaybeNullWhen(false)] out string fileName, LoadedAssemblyModuleFile? testAssembly);
 
     /// <returns>The exception if there was one.</returns>
@@ -315,6 +334,7 @@ internal sealed class LoadedAssemblyModuleFile : ModuleFile
 
             case var ex: // default:
                 logger.LogError(string.Format(Properties.Resources.LogErrorCopyingFile, location), ex);
+                logger.LogError(ex.Message);
                 break;
         }
 
@@ -389,6 +409,7 @@ internal sealed class EmbeddedModuleFile : ModuleFile
         catch (Exception ex)
         {
             logger.LogError(string.Format(Properties.Resources.LogErrorCopyingFile, FileName), ex);
+            logger.LogError(ex.Message);
             fileName = null;
             return false;
         }
@@ -435,6 +456,21 @@ internal sealed class ModuleConfigFile : ModuleFile
             writer.WritePropertyName("Version");
             writer.WriteValue(ModuleFiles.uTestAssembly.GetName().Version.ToString());
 
+            writer.WritePropertyName("Dependencies");
+            writer.WriteStartArray();
+
+            writer.WriteStartObject();
+
+            writer.WritePropertyName("Name");
+            writer.WriteValue("uTest.Bootstrapper");
+
+            writer.WritePropertyName("Version");
+            writer.WriteValue(ModuleFiles.uTestAssembly.GetName().Version.ToString());
+
+            writer.WriteEndObject();
+
+            writer.WriteEndArray();
+
             writer.WritePropertyName("Assemblies");
             writer.WriteStartArray();
 
@@ -470,8 +506,11 @@ internal sealed class ModuleConfigFile : ModuleFile
                     });
                 }
 
-                writer.WritePropertyName("Load_As_Byte_Array");
-                writer.WriteValue(true);
+                if (!file.LoadFromFile)
+                {
+                    writer.WritePropertyName("Load_As_Byte_Array");
+                    writer.WriteValue(true);
+                }
 
                 writer.WriteEndObject();
             }
@@ -485,6 +524,87 @@ internal sealed class ModuleConfigFile : ModuleFile
         catch (Exception ex)
         {
             logger.LogError(string.Format(Properties.Resources.LogErrorCopyingFile, FileName), ex);
+            logger.LogError(ex.Message);
+            fileName = null;
+            return false;
+        }
+
+        if (assemblyCreateDate != DateTime.MaxValue)
+        {
+            try
+            {
+                File.SetLastWriteTime(path, assemblyCreateDate);
+            }
+            catch { /* ignored */ }
+        }
+
+        fileName = path;
+        return true;
+    }
+}
+
+internal sealed class BootstrapperModuleConfigFile : ModuleFile
+{
+    public bool IsEnabled { get; init; } = true;
+
+    public BootstrapperModuleConfigFile() : base(SupportedTargetFramework.Both, "uTest.Bootstrapper.module") { }
+
+    public override bool TryWrite(string baseFolder, ILogger logger, [MaybeNullWhen(false)] out string fileName, LoadedAssemblyModuleFile? testAssembly)
+    {
+        string path = Path.Combine(baseFolder, FileName);
+        DateTime assemblyCreateDate = DateTime.MaxValue;
+
+        try
+        {
+            using FileStream fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 1024, FileOptions.SequentialScan);
+            using StreamWriter sw = new StreamWriter(fs, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), 1024, leaveOpen: true);
+
+            using JsonTextWriter writer = new JsonTextWriter(sw);
+
+            writer.CloseOutput = false;
+#if DEBUG
+            writer.Formatting = Formatting.Indented;
+            writer.IndentChar = ' ';
+            writer.Indentation = 4;
+#endif
+
+            writer.WriteStartObject();
+            
+            writer.WritePropertyName("IsEnabled");
+            writer.WriteValue(IsEnabled);
+
+            writer.WritePropertyName("Name");
+            writer.WriteValue("uTest.Bootstrapper");
+
+            writer.WritePropertyName("Version");
+            writer.WriteValue(ModuleFiles.uTestAssembly.GetName().Version.ToString());
+
+
+            writer.WritePropertyName("Assemblies");
+            writer.WriteStartArray();
+
+            writer.WriteStartObject();
+
+            writer.WritePropertyName("Path");
+            // nelson just appends the file name so this is correct
+            writer.WriteValue("/uTest.Bootstrapper.dll");
+
+            writer.WritePropertyName("Role");
+            writer.WriteValue("Both_Optional");
+
+            writer.WriteEndObject();
+
+            writer.WriteEndArray();
+
+
+            writer.WriteEndObject();
+
+            writer.Flush();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(string.Format(Properties.Resources.LogErrorCopyingFile, FileName), ex);
+            logger.LogError(ex.Message);
             fileName = null;
             return false;
         }

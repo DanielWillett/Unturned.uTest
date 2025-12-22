@@ -1,25 +1,23 @@
-﻿using DanielWillett.ModularRpcs;
-using DanielWillett.ModularRpcs.Abstractions;
+﻿using DanielWillett.ModularRpcs.Abstractions;
 using DanielWillett.ModularRpcs.Annotations;
 using DanielWillett.ModularRpcs.Async;
-using DanielWillett.ModularRpcs.Configuration;
-using DanielWillett.ModularRpcs.DependencyInjection;
 using DanielWillett.ModularRpcs.NamedPipes;
 using DanielWillett.ModularRpcs.Reflection;
 using DanielWillett.ModularRpcs.Routing;
-using DanielWillett.ModularRpcs.Serialization;
 using JetBrains.Annotations;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
 using SDG.Framework.Modules;
 using System;
-using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Unturned.SystemEx;
 using uTest.Module;
 using uTest.Protocol.DummyPlayerHost;
+// ReSharper disable LocalizableElement
 
 namespace uTest.Dummies;
 
@@ -38,31 +36,12 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
     internal IServiceProvider ModularRpcsServices { get; private set; }
 
-    public DummyPlayerLauncher(MainModule module, ILogger logger)
+    public DummyPlayerLauncher(MainModule module, ILogger logger, IServiceProvider serviceProvider)
     {
         _module = module;
         _logger = logger;
         SteamIdPool = new SteamIdPool(module.TestList?.SteamIdGenerationStyle ?? SteamIdGenerationStyle.DevUniverse);
-        ServiceContainer c = new ServiceContainer();
-
-        ProxyGenerator.Instance.SetLogger(UnturnedLogLogger.Instance);
-        ServerRpcConnectionLifetime lifetime = new ServerRpcConnectionLifetime();
-        DefaultSerializer serializer = new DefaultSerializer(new SerializationConfiguration
-        {
-            MaximumGlobalArraySize = 256,
-            MaximumArraySizes = { { typeof(byte), 16384 } }
-        });
-        DependencyInjectionRpcRouter router = new DependencyInjectionRpcRouter(c);
-        lifetime.SetLogger(UnturnedLogLogger.Instance);
-        router.SetLogger(UnturnedLogLogger.Instance);
-
-        c.AddService(typeof(ProxyGenerator), ProxyGenerator.Instance);
-        c.AddService(typeof(IRpcConnectionLifetime), lifetime);
-        c.AddService(typeof(IRpcSerializer), serializer);
-        c.AddService(typeof(IRpcRouter), router);
-        c.AddService(typeof(DummyPlayerLauncher), this);
-
-        ModularRpcsServices = c;
+        ModularRpcsServices = serviceProvider;
     }
 
     public bool TryGetRemoteDummy(Player player, [MaybeNullWhen(false)] out RemoteDummyPlayerActor dummy)
@@ -75,14 +54,14 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         return _remoteDummies.TryGetValue(steam64, out dummy);
     }
 
-    private string GetArgs(CSteamID steamId, string dataDir)
+    private string GetArgs(CSteamID steamId, string dataDir, int i)
     {
-        return $"-NoDefaultLog " +
+        return (i == 0 ? string.Empty : "-NoDefaultLog ") +
                $"-ModulesPath \"{_module.HomeDirectory}\" " +
                $"-uTestSteamId {steamId.m_SteamID.ToString(CultureInfo.InvariantCulture)} " +
                $"-uTestDataDir {CommandLineHelper.EscapeCommandLineArg(dataDir)} " +
-               $"-NoVanillaAssemblySearch " +
-               $"-NoWorkshopSubscriptions";
+                "-NoVanillaAssemblySearch " +
+                "-NoWorkshopSubscriptions";
     }
 
     public void NotifyWorkshopUpdate(PublishedFileId_t[] files)
@@ -106,7 +85,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         });
     }
 
-    [RpcSend("uTest.Dummies.Host.DummyPlayerHost, Unturned.uTest.DummyPlayerHost", "ReceiveWorkshopItemsUpdate"), UsedImplicitly]
+    [RpcSend("uTest.Dummies.Host.DummyPlayerHost, Unturned.uTest.DummyPlayerHost", "ReceiveWorkshopItemsUpdate")]
     private partial RpcTask SendWorkshopItemsUpdate(IEnumerable<IModularRpcRemoteConnection> connections, ulong[] files);
 
     [RpcReceive, UsedImplicitly]
@@ -120,15 +99,22 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         if (status == DummyReadyStatus.StartedUp)
         {
             Interlocked.CompareExchange(ref actor.ConnectionIntl, connection, null);
-            TaskCompletionSource<RemoteDummyPlayerActor>? tcs = actor._loadTcs;
+            TaskCompletionSource<RemoteDummyPlayerActor>? tcs = actor.LoadedCondition;
             if (tcs == null)
             {
                 await Task.Delay(500);
+                tcs = actor.LoadedCondition;
             }
 
             if (tcs == null || !tcs.TrySetResult(actor))
                 throw new ArgumentException($"Player {id} already started.");
         }
+        else if (status == DummyReadyStatus.AssetsLoaded)
+        {
+            actor.ReadyCondition?.TrySetResult(actor);
+        }
+
+        _logger.LogInformation($"Remote actor status update: {actor.Steam64.m_SteamID} (PID {actor.ProcessId}): {status}.");
     }
 
     public async Task<bool> StartDummiesAsync(int amt)
@@ -144,23 +130,38 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
         JsonSerializer serializer = JsonSerializer.CreateDefault();
 
+        // cmd line args don't support escaping backslashes in Unturend so we have to explicitly use forward slashes
         string baseDummyPath = Path.Combine(_module.HomeDirectory, "Dummies/");
-        if (Path.PathSeparator == '\\')
-            baseDummyPath = baseDummyPath.Replace(Path.PathSeparator, '/');
+
+        try
+        {
+            foreach (string dir in Directory.EnumerateDirectories(baseDummyPath))
+            {
+                if (uint.TryParse(Path.GetFileName(dir), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+                {
+                    Directory.Delete(dir, true);
+                }
+            }
+        }
+        catch (DirectoryNotFoundException) { }
+
+        if (Path.DirectorySeparatorChar == '\\')
+            baseDummyPath = baseDummyPath.Replace('\\', '/');
 
         ulong[] workshopIds = WorkshopDownloadConfig.getOrLoad().File_IDs.ToArray();
 
         bool failed = false;
 
         RemoteDummyPlayerActor[] actors = new RemoteDummyPlayerActor[amt];
+
         for (int i = 0; i < amt; ++i)
         {
             CSteamID steamId = SteamIdPool.GetUniqueCSteamID();
 
-            // cmd line args don't support escaping backslashes in Unturend so we have to explicitly use forward slashes
             string configDir = baseDummyPath + steamId.GetAccountID().m_AccountID.ToString("X8", CultureInfo.InvariantCulture);
-            
-            string args = GetArgs(steamId, configDir);
+            Directory.CreateDirectory(configDir);
+
+            string args = GetArgs(steamId, configDir, i);
 
             using (JsonTextWriter writer = new JsonTextWriter(new StreamWriter(configDir + "/startup.json", false, Encoding.UTF8)))
             {
@@ -195,47 +196,103 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
             }
             catch (PlatformNotSupportedException) { }
 
-            Process? p = Process.Start(startInfo);
-            if (p == null)
+            Process? process = Process.Start(startInfo);
+            if (process == null)
             {
                 _logger.LogError($"Failed to start process for client {i} ({steamId.m_SteamID}).");
                 failed = true;
-                for (int j = 0; j < i; ++j)
+            }
+            else
+            {
+                try
                 {
-                    RemoteDummyPlayerActor a = actors[j];
-                    try
+                    RemoteDummyPlayerActor actor = ProxyGenerator.Instance.CreateProxy<RemoteDummyPlayerActor>(
+                        ModularRpcsServices.GetRequiredService<IRpcRouter>(),
+                        nonPublic: true,
+                        steamId,
+                        $"TestPlayer_{steamId.GetAccountID().m_AccountID}",
+                        this,
+                        process,
+                        Path.GetFullPath(configDir)
+                    );
+
+                    actors[i] = actor;
+
+                    _remoteDummies.Add(steamId.m_SteamID, actor);
+                    _logger.LogInformation($"Waiting to hear from simulated player {i} (PID {actor.ProcessId})...");
+                    await Task.WhenAny(
+                        Task.Delay(TimeSpan.FromSeconds(15), _module.CancellationToken),
+                        actor.LoadedCondition!.Task
+                    );
+                    if (!actor.LoadedCondition.Task.IsCompleted || process.HasExited)
                     {
-                        a.Process.Kill();
+                        _logger.LogWarning($"Still waiting after 15 seconds for simulated player {i} (PID {actor.ProcessId}) to start loading (or was closed).");
+
+                        if (!process.HasExited)
+                        {
+                            await Task.WhenAny(
+                                Task.Delay(TimeSpan.FromSeconds(45), _module.CancellationToken),
+                                actor.LoadedCondition.Task
+                            );
+                        }
                     }
-                    catch (Exception ex)
+
+                    if (!actor.LoadedCondition.Task.IsCompleted || process.HasExited)
                     {
-                        _logger.LogError($"Failed to kill process for client {j} ({a.Steam64.m_SteamID}).", ex);
+                        _logger.LogError($"Simulated player {i} (PID {actor.ProcessId}) did not start loading within a minute (or was closed).");
+                        try
+                        {
+                            if (!process.HasExited)
+                                process.Kill();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError($"Failed to kill process for client {i}: {actor.ProcessId} ({actor.Steam64.m_SteamID}).", ex);
+                        }
+                        finally
+                        {
+                            process.Dispose();
+                        }
+
+                        failed = true;
                     }
-                    a.Process.Dispose();
-                    _remoteDummies.Remove(a.Steam64.m_SteamID);
+                    else
+                    {
+                        await actor.LoadedCondition.Task;
+                        actor.LoadedCondition = null;
+                        _logger.LogInformation($"Simulated player {i} (PID {actor.ProcessId}) has started loading.");
+                    }
                 }
-                
-                break;
+                catch
+                {
+                    _remoteDummies.Remove(steamId.m_SteamID);
+                    process.Dispose();
+                    throw;
+                }
             }
 
-            try
+            if (!failed)
+                continue;
+
+            for (int j = 0; j < i; ++j)
             {
-                RemoteDummyPlayerActor actor = new RemoteDummyPlayerActor(steamId, $"TestPlayer_{steamId.GetAccountID().m_AccountID}", this, p);
-                actors[i] = actor;
-
-                _remoteDummies.Add(steamId.m_SteamID, actor);
-                actor.ProcessId = (uint)p.Id;
-                actor.Process = p;
-
-                actor._loadTcs = new TaskCompletionSource<RemoteDummyPlayerActor>();
-                await actor._loadTcs.Task;
+                RemoteDummyPlayerActor a = actors[j];
+                try
+                {
+                    a.Process.Kill();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Failed to kill process for client {j}: {a.ProcessId} ({a.Steam64.m_SteamID}).", ex);
+                }
+                finally
+                {
+                    a.Process.Dispose();
+                }
+                _remoteDummies.Remove(a.Steam64.m_SteamID);
             }
-            catch
-            {
-                _remoteDummies.Remove(steamId.m_SteamID);
-                p.Dispose();
-                throw;
-            }
+
+            break;
         }
 
         return !failed;
@@ -251,9 +308,177 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         return default;
     }
 
-    private Task ConnectDummyPlayersAsyncIntl(List<ulong>? idsOrNull, CancellationToken token)
+    public ValueTask DisconnectDummyPlayersAsync(List<ulong>? idsOrNull, CancellationToken token)
     {
-        return Task.CompletedTask;
+        if (_remoteDummies.Count > 0)
+        {
+            return new ValueTask(DisconnectDummyPlayersAsyncIntl(idsOrNull, token));
+        }
+
+        return default;
+    }
+
+    private async Task ConnectDummyPlayersAsyncIntl(List<ulong>? idsOrNull, CancellationToken token)
+    {
+        await GameThread.Switch(token);
+
+        ulong serverCode = SteamGameServer.GetSteamID().m_SteamID;
+        ushort port = Provider.GetServerConnectionPort();
+
+        if (!IPv4Address.TryParse(Provider.bindAddress, out IPv4Address address))
+        {
+            address = new IPv4Address(127u << 24 | 1 /* 127.0.0.1 */);
+        }
+
+        if (idsOrNull == null)
+        {
+            foreach (RemoteDummyPlayerActor actor in _remoteDummies.Values)
+            {
+                await ConnectDummyAsync(actor, token, address.value, port, serverCode);
+            }
+        }
+        else
+        {
+            foreach (ulong id in idsOrNull)
+            {
+                if (!_remoteDummies.TryGetValue(id, out RemoteDummyPlayerActor actor))
+                    throw new ArgumentException($"Fully-simulated dummy doesn't exist: {id}.", nameof(idsOrNull));
+
+                await ConnectDummyAsync(actor, token, address.value, port, serverCode);
+            }
+        }
+    }
+    
+    private async Task DisconnectDummyPlayersAsyncIntl(List<ulong>? idsOrNull, CancellationToken token)
+    {
+        await GameThread.Switch(token);
+
+        if (idsOrNull == null)
+        {
+            foreach (RemoteDummyPlayerActor actor in _remoteDummies.Values)
+            {
+                await DisconnectDummyAsync(actor);
+            }
+        }
+        else
+        {
+            foreach (ulong id in idsOrNull)
+            {
+                if (!_remoteDummies.TryGetValue(id, out RemoteDummyPlayerActor actor))
+                    throw new ArgumentException($"Fully-simulated dummy doesn't exist: {id}.", nameof(idsOrNull));
+
+                await DisconnectDummyAsync(actor);
+            }
+        }
+    }
+
+    private async Task ConnectDummyAsync(RemoteDummyPlayerActor actor, CancellationToken token, uint ipv4, ushort port, ulong serverCode)
+    {
+        TaskCompletionSource<RemoteDummyPlayerActor>? readyTask = actor.ReadyCondition;
+        if (readyTask != null)
+        {
+            if (!readyTask.Task.IsCompleted)
+            {
+                _logger.LogInformation($"Waiting for {actor.Steam64} (PID {actor.ProcessId}) to finish loading assets.");
+
+                await Task.WhenAny(
+                    Task.Delay(TimeSpan.FromMinutes(5d), token),
+                    readyTask.Task
+                );
+            }
+            if (!readyTask.Task.IsCompleted)
+                throw new TimeoutException($"Timed out waiting for {actor.Steam64} (PID {actor.ProcessId}) to finish loading assets after 5 minutes.");
+
+            await readyTask.Task;
+        }
+
+        TaskCompletionSource<RemoteDummyPlayerActor> connectTask = new TaskCompletionSource<RemoteDummyPlayerActor>();
+        actor.ConnectedCondition = connectTask;
+
+        await actor.Connect(ipv4, port, Provider.serverPassword, serverCode,
+            Provider.map,
+            Provider.cameraMode,
+            Provider.isPvP,
+            "Unturned.uTest",
+            Provider.hasCheats,
+            Provider.getServerWorkshopFileIDs().Count > 0,
+            Provider.mode,
+            Provider.clients.Count,
+            Provider.maxPlayers,
+            !string.IsNullOrEmpty(Provider.serverPassword),
+            Provider.isGold,
+            Provider.configData.Browser.Is_Using_Anycast_Proxy ? SteamServerAdvertisement.EAnycastProxyMode.TaggedByHost : SteamServerAdvertisement.EAnycastProxyMode.None,
+            Provider.configData.Browser.Monetization,
+            Provider.configData.Server.VAC_Secure,
+            Provider.IsBattlEyeActiveOnCurrentServer,
+            SteamPluginAdvertising.Get().PluginFrameworkTag switch
+            {
+                null or "" => SteamServerAdvertisement.EPluginFramework.None,
+                "rm" => SteamServerAdvertisement.EPluginFramework.Rocket,
+                "om" => SteamServerAdvertisement.EPluginFramework.OpenMod,
+                _ => SteamServerAdvertisement.EPluginFramework.Unknown
+            },
+            Provider.configData.Browser.Thumbnail,
+            Provider.configData.Browser.Desc_Server_List
+        );
+
+        await Task.WhenAny(
+            Task.Delay(TimeSpan.FromMinutes(2d), token),
+            connectTask.Task
+        );
+        
+        if (!connectTask.Task.IsCompleted)
+            throw new TimeoutException($"Timed out waiting for {actor.Steam64} (PID {actor.ProcessId}) to connect after 2 minutes.");
+
+        await connectTask.Task;
+        actor.ConnectedCondition = null;
+        actor.Status = DummyReadyStatus.Connected;
+    }
+
+    private static async Task DisconnectDummyAsync(RemoteDummyPlayerActor actor)
+    {
+        if (actor.ReadyCondition is { Task.IsCompleted: false })
+            return;
+
+        await actor.Disconnect();
+        actor.Status = DummyReadyStatus.AssetsLoaded;
+    }
+
+    internal void CloseAllDummies()
+    {
+        List<RemoteDummyPlayerActor> actors = _remoteDummies.Values.ToList();
+        Task[] tasks = new Task[actors.Count];
+        for (int i = 0; i < actors.Count; i++)
+        {
+            RemoteDummyPlayerActor actor = actors[i];
+            tasks[i] = Task.Run(async () =>
+            {
+                try
+                {
+                    bool closed = actor.Process.HasExited;
+                    if (actor.ConnectionIntl != null && !closed)
+                    {
+                        await actor.SendGracefullyClose();
+                        closed = actor.Process.WaitForExit(1000);
+                    }
+
+                    if (!closed)
+                    {
+                        actor.Process.Kill();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError($"Error gracefully closing connection with simulated dummy {actor.Steam64}.", ex);
+                }
+                finally
+                {
+                    actor.Process.Dispose();
+                }
+            });
+        }
+
+        Task.WhenAll(tasks).Wait();
     }
 }
 
@@ -267,7 +492,9 @@ internal enum DummyReadyStatus : byte
     /// <summary>
     /// Invoked after vanilla and workshop assets have been loaded, therefore client is ready to connect.
     /// </summary>
-    AssetsLoaded
+    AssetsLoaded,
+
+    Connected
 }
 
 internal class DummyLauncherConfig

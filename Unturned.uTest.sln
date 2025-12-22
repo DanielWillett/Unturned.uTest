@@ -3,8 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.0.11018.127
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest", "Unturned.uTest\Unturned.uTest.csproj", "{3C666450-1525-453A-85B2-D1045774FD47}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.Tests", "Unturned.uTest.Tests\Unturned.uTest.Tests.csproj", "{28E8AD36-CF10-4C41-96F7-B807F5E972F7}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.Sandbox", "Unturned.uTest.Sandbox\Unturned.uTest.Sandbox.csproj", "{7AC644F4-0E21-443E-84CE-5F85030695EB}"
@@ -15,16 +13,16 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.Runner.Sourc
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.DummyPlayerHost", "Unturned.uTest.DummyPlayerHost\Unturned.uTest.DummyPlayerHost.csproj", "{498B6D88-68A9-435D-86BC-6933C01E3299}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest", "Unturned.uTest\Unturned.uTest.csproj", "{AA601F7B-5566-6A47-6591-7FD3FFDDF921}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.Bootstrapper", "Unturned.uTest.Bootstrapper\Unturned.uTest.Bootstrapper.csproj", "{84CA667C-3D9B-47EF-8DDC-C0C7E8964AC7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{3C666450-1525-453A-85B2-D1045774FD47}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3C666450-1525-453A-85B2-D1045774FD47}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3C666450-1525-453A-85B2-D1045774FD47}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3C666450-1525-453A-85B2-D1045774FD47}.Release|Any CPU.Build.0 = Release|Any CPU
 		{28E8AD36-CF10-4C41-96F7-B807F5E972F7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{28E8AD36-CF10-4C41-96F7-B807F5E972F7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{28E8AD36-CF10-4C41-96F7-B807F5E972F7}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -45,6 +43,14 @@ Global
 		{498B6D88-68A9-435D-86BC-6933C01E3299}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{498B6D88-68A9-435D-86BC-6933C01E3299}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{498B6D88-68A9-435D-86BC-6933C01E3299}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AA601F7B-5566-6A47-6591-7FD3FFDDF921}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA601F7B-5566-6A47-6591-7FD3FFDDF921}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA601F7B-5566-6A47-6591-7FD3FFDDF921}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA601F7B-5566-6A47-6591-7FD3FFDDF921}.Release|Any CPU.Build.0 = Release|Any CPU
+		{84CA667C-3D9B-47EF-8DDC-C0C7E8964AC7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{84CA667C-3D9B-47EF-8DDC-C0C7E8964AC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{84CA667C-3D9B-47EF-8DDC-C0C7E8964AC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{84CA667C-3D9B-47EF-8DDC-C0C7E8964AC7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

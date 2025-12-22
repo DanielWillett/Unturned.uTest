@@ -41,7 +41,7 @@ public class PlayerActor : ITestPlayer
     }
 
     [MemberNotNull(nameof(_player))]
-    private protected void NotifyConnectedIntl(Player player)
+    private protected virtual void NotifyConnectedIntl(Player player)
     {
         _player = player;
         SteamPlayerID playerId = player.channel.owner.playerID;

@@ -1,2 +1,6 @@
-Assemblies will be wiped from this folder occasionally if they're not added by uTest.
+Assemblies (.dll, .exe) will be wiped from this folder occasionally if they're not added by uTest.
 This is done to allow removing assemblies from uTest's dependencies in the future.
+
+
+If you're wondering why some of these are EXEs, its to avoid Unturned automatically discovering them and messing up functionality of other modules.
+They are just renamed .dll files and running them will do nothing.

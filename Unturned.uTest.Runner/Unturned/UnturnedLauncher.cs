@@ -55,6 +55,7 @@ internal class UnturnedLauncher : IDisposable
     {
         string moduleRoot = Path.Combine(installDir, "Modules", "uTest");
 
+        ModuleFiles.IsServer = _u3ds;
         if (!ModuleFiles.DisableModule(moduleRoot, _logger, testAssembly))
         {
             throw new NotSupportedException("Unable to disable test module.");
@@ -66,6 +67,7 @@ internal class UnturnedLauncher : IDisposable
     {
         string moduleRoot = Path.Combine(installDir, "Modules", "uTest");
 
+        ModuleFiles.IsServer = _u3ds;
         if (!ModuleFiles.WriteModuleFiles(moduleRoot, _logger, testAssembly))
         {
             throw new NotSupportedException("Unable to write test module.");
@@ -242,18 +244,25 @@ internal class UnturnedLauncher : IDisposable
                 {
                     _logger.LogInformation("Initial connection established.");
 
-                    disabledModule = true;
-                    DisableModule(installDir, testAssembly);
-
                     completionSource = new TaskCompletionSource<int>();
 
                     Action<ITransportMessage> onMessage = message =>
                     {
                         _logger.LogInformation($"Message received: {message.GetType().FullName}.");
 
-                        if (message is LevelLoadedMessage)
-                            completionSource.SetResult(0);
+                        switch (message)
+                        {
+                            case LevelLoadedMessage:
+                                completionSource.SetResult(0);
+                                break;
+
+                            case AllInstancesStartedMessage:
+                                disabledModule = true;
+                                DisableModule(installDir, testAssembly);
+                                break;
+                        }
                     };
+
 
                     Client.MessageReceived += onMessage;
                     try

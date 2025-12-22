@@ -1,0 +1,1 @@
+﻿This project runs before the main uTest assembly is loaded to register dependencies in a way that preserves existing dependencies if they exist and are new enough.

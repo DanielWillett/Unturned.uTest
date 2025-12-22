@@ -1,5 +1,6 @@
 using System;
 using System.Text;
+using DanielWillett.ModularRpcs.Serialization.Parsers;
 using DanielWillett.ReflectionTools;
 
 #pragma warning disable IDE0130
@@ -38,6 +39,45 @@ public static class DefaultLogger
             Logger = CommandWindowLogger.Instance;
         else
             Logger = UnturnedLogLogger.Instance;
+    }
+}
+
+public static class DefaultLoggerReflectionTools
+{
+    public static IReflectionToolsLogger Logger { get; } = new ReflectionToolsLoggerWrapper(DefaultLogger.Logger);
+}
+
+internal sealed class ReflectionToolsLoggerWrapper(ILogger logger) : IReflectionToolsLogger
+{
+    public void LogDebug(string source, string message)
+    {
+        logger.LogDebug(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
+    }
+
+    public void LogInfo(string source, string message)
+    {
+        logger.LogInformation(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
+    }
+
+    public void LogWarning(string source, string message)
+    {
+        logger.LogWarning(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
+    }
+
+    public void LogError(string source, Exception? ex, string? message)
+    {
+        if (ex != null)
+        {
+            if (message == null)
+                logger.LogError(ex);
+            else
+                logger.LogError(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}", ex);
+        }
+        else
+        {
+            if (message != null)
+                logger.LogError(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
+        }
     }
 }
 
@@ -95,7 +135,6 @@ public sealed class ConsoleLogger : ILogger
         StringBuilderPool.Return(sb);
     }
 
-    /// <inheritdoc />
     public bool IsEnabled(LogLevel logLevel) => true;
 }
 
@@ -165,36 +204,57 @@ public sealed class CommandWindowLogger : ILogger
         switch (severity)
         {
             default:
-                if (GameThread.IsCurrent)
+                if (GameThread.IsCurrent || GameThread.HasStartedShuttingDown)
                 {
                     CommandWindow.Log(message);
                 }
                 else
                 {
-                    GameThread.Run<object>(message, CommandWindow.Log);
+                    try
+                    {
+                        GameThread.Run<object>(message, CommandWindow.Log);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        CommandWindow.Log(message);
+                    }
                 }
                 break;
 
             case LogLevel.Warning:
-                if (GameThread.IsCurrent)
+                if (GameThread.IsCurrent || GameThread.HasStartedShuttingDown)
                 {
                     CommandWindow.LogWarning(message);
                 }
                 else
                 {
-                    GameThread.Run<object>(message, CommandWindow.LogWarning);
+                    try
+                    {
+                        GameThread.Run<object>(message, CommandWindow.LogWarning);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        CommandWindow.LogWarning(message);
+                    }
                 }
                 break;
 
             case LogLevel.Error:
             case LogLevel.Critical:
-                if (GameThread.IsCurrent)
+                if (GameThread.IsCurrent || GameThread.HasStartedShuttingDown)
                 {
                     CommandWindow.LogError(message);
                 }
                 else
                 {
-                    GameThread.Run<object>(message, CommandWindow.LogError);
+                    try
+                    {
+                        GameThread.Run<object>(message, CommandWindow.LogError);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        CommandWindow.LogError(message);
+                    }
                 }
                 break;
         }
@@ -252,11 +312,10 @@ public sealed class CommandWindowLogger : ILogger
         StringBuilderPool.Return(sb);
     }
 
-    /// <inheritdoc />
     public bool IsEnabled(LogLevel logLevel) => true;
 }
 
-public sealed class UnturnedLogLogger : ILogger, IReflectionToolsLogger
+public sealed class UnturnedLogLogger : ILogger
 {
     public static readonly UnturnedLogLogger Instance = new UnturnedLogLogger();
 
@@ -268,36 +327,57 @@ public sealed class UnturnedLogLogger : ILogger, IReflectionToolsLogger
         switch (severity)
         {
             default:
-                if (GameThread.IsCurrent)
+                if (GameThread.IsCurrent || GameThread.HasStartedShuttingDown)
                 {
                     UnturnedLog.info(message);
                 }
                 else
                 {
-                    GameThread.Run(message, UnturnedLog.info);
+                    try
+                    {
+                        GameThread.Run(message, UnturnedLog.info);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        UnturnedLog.info(message);
+                    }
                 }
                 break;
 
             case LogLevel.Warning:
-                if (GameThread.IsCurrent)
+                if (GameThread.IsCurrent || GameThread.HasStartedShuttingDown)
                 {
                     UnturnedLog.warn(message);
                 }
                 else
                 {
-                    GameThread.Run(message, UnturnedLog.warn);
+                    try
+                    {
+                        GameThread.Run(message, UnturnedLog.warn);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        UnturnedLog.warn(message);
+                    }
                 }
                 break;
 
             case LogLevel.Error:
             case LogLevel.Critical:
-                if (GameThread.IsCurrent)
+                if (GameThread.IsCurrent || GameThread.HasStartedShuttingDown)
                 {
                     UnturnedLog.error(message);
                 }
                 else
                 {
-                    GameThread.Run(message, UnturnedLog.error);
+                    try
+                    {
+                        GameThread.Run(message, UnturnedLog.error);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        UnturnedLog.error(message);
+                    }
                 }
                 break;
         }
@@ -356,35 +436,4 @@ public sealed class UnturnedLogLogger : ILogger, IReflectionToolsLogger
     }
 
     public bool IsEnabled(LogLevel logLevel) => true;
-
-    public void LogDebug(string source, string message)
-    {
-        this.LogDebug(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
-    }
-
-    public void LogInfo(string source, string message)
-    {
-        this.LogInformation(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
-    }
-
-    public void LogWarning(string source, string message)
-    {
-        this.LogWarning(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
-    }
-
-    public void LogError(string source, Exception? ex, string? message)
-    {
-        if (ex != null)
-        {
-            if (message == null)
-                this.LogError(ex);
-            else
-                this.LogError(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}", ex);
-        }
-        else
-        {
-            if (message != null)
-                this.LogError(string.IsNullOrEmpty(source) ? message : $"[{source}] {message}");
-        }
-    }
 }

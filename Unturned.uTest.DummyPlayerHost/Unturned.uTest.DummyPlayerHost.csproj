@@ -16,12 +16,15 @@
 
 	<ItemGroup>
 
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease23,2.0.0)" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+
+    <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
+
+    <PackageReference Include="DanielWillett.ReflectionTools" Version="4.0.0" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease25,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" Aliases="JBA" />
-
-    <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
 
     <PackageReference Include="Unturned.MSBuild" Version="1.0.0-test6">
       <PrivateAssets>all</PrivateAssets>
@@ -53,12 +56,39 @@
     <Publicize Include="Assembly-CSharp:SDG.Unturned.LocalWorkshopSettings.instance" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.Assets.AddClientUgcSearchLocations" />
     <Publicize Include="Assembly-CSharp:SDG.Provider.TempSteamworksWorkshop.downloadServerItems" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._steamID" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._ip" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._name" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._map" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._isPvP" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._hasCheats" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._isWorkshop" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._mode" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._cameraMode" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._pingMs" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.sortingPing" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._players" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._maxPlayers" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._isPassworded" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._isPro" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.utilityScore" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.infoSource" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.anycastProxyMode" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.monetization" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.IsVACSecure" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.IsBattlEyeSecure" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.networkTransport" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._maxPlayers" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.pluginFramework" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.thumbnailURL" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.descText" />
 
   </ItemGroup>
 
   <ItemGroup>
 
 		<UnturnedReference Include="Assembly-CSharp" />
+		<UnturnedReference Include="SystemEx" />
     <UnturnedReference Include="com.rlabrecque.steamworks.net" />
 		<UnturnedReference Include="UnityEngine" />
 		<UnturnedReference Include="UnityEngine.CoreModule" />

@@ -54,7 +54,9 @@
     <UnturnedReference Include="SDG.NetTransport" />
     <UnturnedReference Include="SystemEx" />
 
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease23,2.0.0)" />
+    <!-- Update ModuleLibraryHelper if any of the versions of the fallback assemblies change. -->
+    <!--<PackageReference Include="DanielWillett.ReflectionTools" Version="4.0.0" />-->
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease25,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" ExcludeAssets="all" />
@@ -62,7 +64,6 @@
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="3.1.0" PrivateAssets="all" />
-    <!--<PackageReference Include="DanielWillett.ReflectionTools" Version="*" />-->
 
 		<PackageReference Include="xunit.assert" Version="2.9.3" PrivateAssets="none" />
     <PackageReference Include="xunit.analyzers" Version="1.24.0" PrivateAssets="none" ExcludeAssets="all" />
@@ -81,8 +82,11 @@
 
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.ServerMessageHandler_GetWorkshopFiles" />
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.NetMessages" />
-		<Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.buffer" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.buffer" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.IsBattlEyeActiveOnCurrentServer" />
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.DedicatedUGC.itemsToDownload" />
+		<Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPluginAdvertising" />
+		<Publicize Include="Assembly-CSharp:SDG.Framework.Modules.ModuleHook.discoveredNameToPath" />
 
 	</ItemGroup>
 

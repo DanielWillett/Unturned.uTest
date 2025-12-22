@@ -17,13 +17,13 @@
 
 	<ItemGroup>
 
-		<UnturnedReference Include="Assembly-CSharp"/>
+		<UnturnedReference Include="Assembly-CSharp" />
 
 		<PackageReference Include="Unturned.MSBuild" Version="1.0.0-test6">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
 		</PackageReference>
-		<ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
+    <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
 		<ProjectReference Include="../Unturned.uTest.Runner/Unturned.uTest.Runner.csproj" />
 		<ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />
 

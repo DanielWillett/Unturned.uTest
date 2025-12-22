@@ -1,4 +1,11 @@
-﻿using System;
+﻿using DanielWillett.ModularRpcs;
+using DanielWillett.ModularRpcs.Configuration;
+using DanielWillett.ModularRpcs.DependencyInjection;
+using DanielWillett.ModularRpcs.Reflection;
+using DanielWillett.ModularRpcs.Routing;
+using DanielWillett.ModularRpcs.Serialization;
+using System;
+using System.ComponentModel.Design;
 using System.Globalization;
 using System.Linq;
 using uTest.Discovery;
@@ -23,7 +30,7 @@ internal class DummyManager : IDummyPlayerController
         _module = module;
     }
 
-    public Task InitializeDummiesAsync(UnturnedTestInstance[] tests)
+    public Task<bool> InitializeDummiesAsync(UnturnedTestInstance[] tests)
     {
         bool needsFullPlayers = false;
         int minDummies = 0;
@@ -57,14 +64,41 @@ internal class DummyManager : IDummyPlayerController
 
         if (minDummies <= 0)
         {
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         if (!needsFullPlayers)
-            return Task.CompletedTask;
+            return Task.FromResult(true);
 
         _simMode = PlayerSimulationMode.Full;
-        _remoteDummyLauncher ??= new DummyPlayerLauncher(_module, _module.Logger);
+        if (_remoteDummyLauncher == null)
+        {
+            ServiceContainer cont = new ServiceContainer();
+
+            ProxyGenerator.Instance.SetLogger(DefaultLoggerReflectionTools.Logger);
+            ServerRpcConnectionLifetime lifetime = new ServerRpcConnectionLifetime();
+            DefaultSerializer serializer = new DefaultSerializer(new SerializationConfiguration
+            {
+                MaximumGlobalArraySize = 256,
+                MaximumArraySizes = { { typeof(byte), 16384 }, { typeof(string), 16384 } }, // todo
+                MaximumStringLength = 16384
+            });
+
+            cont.AddService(typeof(ProxyGenerator), ProxyGenerator.Instance);
+            cont.AddService(typeof(IRpcConnectionLifetime), lifetime);
+            cont.AddService(typeof(IRpcSerializer), serializer);
+
+            DependencyInjectionRpcRouter router = new DependencyInjectionRpcRouter(cont);
+            lifetime.SetLogger(DefaultLoggerReflectionTools.Logger);
+            router.SetLogger(DefaultLoggerReflectionTools.Logger);
+
+            cont.AddService(typeof(IRpcRouter), router);
+
+            _remoteDummyLauncher = ProxyGenerator.Instance.CreateProxy<DummyPlayerLauncher>(router, true, _module, _module.Logger, cont);
+            cont.AddService(typeof(DummyPlayerLauncher), _remoteDummyLauncher);
+            cont.AddService(typeof(IDummyPlayerController), _remoteDummyLauncher);
+        }
+
         return _remoteDummyLauncher.StartDummiesAsync(minDummies);
     }
 
@@ -191,6 +225,11 @@ internal class DummyManager : IDummyPlayerController
         state.Dispose();
 
         return state.Actor;
+    }
+
+    public void Dispose()
+    {
+        _remoteDummyLauncher?.CloseAllDummies();
     }
 }
 

@@ -1,5 +1,3 @@
-using uTest.Environment;
-
 namespace uTest.Sandbox;
 
 [Test]
@@ -7,10 +5,14 @@ public class Tests2 : ITestClass, ITestClassSetup
 {
     private bool _setupRan;
 
+    [PlayerSimulationMode(PlayerSimulationMode.Full)]
+    [PlayerCount(1)]
     [Test]
-    public void Test1(ITestEnvironment env)
+    public async Task Test1()
     {
-        IServersideTestPlayer player = env.Players.OfType<IServersideTestPlayer>().First();
+        await TestContext.Current.SpawnAllPlayersAsync();
+
+        await GameThread.Switch();
 
         Assert.True(_setupRan);
     }
@@ -20,7 +22,7 @@ public class Tests2 : ITestClass, ITestClassSetup
     {
         testContext.ConfigureAsync(env =>
         {
-
+            
         });
         return default;
     }

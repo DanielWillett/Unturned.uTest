@@ -16,6 +16,8 @@ public static class GameThread
     private static readonly ConcurrentQueue<GameThreadTaskAwaiter> TaskAwaiters = new ConcurrentQueue<GameThreadTaskAwaiter>();
     private static bool _hasFlushedRunAndWaits;
 
+    public static bool HasStartedShuttingDown => _hasFlushedRunAndWaits;
+
     /// <summary>
     /// Whether or not the current thread is the main Unity thread.
     /// </summary>

@@ -15,11 +15,6 @@ public class GameThreadTask
         _awaiter = new GameThreadTaskAwaiter(isCompleted, token);
     }
 
-    ~GameThreadTask()
-    {
-        _awaiter.Dispose();
-    }
-
     public GameThreadTaskAwaiter GetAwaiter()
     {
         return _awaiter;
@@ -37,6 +32,11 @@ public class GameThreadTaskAwaiter : ICriticalNotifyCompletion
     private CancellationTokenRegistration _tokenCancel;
 
     public bool IsCompleted { get; private set; }
+
+    ~GameThreadTaskAwaiter()
+    {
+        Dispose();
+    }
 
     public GameThreadTaskAwaiter(bool shouldStartCompleted, CancellationToken token)
     {
@@ -123,14 +123,8 @@ public class GameThreadTaskAwaiter : ICriticalNotifyCompletion
             if (continuation == null)
                 return;
 
-            try
-            {
-                continuation.Invoke();
-            }
-            catch (Exception ex)
-            {
-                me.Exception = ExceptionDispatchInfo.Capture(ex);
-            }
+            UnturnedLog.info("Invoked task continuation");
+            continuation.Invoke();
         }
     }
 

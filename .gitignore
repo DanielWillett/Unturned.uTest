@@ -361,3 +361,19 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/Unturned.uTest.Runner/Module/xunit.assert.dll
+/Unturned.uTest.Runner/Module/ReflectionTools.dll
+/Unturned.uTest.Runner/Module/ReflectionTools.Harmony.dll
+/Unturned.uTest.Runner/Module/ReflectionTools.dll
+/Unturned.uTest.Runner/Module/ReflectionTools.Harmony.dll
+/Unturned.uTest.Runner/Module/Microsoft.Extensions.FileSystemGlobbing.dll
+/Unturned.uTest.Runner/Module/0Harmony.dll
+/Unturned.uTest.Runner/Module/Microsoft.Testing.Extensions.TrxReport.Abstractions.dll
+/Unturned.uTest.Runner/Module/ModularRpcs.dll
+/Unturned.uTest.Runner/Module/ModularRpcs.NamedPipes.dll
+/Unturned.uTest.Runner/Module/ModularRpcs.Unity.dll
+/Unturned.uTest.Runner/Module/Microsoft.Extensions.DependencyInjection.Abstractions.dll
+/Unturned.uTest.Runner/Module/Microsoft.Extensions.Logging.Abstractions.dll
+/Unturned.uTest.Runner/Module/Microsoft.Bcl.AsyncInterfaces.dll
+/Unturned.uTest.Runner/Module/System.Diagnostics.DiagnosticSource.dll
+/Unturned.uTest.Runner/Module/DanielWillett.SpeedBytes.dll

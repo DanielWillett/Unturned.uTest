@@ -1,8 +1,8 @@
-﻿using System;
+﻿using JetBrains.Annotations;
+using System;
 using System.IO;
 using System.Reflection;
 using System.Text;
-using JetBrains.Annotations;
 using uTest.Environment;
 
 namespace uTest.Module;

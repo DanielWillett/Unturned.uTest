@@ -69,6 +69,8 @@ internal sealed class TestAsyncStateMachine
 
     private void OnStart(TestRunStopwatchStage stage)
     {
+        uTest.TestContext.Current = Context;
+
         _startTime = DateTimeOffset.Now;
         _stopwatch.Restart();
     }
@@ -96,6 +98,8 @@ internal sealed class TestAsyncStateMachine
                 Stage = stage
             }
         );
+
+        uTest.TestContext.Current = null!;
     }
 
     private void Continue()

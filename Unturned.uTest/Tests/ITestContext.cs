@@ -1,6 +1,6 @@
+using JetBrains.Annotations;
 using System;
 using System.Reflection;
-using JetBrains.Annotations;
 
 namespace uTest;
 
@@ -115,6 +115,19 @@ public interface ITestContext : IUnconfiguredTestContext
     /// <exception cref="ArgumentNullException"/>
     /// <exception cref="ActorDestroyedException">One or more elements in <paramref name="players"/> no longer exists.</exception>
     ValueTask SpawnPlayersAsync(params IServersideTestPlayer[] players);
+}
+
+public static class TestContext
+{
+    /// <summary>
+    /// The context for the currently running test.
+    /// </summary>
+    [field: MaybeNull]
+    public static ITestContext Current
+    {
+        get => field ?? throw new InvalidOperationException("Not in test.");
+        internal set;
+    }
 }
 
 /// <summary>
