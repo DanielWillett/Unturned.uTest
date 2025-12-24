@@ -1,17 +1,18 @@
 ﻿using HarmonyLib;
 using System;
 using System.Reflection;
-using uTest.Dummies;
 using uTest.Module;
+
+#pragma warning disable IDE0130
 
 namespace uTest.Patches;
 
 /// <summary>
-/// Patches "SDG.Unturned.DedicatedUGC.installNextItem" to update dummies when a new workshop item is installed.
+/// Patches "SDG.Unturned.Provider.verifyTicket" to skip running steam authentication and skip joining a group.
 /// </summary>
-internal static class WorkshopItemsQueriedUpdateDummies
+internal static class SkipSteamAuthenticationForDummyPlayers
 {
-    private const string PatchName = "DedicatedUGC.installNextItem";
+    private const string PatchName = "Provider.verifyTicket";
     private static bool _hasPatch;
 
     private static MethodInfo? _patchedMethod;
@@ -19,15 +20,14 @@ internal static class WorkshopItemsQueriedUpdateDummies
     internal static bool TryPatch(Harmony harmony, ILogger logger)
     {
         _hasPatch = false;
-        _patchedMethod = typeof(DedicatedUGC).GetMethod(
-            "installNextItem",
+        _patchedMethod = typeof(Provider).GetMethod(
+            "verifyTicket",
             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
             null,
             CallingConventions.Any,
-            Type.EmptyTypes,
+            [ typeof(CSteamID), typeof(byte[]) ],
             null
         );
-
         if (_patchedMethod == null)
         {
             logger.LogError(string.Format(Properties.Resources.LogErrorPatchFailed, PatchName, "Unable to find target method."));
@@ -36,7 +36,7 @@ internal static class WorkshopItemsQueriedUpdateDummies
 
         try
         {
-            harmony.Patch(_patchedMethod, prefix: new HarmonyMethod(new Action(Prefix).Method));
+            harmony.Patch(_patchedMethod, prefix: new PrefixDelegate(Prefix).Method);
             _hasPatch = true;
         }
         catch (Exception ex)
@@ -55,7 +55,7 @@ internal static class WorkshopItemsQueriedUpdateDummies
 
         try
         {
-            harmony.Unpatch(_patchedMethod, new Action(Prefix).Method);
+            harmony.Unpatch(_patchedMethod, new PrefixDelegate(Prefix).Method);
             return true;
         }
         catch
@@ -69,12 +69,28 @@ internal static class WorkshopItemsQueriedUpdateDummies
         }
     }
 
-    internal static void Prefix()
+    private delegate bool PrefixDelegate(CSteamID steamID, byte[] ticket, ref bool __result);
+    internal static bool Prefix(CSteamID steamID, byte[] ticket, ref bool __result)
     {
-        DummyManager dummyManager = MainModule.Instance.Dummies;
-        if (dummyManager.Controller is DummyPlayerLauncher launcher)
+        if (!MainModule.Instance.Dummies.TryGetDummy(steamID.m_SteamID, out _))
         {
-            launcher.NotifyWorkshopUpdate(DedicatedUGC.itemsToDownload.ToArray());
+            return true;
         }
+
+        MainModule.Instance.Logger.LogInformation($"Skipping steam authentication for dummy {steamID}.");
+
+        ulong s64 = steamID.m_SteamID;
+        SteamPending pending = Provider.pending.Find(x => x.playerID.steamID.m_SteamID == s64);
+        if (pending == null)
+        {
+            return true;
+        }
+
+        pending.playerID.group = CSteamID.Nil;
+        pending.hasAuthentication = true;
+        __result = true;
+        return false;
     }
 }
+
+#pragma warning restore IDE0130

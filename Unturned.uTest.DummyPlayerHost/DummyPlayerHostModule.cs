@@ -19,12 +19,14 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
+using DanielWillett.ReflectionTools.Formatting;
 using UnityEngine.SceneManagement;
 using Unturned.SystemEx;
 using uTest.Dummies.Host.Facades;
+using uTest.Dummies.Host.Patches;
 using uTest.Module;
-using uTest.Protocol.DummyPlayerHost;
 
 namespace uTest.Dummies.Host;
 
@@ -42,6 +44,7 @@ internal partial class DummyPlayerHost : IDisposable
 
     private NamedPipeClientsideRemoteRpcConnection _rpcConnection;
     private NamedPipeEndpoint _rpcEndpoint;
+    private uTest.Patches.UnturnedTestPatches _patches;
 
     private readonly CommandLineString _steamIdArg = new CommandLineString("-uTestSteamId");
     private readonly CommandLineString _dataDirArg = new CommandLineString("-uTestDataDir");
@@ -59,6 +62,11 @@ internal partial class DummyPlayerHost : IDisposable
     public DummyLauncherConfig LaunchConfig { get; private set; }
 
     public IModularRpcRemoteConnection Connection => _rpcConnection;
+
+    /// <summary>
+    /// The Unity window handle ('HWND') if currently on Windows. This is unused on other platforms.
+    /// </summary>
+    public nint WindowHandle { get; internal set; }
 
 #nullable restore
 
@@ -83,6 +91,7 @@ internal partial class DummyPlayerHost : IDisposable
         }
 
         TemporaryDataPath = Path.GetFullPath(_dataDirArg.value);
+        Logs.setLogFilePath(Path.Combine(TemporaryDataPath, "Client.log"));
         string configFile = Path.Combine(TemporaryDataPath, "startup.json");
 
         using (JsonTextReader reader = new JsonTextReader(new StreamReader(configFile, Encoding.UTF8, true, 1024)))
@@ -105,9 +114,29 @@ internal partial class DummyPlayerHost : IDisposable
 
         AssetLoadModel = new AssetLoadModel();
 
-        Patches.SkipAddFoundAssetIfNotRequired.TryPatch(Harmony, ConsoleLogger.Instance);
+        // Patches
+        {
+            try
+            {
+                TranspileContext ctx = new TranspileContext(null, null, null);
+            }
+            catch (ArgumentNullException)
+            {
 
-        _rpcEndpoint = NamedPipeEndpoint.AsClient(serviceProvider, NamedPipe.PipeName);
+            }
+            HarmonyLog.Reset(Path.Combine(TemporaryDataPath, "harmony.log"));
+            _patches = new uTest.Patches.UnturnedTestPatches(Logger);
+            _patches.Init(
+                TemporaryDataPath,
+                p =>
+                {
+                    p.RegisterPatch(SkipAddFoundAssetIfNotRequired.TryPatch, SkipAddFoundAssetIfNotRequired.TryUnpatch);
+                    p.RegisterPatch(IgnoreSocketExceptionsOnClient.TryPatch, IgnoreSocketExceptionsOnClient.TryUnpatch);
+                }
+            );
+        }
+
+        _rpcEndpoint = NamedPipeEndpoint.AsClient(serviceProvider, LaunchConfig.PipeName);
 
         CommandWindow.Log($"Connecting to uTest server via Named Pipes as {steamId}...");
 
@@ -120,15 +149,110 @@ internal partial class DummyPlayerHost : IDisposable
 
         LocalWorkshopSettings.instance = new DummyLocalWorkshopSettings(this);
 
-        // todo Provider._client = SteamId;
-        // todo Provider._user = SteamId;
+        Provider._client = SteamId;
+        Provider._clientName = LaunchConfig.Name ?? SteamId.ToString();
+        Provider._user = SteamId;
 
         DummyProvider.ShutdownOldProviderServices(Provider.provider);
         Provider.provider = new DummyProvider(this);
 
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            WindowHandle = RemoteDummyWindowsManager.GetWindowHandle(false);
+            Logger.LogDebug($"HWND: {(long)WindowHandle:X16} | HMONITOR: {LaunchConfig.DisplayHandle.GetValueOrDefault():X16}");
+
+            ReadOnlySpan<char> prefix = "uTest Simulated Client (";
+            Span<char> windowTitle = stackalloc char[prefix.Length + 10];
+            prefix.CopyTo(windowTitle);
+            SteamId.GetAccountID().m_AccountID.TryFormat(windowTitle.Slice(prefix.Length, 8), out _, "X8", CultureInfo.InvariantCulture);
+            windowTitle[^2] = ')';
+
+            RemoteDummyWindowsManager.SetWindowTitle(WindowHandle, windowTitle);
+        }
+
+        if (GraphicsSettings.fullscreenMode != FullScreenMode.Windowed)
+        {
+            GraphicsSettings.fullscreenMode = FullScreenMode.Windowed;
+        }
+
+        GraphicsSettings.TargetFrameRate = 30;
+        GraphicsSettings.effectQuality = EGraphicQuality.LOW;
+        GraphicsSettings.foliageQuality = EGraphicQuality.LOW;
+        GraphicsSettings.landmarkQuality = EGraphicQuality.LOW;
+        GraphicsSettings.lightingQuality = EGraphicQuality.LOW;
+        GraphicsSettings.outlineQuality = EGraphicQuality.LOW;
+        GraphicsSettings.planarReflectionQuality = EGraphicQuality.LOW;
+        GraphicsSettings.reflectionQuality = EGraphicQuality.LOW;
+        GraphicsSettings.scopeQuality = EGraphicQuality.LOW;
+        GraphicsSettings.sunShaftsQuality = EGraphicQuality.LOW;
+        GraphicsSettings.terrainQuality = EGraphicQuality.LOW;
+        GraphicsSettings.waterQuality = EGraphicQuality.LOW;
+        GraphicsSettings.IsClutterEnabled = false;
+        GraphicsSettings.IsItemIconAntiAliasingEnabled = false;
+        GraphicsSettings.IsWindEnabled = false;
+        GraphicsSettings.anisotropicFilteringMode = EAnisotropicFilteringMode.DISABLED;
+        GraphicsSettings.antiAliasingType = EAntiAliasingType.OFF;
+        GraphicsSettings.blast = false;
+        GraphicsSettings.blend = false;
+        GraphicsSettings.filmGrain = false;
+        GraphicsSettings.buffer = false;
+        GraphicsSettings.bloom = false;
+        GraphicsSettings.debris = false;
+        GraphicsSettings.chromaticAberration = false;
+        GraphicsSettings.foliageFocus = false;
+        GraphicsSettings.puddle = false;
+        GraphicsSettings.UseUnfocusedTargetFrameRate = false;
+        GraphicsSettings.glitter = false;
+        GraphicsSettings.normalizedDrawDistance = 0;
+        GraphicsSettings.normalizedLandmarkDrawDistance = 0;
+        GraphicsSettings.renderMode = ERenderMode.FORWARD;
+        GraphicsSettings.grassDisplacement = false;
+        GraphicsSettings.ragdolls = false;
+        GraphicsSettings.userInterfaceScale = 0.5f;
+        GraphicsSettings.triplanar = false;
+        GraphicsSettings.isAmbientOcclusionEnabled = false;
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            && LaunchConfig.DisplayHandle.HasValue
+            && WindowHandle != 0)
+        {
+            TimeUtility.updated += AlignWindowToGridOnFirstFrame;
+        }
+
+        // apply is ran on MenuStartup.Start() anyways
+        // GraphicsSettings.apply("Lower options for test clients.");
+
         StartStatusNotificationUpdate(DummyReadyStatus.StartedUp);
 
         SceneManager.sceneLoaded += HandleSceneLoaded;
+    }
+
+    private int _delayedTicks;
+    private void AlignWindowToGridOnFirstFrame()
+    {
+        ++_delayedTicks;
+        if (_delayedTicks <= 1)
+            return;
+
+        // only subscribed on Windows
+
+        TimeUtility.updated -= AlignWindowToGridOnFirstFrame;
+
+        if (RemoteDummyWindowsManager.AlignWindowToGrid(
+                (nint)LaunchConfig.DisplayHandle.GetValueOrDefault(),
+                WindowHandle,
+                LaunchConfig.Index + LaunchConfig.TileOffset,
+                LaunchConfig.Count + LaunchConfig.TileOffset,
+                out bool isPrimaryMonitor
+            )
+        )
+        {
+            Logger.LogTrace(isPrimaryMonitor
+                ? $"Tiled game window (HWND 0x{(long)WindowHandle:X16}) to primary monitor."
+                : $"Tiled game window (HWND 0x{(long)WindowHandle:X16}).");
+        }
+        else
+            Logger.LogWarning("Failed to tile game window.");
     }
 
     private void StartStatusNotificationUpdate(DummyReadyStatus status)
@@ -137,7 +261,7 @@ internal partial class DummyPlayerHost : IDisposable
         {
             Task.Run(async () =>
             {
-                await SendStatusNotification(SteamId.m_SteamID, status);
+                await SendStatusNotification(SteamId.m_SteamID, status, WindowHandle);
             }).Wait(TimeSpan.FromSeconds(3));
         }
         catch (Exception ex)
@@ -157,12 +281,12 @@ internal partial class DummyPlayerHost : IDisposable
         if (scene.buildIndex != Level.BUILD_INDEX_MENU)
             return;
 
-        StartStatusNotificationUpdate(DummyReadyStatus.AssetsLoaded);
+        StartStatusNotificationUpdate(DummyReadyStatus.InMenu);
     }
 
     [RpcSend(typeof(DummyPlayerLauncher), "ReceiveStatusNotification")]
     [RpcTimeout(2 * Timeouts.Seconds)]
-    private partial RpcTask SendStatusNotification(ulong id, DummyReadyStatus status);
+    private partial RpcTask SendStatusNotification(ulong id, DummyReadyStatus status, nint hWnd);
 
     [RpcReceive]
     private void ReceiveWorkshopItemsUpdate(ulong[] workshopItems)
@@ -199,10 +323,10 @@ internal partial class DummyPlayerHost : IDisposable
         await GameThread.Switch();
 
         IPv4Address addr = new IPv4Address(ipv4);
-        Logger.LogInformation($"Received request connection to {addr}:{port} (ID {serverCode}).");
+        Logger.LogInformation($"Received connection request to {addr}:{port} (ID {serverCode}).");
 
         Provider.connect(
-            new ServerConnectParameters(addr, (ushort)(port - 1), port, password ?? string.Empty),
+            new ServerConnectParameters(addr, (ushort)(port - 1u), port, password ?? string.Empty),
             new SteamServerAdvertisement("Unturned.uTest", EGameMode.NORMAL, false, false, false)
             {
                 _steamID = new CSteamID(serverCode),
@@ -242,7 +366,8 @@ internal partial class DummyPlayerHost : IDisposable
     {
         await GameThread.Switch();
 
-        Provider.disconnect();
+        Logger.LogInformation("Received graceful disconnect request from uTest server.");
+        Provider.RequestDisconnect("Requested by uTest.");
     }
 
     [RpcReceive]
@@ -257,6 +382,8 @@ internal partial class DummyPlayerHost : IDisposable
     {
         TimeUtility.updated -= GameThread.RunContinuations;
         SceneManager.sceneLoaded -= HandleSceneLoaded;
+        _patches?.Dispose();
+        _patches = null;
         if (Instance == this)
             Instance = null;
         Harmony.UnpatchAll(Harmony.Id);
@@ -270,15 +397,40 @@ internal sealed class DummyPlayerHostModule : IModuleNexus
 
     void IModuleNexus.initialize()
     {
+#if DEBUG
+        UnturnedLog.info($"Command line: \"{System.Environment.CommandLine}\".");
+#endif
+        ITranspileContextLogger logger = null;
         try
         {
+            // copy 0Harmony.dll v2.3.3 to the working directory
+            // for some reason it refuses to work on any other version only on the client module, server module works fine
+            //Assembly thisAsm = Assembly.GetExecutingAssembly();
+            //string fileName = Path.Combine(Path.GetDirectoryName(thisAsm.Location)!, "0Harmony (2.3.3).exe");
+            //DateTime srcLastModified = FileHelper.GetLastWriteTimeUTCSafe(thisAsm, DateTime.MaxValue);
+            //DateTime dstLastModified = FileHelper.GetLastWriteTimeUTCSafe(fileName, DateTime.MinValue);
+            //if (srcLastModified > dstLastModified)
+            //{
+            //    Stream? harmonyDll = thisAsm.GetManifestResourceStream("uTest.Dummies.Host.lib.0Harmony.dll");
+            //    if (harmonyDll == null)
+            //    {
+            //        throw new Exception("Failed to find 0Harmony.dll lib in embedded resources.");
+            //    }
+            //
+            //    using FileStream fs = new FileStream(fileName, FileMode.Create, FileAccess.Write, FileShare.Read);
+            //    harmonyDll.CopyTo(fs);
+            //}
+            //
+            //Assembly asm = Assembly.LoadFrom(fileName);
+            //UnturnedLog.info($"Loaded {asm}");
+
             GameThread.Setup();
             Init();
         }
         catch (Exception ex)
         {
-            CommandWindow.Log("Startup error.");
-            CommandWindow.Log(ex);
+            UnturnedLog.error("Startup error.");
+            UnturnedLog.error(ex);
 
             InstantShutdown(ex.GetType().Name, UnturnedTestExitCode.StartupFailure, () =>
             {
@@ -331,7 +483,7 @@ internal sealed class DummyPlayerHostModule : IModuleNexus
         }
         else
         {
-            CommandWindow.LogWarning("uTest failed to find field 'Provider.wasQuitGameCalled'.");
+            UnturnedLog.warn("uTest failed to find field 'Provider.wasQuitGameCalled'.");
         }
 
         UnturnedLog.info($"uTest Quit game: {reason}. Exit code: {(int)exitCode} ({exitCode}).");
@@ -341,8 +493,8 @@ internal sealed class DummyPlayerHostModule : IModuleNexus
         }
         catch (Exception ex)
         {
-            CommandWindow.LogError("Shutdown error");
-            CommandWindow.LogError(ex);
+            UnturnedLog.error("Shutdown error");
+            UnturnedLog.error(ex);
         }
         Application.Quit((int)exitCode);
         throw new QuitGameException();

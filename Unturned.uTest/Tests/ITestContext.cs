@@ -115,6 +115,21 @@ public interface ITestContext : IUnconfiguredTestContext
     /// <exception cref="ArgumentNullException"/>
     /// <exception cref="ActorDestroyedException">One or more elements in <paramref name="players"/> no longer exists.</exception>
     ValueTask SpawnPlayersAsync(params IServersideTestPlayer[] players);
+
+    /// <summary>
+    /// Notifies all allocated players that it's time to disconnect from the server and waits for them to fully disconnect and return to the main menu.
+    /// </summary>
+    /// <remarks>If no players are configured this method will do nothing.</remarks>
+    ValueTask DespawnAllPlayersAsync();
+
+    /// <summary>
+    /// Notifies the given players that it's time to disconnect from the server and waits for them to fully disconnect and return to the main menu.
+    /// </summary>
+    /// <remarks>If <paramref name="players"/> is empty this method will do nothing.</remarks>
+    /// <param name="players">The players to despawn. Duplicates are ignored.</param>
+    /// <exception cref="ArgumentNullException"/>
+    /// <exception cref="ActorDestroyedException">One or more elements in <paramref name="players"/> no longer exists.</exception>
+    ValueTask DespawnPlayersAsync(params IServersideTestPlayer[] players);
 }
 
 public static class TestContext

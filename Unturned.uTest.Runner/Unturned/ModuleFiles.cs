@@ -23,11 +23,12 @@ internal static class ModuleFiles
 
     internal static ModuleFile[] Files { get; } =
     [
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.Bootstrapper.dll",                            "uTest.Bootstrapper.dll"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.Bootstrapper.dll",                            "uTest.Bootstrapper.dll", hasSymbols: true),
         new BootstrapperModuleConfigFile(),
         
         new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, MTPAssembly,                                                                "Microsoft.Testing.Platform.dll") { ModuleReferenceMode = ModuleFileReferenceMode.TestClient },
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ReflectionTools.dll",                                        "ReflectionTools.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ReflectionTools.Harmony.dll",                                "ReflectionTools.Harmony.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.DanielWillett.SpeedBytes.dll",                               "DanielWillett.SpeedBytes.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ModularRpcs.dll",                                            "ModularRpcs.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.ModularRpcs.NamedPipes.dll",                                 "ModularRpcs.NamedPipes.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
@@ -71,7 +72,7 @@ internal static class ModuleFiles
         
         new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, uTestAssembly,                                                              "uTest.dll") { ModuleReferenceMode = ModuleFileReferenceMode.Both },
         new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, uTestRunnerAssembly,                                                        "uTest.Runner.dll"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.DummyPlayerHost.dll",                         "uTest.DummyPlayerHost.dll") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.DummyPlayerHost.dll",                         "uTest.DummyPlayerHost.dll", hasSymbols: true) { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
         
         new ModuleConfigFile()
     ];
@@ -84,16 +85,22 @@ internal static class ModuleFiles
     static ModuleFiles()
     {
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_0_OR_GREATER || NET472_OR_GREATER
-        ExpectedFiles = new HashSet<string>(Files.Length + 1, FileHelper.FileNameComparer)
+        ExpectedFiles = new HashSet<string>(Files.Length + 2, FileHelper.FileNameComparer)
 #else
         ExpectedFiles = new HashSet<string>(FileHelper.FileNameComparer)
 #endif
         {
-            "test-settings.json"
+            "test-settings.json",
+            "0Harmony (2.3.3).exe"
         };
         foreach (ModuleFile file in Files)
         {
             ExpectedFiles.Add(file.FileName);
+            if (file.OtherFileName is not { Length: > 0 })
+                continue;
+
+            foreach (string s in file.OtherFileName)
+                ExpectedFiles.Add(s);
         }
     }
 
@@ -128,7 +135,7 @@ internal static class ModuleFiles
     /// </summary>
     internal static bool DisableModule(string moduleFolder, ILogger logger, Assembly testAssembly)
     {
-        LoadedAssemblyModuleFile testAssemblyFile = new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, testAssembly)
+        LoadedAssemblyModuleFile testAssemblyFile = new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, testAssembly, hasSymbolsInRelease: true)
         {
             ModuleReferenceMode = ModuleFileReferenceMode.TestClient
         };
@@ -154,7 +161,7 @@ internal static class ModuleFiles
 
         LoadedAssemblyModuleFile? testAssemblyFile = testAssembly == null
             ? null
-            : new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, testAssembly)
+            : new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, testAssembly, hasSymbolsInRelease: true)
             {
                 ModuleReferenceMode = ModuleFileReferenceMode.TestClient
             };
@@ -176,10 +183,15 @@ internal static class ModuleFiles
         }
 
         string? testAssemblyLocation = null;
+        string? testAssemblySymbols = null;
 
         if (!anyFailed && testAssemblyFile != null)
         {
             anyFailed = !testAssemblyFile.TryWrite(moduleFolder, logger, out testAssemblyLocation, testAssemblyFile);
+            if (testAssemblyLocation != null)
+            {
+                testAssemblySymbols = Path.ChangeExtension(testAssemblyLocation, ".pdb");
+            }
         }
 
         try
@@ -187,12 +199,20 @@ internal static class ModuleFiles
             foreach (string file in Directory.EnumerateFiles(moduleFolder, "*", SearchOption.TopDirectoryOnly))
             {
                 string ext = Path.GetExtension(file);
-                if (!ext.Equals(".dll", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".exe", StringComparison.OrdinalIgnoreCase))
+                if (!ext.Equals(".dll", StringComparison.OrdinalIgnoreCase)
+                    && !ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                    && !ext.Equals(".pdb", StringComparison.OrdinalIgnoreCase))
+                {
                     continue;
+                }
 
                 string fileName = Path.GetFileName(file);
-                if (FileHelper.FileNameComparer.Equals(file, testAssemblyLocation) || IsFileExpected(fileName))
+                if (FileHelper.FileNameComparer.Equals(file, testAssemblyLocation)
+                    || FileHelper.FileNameComparer.Equals(file, testAssemblySymbols)
+                    || IsFileExpected(fileName))
+                {
                     continue;
+                }
 
                 try
                 {
@@ -226,8 +246,9 @@ internal abstract class ModuleFile
 {
     internal SupportedTargetFramework Framework { get; }
     internal string FileName { get; }
+    internal string[]? OtherFileName { get; set; }
     internal ModuleFileReferenceMode ModuleReferenceMode { get; init; }
-    internal bool LoadFromFile { get; set; }
+    internal bool LoadFromFile { get; set; } = true;
 
     protected ModuleFile(SupportedTargetFramework framework, string fileName)
     {
@@ -235,31 +256,13 @@ internal abstract class ModuleFile
         FileName = fileName;
     }
 
-    // wtf microsoft
-    private static readonly DateTime FileNotExistsWriteTimeReturnValue = new DateTime(1601, 01, 01, 00, 00, 00);
-
-    protected static DateTime GetLastWriteTimeUTCSafe(string file, DateTime defaultValue)
-    {
-        DateTime dt;
-        try
-        {
-            dt = File.GetLastWriteTimeUtc(file);
-        }
-        catch
-        {
-            return defaultValue;
-        }
-
-        return dt == FileNotExistsWriteTimeReturnValue ? defaultValue : dt;
-    }
-    
     public abstract bool TryWrite(string baseFolder, ILogger logger, [MaybeNullWhen(false)] out string fileName, LoadedAssemblyModuleFile? testAssembly);
 
     /// <returns>The exception if there was one.</returns>
     protected Exception? TryCopyIfNewer(string src, string dst, ILogger logger)
     {
-        DateTime srcTime = GetLastWriteTimeUTCSafe(src, DateTime.MaxValue);
-        DateTime existingTime = GetLastWriteTimeUTCSafe(dst, DateTime.MinValue);
+        DateTime srcTime = FileHelper.GetLastWriteTimeUTCSafe(src, DateTime.MaxValue);
+        DateTime existingTime = FileHelper.GetLastWriteTimeUTCSafe(dst, DateTime.MinValue);
 
         if (srcTime <= existingTime)
         {
@@ -293,10 +296,20 @@ internal sealed class LoadedAssemblyModuleFile : ModuleFile
 {
     internal Assembly Assembly { get; }
 
-    public LoadedAssemblyModuleFile(SupportedTargetFramework framework, Assembly assembly, string? fileName = null)
+    internal string? SymbolFile { get; }
+
+    // ReSharper disable once UnusedParameter.Local
+    public LoadedAssemblyModuleFile(SupportedTargetFramework framework, Assembly assembly, string? fileName = null, bool hasSymbolsInRelease = false)
         : base(framework, fileName ?? assembly.GetName().Name + ".dll")
     {
         Assembly = assembly;
+
+#if RELEASE
+        if (!hasSymbolsInRelease)
+            return;
+#endif
+        SymbolFile = Path.ChangeExtension(FileName, ".pdb");
+        OtherFileName = [ SymbolFile ];
     }
 
     public override bool TryWrite(string baseFolder, ILogger logger, [MaybeNullWhen(false)] out string fileName, LoadedAssemblyModuleFile? testAssembly)
@@ -318,6 +331,24 @@ internal sealed class LoadedAssemblyModuleFile : ModuleFile
             logger.LogError(string.Format(Properties.Resources.LogErrorFindingAssemblyLocation, Assembly.FullName));
             fileName = null;
             return false;
+        }
+
+        if (SymbolFile != null)
+        {
+            string pdbSrcPath = Path.ChangeExtension(location, ".pdb");
+            string pdbDstPath = Path.Combine(baseFolder, SymbolFile);
+            if (File.Exists(pdbSrcPath))
+            {
+                if (TryCopyIfNewer(pdbSrcPath, pdbDstPath, logger) is { } ex)
+                {
+                    logger.LogError(string.Format(Properties.Resources.LogErrorCopyingFile, location), ex);
+                    logger.LogError(ex.Message);
+                }
+            }
+            else
+            {
+                logger.LogWarning(string.Format(Properties.Resources.LogErrorFindingAssemblyLocation, pdbSrcPath));
+            }
         }
 
         string path = Path.Combine(baseFolder, FileName);
@@ -347,11 +378,25 @@ internal sealed class EmbeddedModuleFile : ModuleFile
 {
     internal string EmbeddedResourceName { get; }
     public Assembly Assembly { get; }
+#if DEBUG
+    internal string? SymbolFileName { get; }
+    internal string? SymbolResourceName { get; }
+#endif
 
-    public EmbeddedModuleFile(SupportedTargetFramework framework, string embeddedResourceName, string fileName, Assembly? assembly = null) : base(framework, fileName)
+    // ReSharper disable once UnusedParameter.Local
+    public EmbeddedModuleFile(SupportedTargetFramework framework, string embeddedResourceName, string fileName, bool hasSymbols = false, Assembly? resxAssembly = null) : base(framework, fileName)
     {
         EmbeddedResourceName = embeddedResourceName;
-        Assembly = assembly ?? ModuleFiles.uTestRunnerAssembly;
+        Assembly = resxAssembly ?? ModuleFiles.uTestRunnerAssembly;
+#if DEBUG
+        if (!hasSymbols)
+            return;
+
+        SymbolFileName = Path.ChangeExtension(fileName, ".pdb");
+        SymbolResourceName = Path.ChangeExtension(embeddedResourceName, ".pdb");
+
+        OtherFileName = [ SymbolFileName ];
+#endif
     }
 
     public override bool TryWrite(string baseFolder, ILogger logger, [MaybeNullWhen(false)] out string fileName, LoadedAssemblyModuleFile? testAssembly)
@@ -359,6 +404,9 @@ internal sealed class EmbeddedModuleFile : ModuleFile
         string path = Path.Combine(baseFolder, FileName);
 
         Stream? embeddedResourceStream = null;
+#if DEBUG
+        Stream? pdbEmbeddedResourceStream = null;
+#endif
         try
         {
             embeddedResourceStream = Assembly.GetManifestResourceStream(EmbeddedResourceName);
@@ -369,17 +417,24 @@ internal sealed class EmbeddedModuleFile : ModuleFile
                 return false;
             }
 
-            DateTime assemblyCreateDate;
-            DateTime fileCreateDate = GetLastWriteTimeUTCSafe(path, DateTime.MinValue);
-            try
+#if DEBUG
+            string? symbolPath = null;
+            if (SymbolResourceName != null && SymbolFileName != null)
             {
-                // GetLastWriteTimeUTCSafe is safe but Assembly.Location.get might not be
-                assemblyCreateDate = GetLastWriteTimeUTCSafe(Assembly.Location, DateTime.MaxValue);
+                symbolPath = Path.Combine(baseFolder, SymbolFileName);
+                pdbEmbeddedResourceStream = Assembly.GetManifestResourceStream(SymbolResourceName);
+                if (pdbEmbeddedResourceStream == null)
+                    logger.LogWarning(string.Format(Properties.Resources.LogErrorCopyingFile, SymbolFileName + $" ({SymbolResourceName})"));
             }
-            catch
-            {
-                assemblyCreateDate = DateTime.MaxValue;
-            }
+#endif
+
+            DateTime fileCreateDate = FileHelper.GetLastWriteTimeUTCSafe(path, DateTime.MinValue);
+#if DEBUG
+            DateTime symbolFileCreateDate = pdbEmbeddedResourceStream == null
+                ? DateTime.MinValue
+                : FileHelper.GetLastWriteTimeUTCSafe(symbolPath!, DateTime.MinValue);
+#endif
+            DateTime assemblyCreateDate = FileHelper.GetLastWriteTimeUTCSafe(Assembly, DateTime.MaxValue);
 
             if (assemblyCreateDate <= fileCreateDate)
             {
@@ -402,8 +457,26 @@ internal sealed class EmbeddedModuleFile : ModuleFile
                 }
                 catch { /* ignored */ }
             }
-
             fileName = path;
+#if DEBUG
+            if (pdbEmbeddedResourceStream != null && assemblyCreateDate > symbolFileCreateDate)
+            {
+                using (FileStream fileStream = new FileStream(symbolPath, FileMode.Create, FileAccess.Write, FileShare.Read, 16384, FileOptions.SequentialScan))
+                {
+                    embeddedResourceStream.CopyTo(fileStream);
+                }
+
+                if (assemblyCreateDate != DateTime.MaxValue)
+                {
+                    try
+                    {
+                        File.SetLastWriteTime(symbolPath!, assemblyCreateDate);
+                    }
+                    catch { /* ignored */ }
+                }
+            }
+#endif
+
             return true;
         }
         catch (Exception ex)

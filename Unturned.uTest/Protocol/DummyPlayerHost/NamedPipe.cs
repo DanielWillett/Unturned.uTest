@@ -2,5 +2,5 @@
 
 public static class NamedPipe
 {
-    public const string PipeName = "uTest_DummyPlayerHost";
+    public const string PipeName = "uTest_DPH_";
 }

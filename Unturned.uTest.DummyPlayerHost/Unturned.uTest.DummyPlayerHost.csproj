@@ -1,10 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net471</TargetFramework>
+    <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>enable</Nullable>
 		<LangVersion>preview</LangVersion>
 		<RootNamespace>uTest.Dummies.Host</RootNamespace>
+    <DebugType>portable</DebugType>
   </PropertyGroup>
 
 	<ItemGroup>
@@ -21,7 +22,8 @@
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
 
     <PackageReference Include="DanielWillett.ReflectionTools" Version="4.0.0" />
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease25,2.0.0)" />
+    <PackageReference Include="DanielWillett.ReflectionTools.Harmony" Version="4.0.0" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease26,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" Aliases="JBA" />
@@ -31,7 +33,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
 
-    <PackageReference Include="Lib.Harmony" Version="[2.3.3,3.0)" PrivateAssets="all" />
     <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
@@ -90,6 +91,8 @@
 		<UnturnedReference Include="Assembly-CSharp" />
 		<UnturnedReference Include="SystemEx" />
     <UnturnedReference Include="com.rlabrecque.steamworks.net" />
+		<UnturnedReference Include="SDG.NetTransport" />
+		<UnturnedReference Include="SDG.NetPak.Runtime" />
 		<UnturnedReference Include="UnityEngine" />
 		<UnturnedReference Include="UnityEngine.CoreModule" />
 

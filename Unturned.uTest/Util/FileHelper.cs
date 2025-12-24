@@ -1,6 +1,8 @@
 ﻿using SDG.Framework.Foliage;
 using System;
 using System.Globalization;
+using System.IO;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -9,6 +11,39 @@ namespace uTest;
 internal static class FileHelper
 {
     private static readonly Dictionary<Type, int> CachedAssetTypes;
+
+    // wtf microsoft
+    private static readonly DateTime FileNotExistsWriteTimeReturnValue = new DateTime(1601, 01, 01, 00, 00, 00);
+
+    public static DateTime GetLastWriteTimeUTCSafe(string file, DateTime defaultValue)
+    {
+        DateTime dt;
+        try
+        {
+            dt = File.GetLastWriteTimeUtc(file);
+        }
+        catch
+        {
+            return defaultValue;
+        }
+
+        return dt == FileNotExistsWriteTimeReturnValue ? defaultValue : dt;
+    }
+
+    public static DateTime GetLastWriteTimeUTCSafe(Assembly assembly, DateTime defaultValue)
+    {
+        DateTime dt;
+        try
+        {
+            dt = File.GetLastWriteTimeUtc(assembly.Location);
+        }
+        catch
+        {
+            return defaultValue;
+        }
+
+        return dt == FileNotExistsWriteTimeReturnValue ? defaultValue : dt;
+    }
 
     static FileHelper()
     {

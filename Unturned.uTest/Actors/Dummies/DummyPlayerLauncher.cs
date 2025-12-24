@@ -9,10 +9,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
 using SDG.Framework.Modules;
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using Unturned.SystemEx;
 using uTest.Module;
@@ -29,8 +31,9 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 {
     private readonly MainModule _module;
     private readonly ILogger _logger;
+    private NamedPipeEndpoint? _rpcServer;
 
-    private readonly Dictionary<ulong, RemoteDummyPlayerActor> _remoteDummies = new Dictionary<ulong, RemoteDummyPlayerActor>();
+    private readonly ConcurrentDictionary<ulong, RemoteDummyPlayerActor> _remoteDummies = new ConcurrentDictionary<ulong, RemoteDummyPlayerActor>();
 
     internal SteamIdPool SteamIdPool { get; }
 
@@ -42,6 +45,10 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         _logger = logger;
         SteamIdPool = new SteamIdPool(module.TestList?.SteamIdGenerationStyle ?? SteamIdGenerationStyle.DevUniverse);
         ModularRpcsServices = serviceProvider;
+
+        // pre-load this assembly.
+        // Unturned's assembly resolution system isn't threadsafe so it corrupts the dictionary later on when loaded by ModularRPCs
+        _ = Type.GetType("uTest.Dummies.Host.DummyPlayerHost, Unturned.uTest.DummyPlayerHost");
     }
 
     public bool TryGetRemoteDummy(Player player, [MaybeNullWhen(false)] out RemoteDummyPlayerActor dummy)
@@ -54,14 +61,19 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         return _remoteDummies.TryGetValue(steam64, out dummy);
     }
 
-    private string GetArgs(CSteamID steamId, string dataDir, int i)
+    private static string GetArgs(CSteamID steamId, string moduleDir, string dataDir)
     {
-        return (i == 0 ? string.Empty : "-NoDefaultLog ") +
-               $"-ModulesPath \"{_module.HomeDirectory}\" " +
+        return  "-NoDefaultLog " +
+                "-fullscreenmode Windowed " +
+                "-width 1280 " +
+                "-height 720 " +
+                //"-batchmode -nographics " +
+               $"-ModulesPath {CommandLineHelper.EscapeCommandLineArg(moduleDir)} " +
                $"-uTestSteamId {steamId.m_SteamID.ToString(CultureInfo.InvariantCulture)} " +
                $"-uTestDataDir {CommandLineHelper.EscapeCommandLineArg(dataDir)} " +
                 "-NoVanillaAssemblySearch " +
-                "-NoWorkshopSubscriptions";
+                "-NoWorkshopSubscriptions " +
+                "-logfile -"; // '-logfile -' redirects output to stdout
     }
 
     public void NotifyWorkshopUpdate(PublishedFileId_t[] files)
@@ -89,7 +101,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
     private partial RpcTask SendWorkshopItemsUpdate(IEnumerable<IModularRpcRemoteConnection> connections, ulong[] files);
 
     [RpcReceive, UsedImplicitly]
-    private async Task ReceiveStatusNotification(IModularRpcRemoteConnection connection, ulong id, DummyReadyStatus status)
+    private async Task ReceiveStatusNotification(IModularRpcRemoteConnection connection, ulong id, DummyReadyStatus status, nint hwnd)
     {
         CSteamID steamId = new CSteamID(id);
         if (!_remoteDummies.TryGetValue(steamId.m_SteamID, out RemoteDummyPlayerActor actor))
@@ -98,6 +110,10 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         actor.Status = status;
         if (status == DummyReadyStatus.StartedUp)
         {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                actor.WindowHandle = hwnd;
+            }
             Interlocked.CompareExchange(ref actor.ConnectionIntl, connection, null);
             TaskCompletionSource<RemoteDummyPlayerActor>? tcs = actor.LoadedCondition;
             if (tcs == null)
@@ -109,7 +125,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
             if (tcs == null || !tcs.TrySetResult(actor))
                 throw new ArgumentException($"Player {id} already started.");
         }
-        else if (status == DummyReadyStatus.AssetsLoaded)
+        else if (status == DummyReadyStatus.InMenu)
         {
             actor.ReadyCondition?.TrySetResult(actor);
         }
@@ -119,8 +135,50 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
     public async Task<bool> StartDummiesAsync(int amt)
     {
-        NamedPipeEndpoint endpoint = NamedPipeEndpoint.AsServer(ModularRpcsServices, NamedPipe.PipeName);
-        await endpoint.CreateServerAsync().ConfigureAwait(false);
+        if (amt <= 0)
+        {
+            return true;
+        }
+
+        nint display = 0;
+        bool didTileConsole = false;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            nint window = RemoteDummyWindowsManager.GetWindowHandle(true);
+            if (window != 0)
+            {
+                display = RemoteDummyWindowsManager.GetMonitorHandle(window);
+                if (RemoteDummyWindowsManager.AlignWindowToGrid(display, window, 0, amt + 1, out bool isPrimaryMonitor))
+                {
+                    _logger.LogTrace(isPrimaryMonitor
+                        ? $"Tiled console window (HWND 0x{(long)window:X16}) to primary monitor."
+                        : $"Tiled console window (HWND 0x{(long)window:X16}).");
+                    didTileConsole = true;
+                }
+                else
+                    _logger.LogWarning("Failed to tile server console window.");
+            }
+            else
+            {
+                _logger.LogWarning("Failed to find console window handle.");
+            }
+
+            if (display == 0)
+            {
+                display = RemoteDummyWindowsManager.GetPrimaryMonitorHandle();
+            }
+        }
+
+        string pipeName = $"{NamedPipe.PipeName}_{Provider.serverName}";
+
+        NamedPipeEndpoint newEndpoint = NamedPipeEndpoint.AsServer(ModularRpcsServices, pipeName);
+        NamedPipeEndpoint? oldEndpoint = Interlocked.Exchange(ref _rpcServer, newEndpoint);
+        if (oldEndpoint != null)
+        {
+            await oldEndpoint.CloseServerAsync();
+        }
+
+        await newEndpoint.CreateServerAsync().ConfigureAwait(false);
 
         InstallDirUtility dirUtil = new InstallDirUtility(false, _logger);
         if (_module.TestList is { ClientInstallDir: { Length: > 0 } installDir })
@@ -130,7 +188,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
         JsonSerializer serializer = JsonSerializer.CreateDefault();
 
-        // cmd line args don't support escaping backslashes in Unturend so we have to explicitly use forward slashes
+        // cmd line args don't support escaping backslashes in Unturned so we have to explicitly use forward slashes
         string baseDummyPath = Path.Combine(_module.HomeDirectory, "Dummies/");
 
         try
@@ -153,15 +211,17 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         bool failed = false;
 
         RemoteDummyPlayerActor[] actors = new RemoteDummyPlayerActor[amt];
-
+        string moduleDir = _module.HomeDirectory.Replace('\\', '/');
         for (int i = 0; i < amt; ++i)
         {
             CSteamID steamId = SteamIdPool.GetUniqueCSteamID();
 
+            string steamName = $"Dummy ({steamId.GetAccountID().m_AccountID:X8})";
+
             string configDir = baseDummyPath + steamId.GetAccountID().m_AccountID.ToString("X8", CultureInfo.InvariantCulture);
             Directory.CreateDirectory(configDir);
 
-            string args = GetArgs(steamId, configDir, i);
+            string args = GetArgs(steamId, moduleDir, configDir);
 
             using (JsonTextWriter writer = new JsonTextWriter(new StreamWriter(configDir + "/startup.json", false, Encoding.UTF8)))
             {
@@ -177,48 +237,72 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
                 serializer.Serialize(writer, new DummyLauncherConfig
                 {
                     Steam64 = steamId.m_SteamID,
-                    WorkshopIds = workshopIds
+                    WorkshopIds = workshopIds,
+                    Name = steamName,
+                    PipeName = pipeName,
+                    Index = i,
+                    Count = amt,
+                    DisplayHandle = display == 0 ? null : display,
+                    TileOffset = didTileConsole ? 1 : 0
                 });
             }
 
             string unturnedInstall = dirUtil.InstallDirectory;
             string exe = Path.Combine(unturnedInstall, dirUtil.GetExecutableRelativePath());
 
-            ProcessStartInfo startInfo = new ProcessStartInfo(exe, args)
-            {
-                WorkingDirectory = unturnedInstall,
-                WindowStyle = ProcessWindowStyle.Minimized
-            };
+            Process? process = new Process();
+            process.StartInfo.FileName = exe;
+            process.StartInfo.Arguments = args;
+            process.StartInfo.WorkingDirectory = unturnedInstall;
+            process.StartInfo.WindowStyle = ProcessWindowStyle.Minimized;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.RedirectStandardError = true;
 
             try
             {
-                startInfo.UseShellExecute = false;
+                process.StartInfo.UseShellExecute = false;
             }
             catch (PlatformNotSupportedException) { }
 
-            Process? process = Process.Start(startInfo);
-            if (process == null)
+            RemoteDummyPlayerActor? actor = null;
+            try
             {
-                _logger.LogError($"Failed to start process for client {i} ({steamId.m_SteamID}).");
-                failed = true;
-            }
-            else
-            {
-                try
+                actor = ProxyGenerator.Instance.CreateProxy<RemoteDummyPlayerActor>(
+                    ModularRpcsServices.GetRequiredService<IRpcRouter>(),
+                    nonPublic: true,
+                    steamId,
+                    steamName,
+                    this,
+                    process,
+                    Path.GetFullPath(configDir)
+                );
+
+                actor.LogFileWriter = new StreamWriter(configDir + "/Unity.log");
+                process.OutputDataReceived += actor.HandleOutputDataReceived;
+                process.ErrorDataReceived += actor.HandleOutputDataReceived;
+
+                if (!process.Start())
                 {
-                    RemoteDummyPlayerActor actor = ProxyGenerator.Instance.CreateProxy<RemoteDummyPlayerActor>(
-                        ModularRpcsServices.GetRequiredService<IRpcRouter>(),
-                        nonPublic: true,
-                        steamId,
-                        $"TestPlayer_{steamId.GetAccountID().m_AccountID}",
-                        this,
-                        process,
-                        Path.GetFullPath(configDir)
-                    );
+                    _logger.LogError($"Failed to start process for actor {i} {steamId.m_SteamID}.");
+                    process.Dispose();
+                    failed = true;
+                    actor.Dispose();
+                    actor = null;
+                }
+                else
+                {
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
+
+                    actor.ProcessId = (uint)process.Id;
 
                     actors[i] = actor;
 
-                    _remoteDummies.Add(steamId.m_SteamID, actor);
+                    if (!_remoteDummies.TryAdd(steamId.m_SteamID, actor))
+                    {
+                        throw new Exception("Duplicate steam ID, this shouldn't happen.");
+                    }
+
                     _logger.LogInformation($"Waiting to hear from simulated player {i} (PID {actor.ProcessId})...");
                     await Task.WhenAny(
                         Task.Delay(TimeSpan.FromSeconds(15), _module.CancellationToken),
@@ -263,12 +347,13 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
                         _logger.LogInformation($"Simulated player {i} (PID {actor.ProcessId}) has started loading.");
                     }
                 }
-                catch
-                {
-                    _remoteDummies.Remove(steamId.m_SteamID);
-                    process.Dispose();
-                    throw;
-                }
+            }
+            catch
+            {
+                _remoteDummies.TryRemove(steamId.m_SteamID, out _);
+                process.Dispose();
+                actor?.Dispose();
+                throw;
             }
 
             if (!failed)
@@ -289,7 +374,8 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
                 {
                     a.Process.Dispose();
                 }
-                _remoteDummies.Remove(a.Steam64.m_SteamID);
+                _remoteDummies.TryRemove(a.Steam64.m_SteamID, out _);
+                a.Dispose();
             }
 
             break;
@@ -334,7 +420,10 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         {
             foreach (RemoteDummyPlayerActor actor in _remoteDummies.Values)
             {
-                await ConnectDummyAsync(actor, token, address.value, port, serverCode);
+                if (actor.Status is DummyReadyStatus.StartedUp or DummyReadyStatus.InMenu or DummyReadyStatus.Disconnecting)
+                {
+                    await ConnectDummyAsync(actor, token, address.value, port, serverCode);
+                }
             }
         }
         else
@@ -357,7 +446,10 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         {
             foreach (RemoteDummyPlayerActor actor in _remoteDummies.Values)
             {
-                await DisconnectDummyAsync(actor);
+                if (actor.Status is DummyReadyStatus.Connected or DummyReadyStatus.Connecting)
+                {
+                    await DisconnectDummyAsync(actor);
+                }
             }
         }
         else
@@ -374,6 +466,11 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
     private async Task ConnectDummyAsync(RemoteDummyPlayerActor actor, CancellationToken token, uint ipv4, ushort port, ulong serverCode)
     {
+        if (actor.Status is DummyReadyStatus.Connected or DummyReadyStatus.Connecting)
+        {
+            throw new InvalidOperationException($"Actor {actor.Steam64.m_SteamID} is already connected or connecting.");
+        }
+
         TaskCompletionSource<RemoteDummyPlayerActor>? readyTask = actor.ReadyCondition;
         if (readyTask != null)
         {
@@ -395,6 +492,8 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         TaskCompletionSource<RemoteDummyPlayerActor> connectTask = new TaskCompletionSource<RemoteDummyPlayerActor>();
         actor.ConnectedCondition = connectTask;
 
+        _logger.LogInformation($"Notifying dummy {actor.Steam64.m_SteamID} to connect to server.");
+        actor.Status = DummyReadyStatus.Connecting;
         await actor.Connect(ipv4, port, Provider.serverPassword, serverCode,
             Provider.map,
             Provider.cameraMode,
@@ -435,20 +534,36 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         actor.Status = DummyReadyStatus.Connected;
     }
 
-    private static async Task DisconnectDummyAsync(RemoteDummyPlayerActor actor)
+    private async Task DisconnectDummyAsync(RemoteDummyPlayerActor actor)
     {
-        if (actor.ReadyCondition is { Task.IsCompleted: false })
-            return;
+        if (actor.Status is not DummyReadyStatus.Connected and not DummyReadyStatus.Connecting)
+        {
+            throw new InvalidOperationException($"Dummy {actor.Steam64.m_SteamID} not connected.");
+        }
 
+        TaskCompletionSource<RemoteDummyPlayerActor> newTcs = new TaskCompletionSource<RemoteDummyPlayerActor>();
+        TaskCompletionSource<RemoteDummyPlayerActor> rdyCond = Interlocked.CompareExchange(ref actor.ReadyCondition, newTcs, null) ?? newTcs;
+        if (rdyCond.Task.IsCompleted)
+        {
+            TaskCompletionSource<RemoteDummyPlayerActor> oldRdyCond = Interlocked.CompareExchange(ref actor.ReadyCondition, newTcs, rdyCond);
+            rdyCond = oldRdyCond == rdyCond ? newTcs : oldRdyCond;
+        }
+
+        actor.Status = DummyReadyStatus.Disconnecting;
+        _logger.LogInformation($"Notifying dummy {actor.Steam64.m_SteamID} to disconnect from server.");
+        Task dismiss = GameThread.RunAndWaitAsync(actor.Steam64, Provider.dismiss);
         await actor.Disconnect();
-        actor.Status = DummyReadyStatus.AssetsLoaded;
+        await dismiss;
+        await rdyCond.Task;
+        Interlocked.CompareExchange(ref actor.ReadyCondition, null, rdyCond);
     }
 
     internal void CloseAllDummies()
     {
-        List<RemoteDummyPlayerActor> actors = _remoteDummies.Values.ToList();
-        Task[] tasks = new Task[actors.Count];
-        for (int i = 0; i < actors.Count; i++)
+        RemoteDummyPlayerActor[] actors = _remoteDummies.Values.ToArray();
+        _remoteDummies.Clear();
+        Task[] tasks = new Task[actors.Length];
+        for (int i = 0; i < actors.Length; i++)
         {
             RemoteDummyPlayerActor actor = actors[i];
             tasks[i] = Task.Run(async () =>
@@ -459,7 +574,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
                     if (actor.ConnectionIntl != null && !closed)
                     {
                         await actor.SendGracefullyClose();
-                        closed = actor.Process.WaitForExit(1000);
+                        closed = actor.Process.WaitForExit(2000);
                     }
 
                     if (!closed)
@@ -474,26 +589,47 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
                 finally
                 {
                     actor.Process.Dispose();
+                    actor.Dispose();
                 }
             });
         }
 
         Task.WhenAll(tasks).Wait();
+
+        Interlocked.Exchange(ref _rpcServer, null)?.CloseServerAsync();
     }
 }
 
 internal enum DummyReadyStatus : byte
 {
     /// <summary>
+    /// Client has not yet booted to the loading screen.
+    /// </summary>
+    Unknown,
+
+    /// <summary>
     /// Invoked after <see cref="IModuleNexus.initialize"/>.
     /// </summary>
     StartedUp,
 
     /// <summary>
-    /// Invoked after vanilla and workshop assets have been loaded, therefore client is ready to connect.
+    /// Invoked after vanilla and subscribed workshop assets have been loaded, therefore client is ready to connect.
     /// </summary>
-    AssetsLoaded,
+    InMenu,
 
+    /// <summary>
+    /// Client is in the process of disconnecting from a server, after which they will return to the <see cref="InMenu"/> status.
+    /// </summary>
+    Disconnecting,
+    
+    /// <summary>
+    /// Client is in the process of connecting to the server.
+    /// </summary>
+    Connecting,
+    
+    /// <summary>
+    /// Client is connected to the server.
+    /// </summary>
     Connected
 }
 
@@ -501,5 +637,11 @@ internal class DummyLauncherConfig
 {
 
     public required ulong Steam64 { get; set; }
+    public required string Name { get; set; }
+    public required string PipeName { get; set; }
+    public required int Index { get; set; }
+    public required int Count { get; set; }
+    public required long? DisplayHandle { get; set; }
+    public required int TileOffset { get; set; }
     public required ulong[] WorkshopIds { get; set; }
 }

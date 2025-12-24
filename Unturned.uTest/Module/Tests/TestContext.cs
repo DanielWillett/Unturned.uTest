@@ -166,13 +166,11 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
         throw new TestResultException(TestResult.Fail);
     }
 
-    /// <inheritdoc />
     public ValueTask SpawnAllPlayersAsync()
     {
         return _parameters.Module.Dummies.SpawnPlayersAsync(null, CancellationToken);
     }
 
-    /// <inheritdoc />
     public ValueTask SpawnPlayersAsync(params IServersideTestPlayer[] players)
     {
         if (players == null)
@@ -192,6 +190,32 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
         }
 
         return _parameters.Module.Dummies.SpawnPlayersAsync(ids, CancellationToken);
+    }
+
+    public ValueTask DespawnAllPlayersAsync()
+    {
+        return _parameters.Module.Dummies.DespawnPlayersAsync(null, CancellationToken);
+    }
+
+    public ValueTask DespawnPlayersAsync(params IServersideTestPlayer[] players)
+    {
+        if (players == null)
+            throw new ArgumentNullException(nameof(players));
+
+        if (players.Length == 0)
+            return default;
+
+        List<ulong> ids = new List<ulong>(players.Length);
+        foreach (IServersideTestPlayer pl in players)
+        {
+            ulong id = pl.Steam64.m_SteamID;
+            if (ids.Contains(id))
+                continue;
+
+            ids.Add(id);
+        }
+
+        return _parameters.Module.Dummies.DespawnPlayersAsync(ids, CancellationToken);
     }
 
     /// <inheritdoc />

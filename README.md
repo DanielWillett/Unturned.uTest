@@ -18,7 +18,7 @@ uTest is built on the [Microsoft.Testing.Platform](https://learn.microsoft.com/e
 uTest supports projects targeting either **.NET Framework 4.7.1+** or **.NET Standard 2.1**. It also works with multi-targeting.
 
 ### Integration
-uTest integrates into any IDE's that support MTP, including Visual Studio, VS-Code, and Rider. MTP generates an executable file so you can also just run the tests using the `dotnet .\test\file.dll` command. It does not work with `dotnet test` just yet due to .NET Standard libraries not being executable.
+uTest integrates into any IDE's that support MTP, including Visual Studio, Visual Studio Code, and JetBrains Rider. MTP generates an executable file so you can also just run the tests using the `dotnet .\test\file.dll` command. It does not work with `dotnet test` just yet due to .NET Standard libraries not being executable.
 
 ### TRX Reporting
 uTest supports TRX report generation via the `--report-trx` command line argument. You need to reference the MTP TRX extension as well.

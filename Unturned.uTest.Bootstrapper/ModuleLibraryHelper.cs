@@ -46,6 +46,7 @@ internal class ModuleLibraryHelper(string moduleHomePath)
 
         TryAddFallback(new Version(1, 1, 2, 0), "DanielWillett.SpeedBytes.exe", out _);
         TryAddFallback(_4000, "ReflectionTools.exe", out _, load: true);
+        TryAddFallback(new Version(4, 0, 0, 1), "ReflectionTools.Harmony.exe", out _);
         TryAddFallback(new Version(1, 0, 0, 0), "ModularRpcs.exe", out AssemblyName modRpcs, load: true);
         TryAddFallback(modRpcs.Version, "ModularRpcs.NamedPipes.exe", out _, load: true);
         TryAddFallback(modRpcs.Version, "ModularRpcs.Unity.exe", out _, load: true);

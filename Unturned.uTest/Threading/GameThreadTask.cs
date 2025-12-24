@@ -4,7 +4,7 @@ using System.Runtime.ExceptionServices;
 
 namespace uTest;
 
-public class GameThreadTask
+public readonly struct GameThreadTask
 {
     private readonly GameThreadTaskAwaiter _awaiter;
 
@@ -17,7 +17,7 @@ public class GameThreadTask
 
     public GameThreadTaskAwaiter GetAwaiter()
     {
-        return _awaiter;
+        return _awaiter ?? CompletedTask.GetAwaiter();
     }
 }
 
@@ -123,7 +123,6 @@ public class GameThreadTaskAwaiter : ICriticalNotifyCompletion
             if (continuation == null)
                 return;
 
-            UnturnedLog.info("Invoked task continuation");
             continuation.Invoke();
         }
     }

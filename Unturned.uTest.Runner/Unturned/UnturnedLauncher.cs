@@ -128,7 +128,13 @@ internal class UnturnedLauncher : IDisposable
 
             string settingsFile = GetSettingsFile();
 
-            string launchArgs = $"-batchmode -nogui -uTestSettings \"{settingsFile}\" -NetTransport SystemSockets -LogAssemblyResolve +lanserver/uTest";
+            string launchArgs = $"-batchmode " +
+                                $"-nogui " +
+                                $"-uTestSettings \"{settingsFile}\" " +
+                                $"-NetTransport SystemSockets " +
+                                $"-LogAssemblyResolve " +
+                                $"-LogBadMessages " +
+                                $"+lanserver/uTest";
 
             TaskCompletionSource<Process> startupTcs = new TaskCompletionSource<Process>();
             _task = startupTcs;
@@ -142,7 +148,7 @@ internal class UnturnedLauncher : IDisposable
                 {
                     CreateNoWindow = false,
                     WorkingDirectory = installDir,
-                    WindowStyle = ProcessWindowStyle.Minimized
+                    WindowStyle = ProcessWindowStyle.Normal
                 };
 
                 try

@@ -117,6 +117,21 @@ internal class DummyManager : IDummyPlayerController
         return default;
     }
 
+    internal ValueTask DespawnPlayersAsync(List<ulong>? idsOrNull, CancellationToken token)
+    {
+        if (_simMode == PlayerSimulationMode.Full)
+        {
+            return _remoteDummyLauncher!.DisconnectDummyPlayersAsync(idsOrNull, token);
+        }
+        
+        if (_simulatedDummies.Count > 0)
+        {
+            return default;// todo new ValueTask(ConnectDummyPlayersAsync(idsOrNull, token));
+        }
+
+        return default;
+    }
+
     private async Task ConnectDummyPlayersAsync(List<ulong>? idsOrNull, CancellationToken token)
     {
         List<SimulatedDummyPlayerActor> playersToConnect = new List<SimulatedDummyPlayerActor>();

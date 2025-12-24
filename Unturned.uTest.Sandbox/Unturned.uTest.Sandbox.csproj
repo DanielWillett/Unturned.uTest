@@ -11,9 +11,10 @@
 		<LangVersion>preview</LangVersion>
 
 		<IsUnturnedTestProject>True</IsUnturnedTestProject>
-		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>portable</DebugType>
 
-	</PropertyGroup>
+  </PropertyGroup>
 
 	<ItemGroup>
 

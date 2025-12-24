@@ -18,6 +18,7 @@ internal sealed class TestAsyncStateMachine
     private int _state;
     private object? _currentAwaiter;
     private DateTimeOffset _startTime;
+    private ValueTask _disconnectPlayersTask;
 
     internal ITestContext Context => _parameters.Context!;
 
@@ -37,7 +38,24 @@ internal sealed class TestAsyncStateMachine
         m.Continue();
 
         machine = m;
-        return tcs.Task;
+        return Core(tcs, m);
+
+        static async Task Core(TaskCompletionSource<int> tcs, TestAsyncStateMachine m)
+        {
+            try
+            {
+                await tcs.Task;
+            }
+            finally
+            {
+                await m.CleanupTestAsync();
+            }
+        }
+    }
+
+    private async Task CleanupTestAsync()
+    {
+        await _disconnectPlayersTask.ConfigureAwait(false);
     }
 
     public TestAsyncStateMachine(in UnturnedTestInstance test, CancellationToken token, ILogger logger, Stopwatch sw, UnturnedTestList testList, MainModule module)
@@ -99,6 +117,7 @@ internal sealed class TestAsyncStateMachine
             }
         );
 
+        _disconnectPlayersTask = Context.DespawnAllPlayersAsync();
         uTest.TestContext.Current = null!;
     }
 

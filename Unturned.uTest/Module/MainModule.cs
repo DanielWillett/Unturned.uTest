@@ -109,6 +109,10 @@ internal class MainModule : MonoBehaviour, IDisposable
     internal void Initialize(string homeDir, SDG.Framework.Modules.Module module)
     {
         Accessor.Logger = DefaultLoggerReflectionTools.Logger;
+        Accessor.LogDebugMessages = true;
+        Accessor.LogInfoMessages = true;
+        Accessor.LogWarningMessages = true;
+        Accessor.LogErrorMessages = true;
 
         IsFaulted = false;
         HomeDirectory = homeDir;
@@ -144,7 +148,7 @@ internal class MainModule : MonoBehaviour, IDisposable
 
         // todo: docs
         string log = $"""
-                      Launching uTest v{version} on Unturned v{Provider.APP_VERSION} by DanielWillett (@danielwillett on Discord).
+                      Launching uTest v{version} on Unturned v{Provider.APP_VERSION} by DanielWillett aka BlazingFlame (@danielwillett on Discord).
                       - GitHub            : https://github.com/DanielWillett/Unturned.uTest
                       - Docs              : 
                       - Report a problem  : https://github.com/DanielWillett/Unturned.uTest/issues
@@ -159,6 +163,24 @@ internal class MainModule : MonoBehaviour, IDisposable
 
         CommandWindow.Log(log);
 
+        // Patches
+        {
+            _patches = new UnturnedTestPatches(Logger);
+            _patches.Init(
+                Path.Combine(ReadWrite.PATH, "Logs"),
+                p =>
+                {
+                    p.RegisterPatch(SkipAddFoundAssetIfNotRequired.TryPatch, SkipAddFoundAssetIfNotRequired.TryUnpatch);
+                    //p.RegisterPatch(ListenServerAddDummies.TryPatch, ListenServerAddDummies.TryUnpatch);
+                    p.RegisterPatch(SkipSteamAuthenticationForDummyPlayers.TryPatch, SkipSteamAuthenticationForDummyPlayers.TryUnpatch);
+                    p.RegisterPatch(RemoveWorkshopRateLimiter.TryPatch, RemoveWorkshopRateLimiter.TryUnpatch, critical: true);
+                    p.RegisterPatch(RemoveReadyToConnectRateLimiter.TryPatch, RemoveReadyToConnectRateLimiter.TryUnpatch, critical: true);
+                    p.RegisterPatch(IgnoreSocketExceptionsOnServer.TryPatch, IgnoreSocketExceptionsOnServer.TryUnpatch);
+                    p.RegisterPatch(WorkshopItemsQueriedUpdateDummies.TryPatch, WorkshopItemsQueriedUpdateDummies.TryUnpatch);
+                }
+            );
+        }
+
         Dummies = new DummyManager(this);
 
         Task t = DiscoverTestsAsync(TestList);
@@ -172,11 +194,9 @@ internal class MainModule : MonoBehaviour, IDisposable
             t.GetAwaiter().GetResult();
         }
 
-        // Patches
-        {
-            _patches = new UnturnedTestPatches(this);
-            _patches.Init();
-        }
+        Provider.configData.Server.Max_Clients_With_Same_IP_Address = int.MaxValue;
+
+        Level.onPostLevelLoaded += OnPostLevelLoaded;
 
         Environment = new TestEnvironmentServer(Logger);
         Environment.Disconnected += () =>
@@ -190,8 +210,6 @@ internal class MainModule : MonoBehaviour, IDisposable
                 me.ForceQuitGame("Shutdown due to losing contact with runner.", UnturnedTestExitCode.GracefulShutdown);
             });
         };
-
-        Level.onPostLevelLoaded += OnPostLevelLoaded;
 
         Environment.AddMessageHandler<RefreshTestsMessage>(_ =>
         {
@@ -211,7 +229,10 @@ internal class MainModule : MonoBehaviour, IDisposable
                 {
                     Task? t = _discoverTestsTask;
                     if (t != null)
+                    {
                         await t;
+                        _discoverTestsTask = null;
+                    }
 
                     exitCode = await runner.RunTestsAsync(CancellationToken);
                 }
@@ -264,57 +285,51 @@ internal class MainModule : MonoBehaviour, IDisposable
     [MemberNotNull(nameof(Tests))]
     private async Task DiscoverTestsAsync(UnturnedTestList testList)
     {
-        try
+        _assetLoadModelTrigger = new TaskCompletionSource<int>();
+        if (testList.Tests == null || testList.Tests.Count == 0)
         {
-            _assetLoadModelTrigger = new TaskCompletionSource<int>();
-            if (testList.Tests == null || testList.Tests.Count == 0)
-            {
-                Tests = Array.Empty<UnturnedTestInstance>();
-                return;
-            }
-
-            Type listType = Type.GetType(testList.TestListTypeName, throwOnError: true, ignoreCase: false)!;
-
-            ITestRegistrationList list = (ITestRegistrationList)Activator.CreateInstance(listType, TestAssembly);
-
-            ITestFilter? filter = null;
-            if (!testList.IsAllTests)
-            {
-                string[] uids = new string[testList.Tests.Count];
-                for (int i = 0; i < testList.Tests.Count; ++i)
-                    uids[i] = testList.Tests[i].Uid;
-
-                filter = new UidListFilter(uids);
-            }
-
-            Logger.LogInformation($"Discovering tests in \"{TestAssembly.GetName().FullName}\" ...");
-
-            List<UnturnedTestInstance> tests = await list.GetMatchingTestsAsync(Logger, filter, CancellationToken).ConfigureAwait(false);
-
-            Logger.LogInformation($"Found {tests.Count} test(s).");
-
-            UnturnedTestInstance[] testArray = tests.ToArray();
-
-            AssetLoadModel = AssetLoadModel.Create(this, true);
-            _hasAssetLoadModel = true;
-            _assetLoadModelTrigger?.TrySetResult(0);
-
-            if (Dedicator.isStandaloneDedicatedServer)
-            {
-                if (!await Dummies.InitializeDummiesAsync(testArray))
-                {
-                    throw new Exception("Failed to initialize dummies.");
-                }
-            }
-
-            await Environment.SendAsync(new AllInstancesStartedMessage(), CancellationToken);
-
-            Tests = testArray;
+            Tests = Array.Empty<UnturnedTestInstance>();
+            return;
         }
-        finally
+
+        Type listType = Type.GetType(testList.TestListTypeName, throwOnError: true, ignoreCase: false)!;
+
+        ITestRegistrationList list = (ITestRegistrationList)Activator.CreateInstance(listType, TestAssembly);
+
+        ITestFilter? filter = null;
+        if (!testList.IsAllTests)
         {
-            _discoverTestsTask = null;
+            string[] uids = new string[testList.Tests.Count];
+            for (int i = 0; i < testList.Tests.Count; ++i)
+                uids[i] = testList.Tests[i].Uid;
+
+            filter = new UidListFilter(uids);
         }
+
+        Logger.LogInformation($"Discovering tests in \"{TestAssembly.GetName().FullName}\" ...");
+
+        List<UnturnedTestInstance> tests = await list.GetMatchingTestsAsync(Logger, filter, CancellationToken).ConfigureAwait(false);
+
+        Logger.LogInformation($"Found {tests.Count} test(s).");
+
+        UnturnedTestInstance[] testArray = tests.ToArray();
+
+        AssetLoadModel = AssetLoadModel.Create(this, true);
+        _hasAssetLoadModel = true;
+        _assetLoadModelTrigger?.TrySetResult(0);
+
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            if (!await Dummies.InitializeDummiesAsync(testArray))
+            {
+                throw new Exception("Failed to initialize dummies.");
+            }
+        }
+        
+        Tests = testArray;
+
+        await Environment.SendAsync(new AllInstancesStartedMessage(), CancellationToken);
+        _discoverTestsTask = null;
     }
 
     private void OnPostLevelLoaded(int level)
@@ -371,7 +386,7 @@ internal class MainModule : MonoBehaviour, IDisposable
         _patches?.Dispose();
         _patches = null;
 
-        Dummies.Dispose();
+        Dummies?.Dispose();
 
         Provider.onServerConnected -= HandlePlayerConnected;
         GameThread.FlushRunAndWaits();
@@ -482,15 +497,7 @@ internal class MainModuleLoader : IModuleNexus
             return;
         }
 
-        try
-        {
-            Init();
-        }
-        catch (Exception ex)
-        {
-            CommandWindow.LogError(ex);
-            throw;
-        }
+        Init();
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -505,19 +512,19 @@ internal class MainModuleLoader : IModuleNexus
         try
         {
             module.Initialize(_homeDir!, _sdgModule!);
-        }
-        catch (Exception ex)
-        {
-            CommandWindow.LogError(ex);
-            if (!module.IsFaulted)
-                throw;
-        }
-        finally
-        {
             if (module.IsFaulted)
             {
                 module.ForceQuitGame("uTest initialization failed. See log.", UnturnedTestExitCode.StartupFailure);
             }
+        }
+        catch (QuitGameException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            CommandWindow.LogError(ex);
+            module.ForceQuitGame("Exception thrown during uTest initialization. See log.", UnturnedTestExitCode.StartupFailure);
         }
     }
 

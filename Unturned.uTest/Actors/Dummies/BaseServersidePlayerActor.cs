@@ -1,6 +1,8 @@
-﻿namespace uTest.Dummies;
+﻿using System;
 
-public abstract class BaseServersidePlayerActor : PlayerActor, IServersideTestPlayer
+namespace uTest.Dummies;
+
+public abstract class BaseServersidePlayerActor : PlayerActor, IServersideTestPlayer, IDisposable
 {
     private protected IDummyPlayerController PlayerController { get; }
 
@@ -21,5 +23,16 @@ public abstract class BaseServersidePlayerActor : PlayerActor, IServersideTestPl
     {
         NotifyConnectedIntl(connectedPlayer);
         IsOnline = true;
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        Dispose(true);
     }
 }

@@ -2,6 +2,7 @@
 using DanielWillett.ModularRpcs.Protocol;
 using System;
 using System.Diagnostics;
+using System.IO;
 using DanielWillett.ModularRpcs.Annotations;
 using DanielWillett.ModularRpcs.Async;
 
@@ -18,6 +19,7 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
     internal TaskCompletionSource<RemoteDummyPlayerActor>? ReadyCondition = new TaskCompletionSource<RemoteDummyPlayerActor>();
     internal TaskCompletionSource<RemoteDummyPlayerActor>? ConnectedCondition;
     internal IModularRpcRemoteConnection? ConnectionIntl;
+    internal StreamWriter? LogFileWriter;
 
     /// <summary>
     /// The 'home' directory for this client, storing startup config, cloud files, etc.
@@ -35,6 +37,11 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
     public uint ProcessId { get; internal set; }
 
     /// <summary>
+    /// The Unity window handle ('HWND') if currently on Windows. This is unused on other platforms.
+    /// </summary>
+    public nint WindowHandle { get; internal set; }
+
+    /// <summary>
     /// The ModularRPCs connection used to communicate with the client.
     /// </summary>
     public IModularRpcRemoteConnection Connection => ConnectionIntl ?? throw new InvalidOperationException("Not yet connected.");
@@ -48,14 +55,37 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
         : base(steam64, displayName, dummyLauncher)
     {
         Process = process;
-        ProcessId = (uint)process.Id;
         HomeDirectory = homeDirectory;
+    }
+
+    internal void HandleOutputDataReceived(object sender, DataReceivedEventArgs e)
+    {
+        try
+        {
+            LogFileWriter?.WriteLine(e.Data);
+        }
+        catch (ObjectDisposedException)
+        {
+            LogFileWriter = null;
+        }
+        catch (Exception ex)
+        {
+            UnturnedLog.error("Error writing to client log.");
+            UnturnedLog.error(ex);
+            Interlocked.Exchange(ref LogFileWriter, null)?.Dispose();
+        }
     }
 
     private protected override void NotifyConnectedIntl(Player player)
     {
         base.NotifyConnectedIntl(player);
         ConnectedCondition?.TrySetResult(this);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        Interlocked.Exchange(ref LogFileWriter, null)?.Dispose();
+        base.Dispose(disposing);
     }
 
     [RpcSend("uTest.Dummies.Host.DummyPlayerHost, Unturned.uTest.DummyPlayerHost", "ReceiveGracefullyClose")]
