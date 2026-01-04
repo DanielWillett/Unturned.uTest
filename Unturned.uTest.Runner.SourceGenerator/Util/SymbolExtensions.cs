@@ -164,12 +164,11 @@ internal static class SymbolExtensions
         return null;
     }
 
-    public static List<AttributeData> GetAttributes(this ISymbol? symbol, string typeName)
+    public static int GetAttributes(this ISymbol? symbol, INamedTypeSymbol attributeType, IList<AttributeData> outputList)
     {
         bool requireInherited = false;
-        bool isAttribute = string.Equals(typeName, "global::System.Attribute");
-        List<AttributeData> list = new List<AttributeData>();
         bool? isInherited = null;
+        int ct = 0;
         while (symbol != null)
         {
             ImmutableArray<AttributeData> attributes = symbol.GetAttributes();
@@ -177,18 +176,19 @@ internal static class SymbolExtensions
             foreach (AttributeData attr in attributes)
             {
                 for (INamedTypeSymbol? baseType = attr.AttributeClass;
-                     baseType != null && !baseType.IsEqualTo("global::System.Attribute");
+                     baseType != null && baseType.SpecialType != SpecialType.System_Object;
                      baseType = baseType.BaseType)
                 {
-                    if (!isAttribute && !baseType.IsEqualTo(typeName))
+                    if (!SymbolEqualityComparer.Default.Equals(baseType, attributeType))
                         continue;
 
                     if (requireInherited && !(isInherited ??= baseType.IsInheritedAttribute()))
                     {
-                        return list;
+                        return ct;
                     }
 
-                    list.Add(attr);
+                    outputList.Add(attr);
+                    ++ct;
                     break;
                 }
             }
@@ -216,6 +216,49 @@ internal static class SymbolExtensions
             break;
         }
 
-        return list;
+        return ct;
+    }
+
+    public static int GetTestAttributes(this ISymbol? symbol, INamedTypeSymbol attributeType, IList<AttributeData> outputList)
+    {
+        int ct = 0;
+        switch (symbol)
+        {
+            case null:
+                break;
+
+            case IAssemblySymbol assembly:
+                ct += assembly.GetAttributes(attributeType, outputList);
+                break;
+
+            case IModuleSymbol module:
+                ct += module.ContainingAssembly.GetAttributes(attributeType, outputList);
+                ct += module.GetAttributes(attributeType, outputList);
+                break;
+
+            default:
+                ct += symbol.ContainingAssembly.GetAttributes(attributeType, outputList);
+                ct += symbol.ContainingModule.GetAttributes(attributeType, outputList);
+
+                // outer types to nested type
+                Stack<ITypeSymbol> stack = StackPool<ITypeSymbol>.Rent();
+                for (ITypeSymbol containingType = symbol.ContainingType;
+                     containingType != null;
+                     containingType = containingType.ContainingType)
+                {
+                    stack.Push(containingType);
+                }
+
+                while (stack.Count > 0)
+                {
+                    ct += stack.Pop().GetAttributes(attributeType, outputList);
+                }
+
+                StackPool<ITypeSymbol>.Return(stack);
+                ct += symbol.GetAttributes(attributeType, outputList);
+                break;
+        }
+
+        return ct;
     }
 }

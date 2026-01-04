@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using uTest.Dummies;
 using uTest.Environment;
 
 namespace uTest.Module;
@@ -24,9 +25,9 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
 
     public ITestClass Runner { get; }
 
-    public Type TestClass => _parameters.Test.Type;
+    public Type TestClass => _parameters.Test.Instance.Type;
 
-    public MethodInfo TestMethod => _parameters.Test.Method;
+    public MethodInfo TestMethod => _parameters.Test.Instance.Method;
 
     public UnturnedTestUid TestId => _uid;
 
@@ -39,7 +40,7 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     internal TestContext(TestRunParameters parameters, ITestClass runner)
     {
         _parameters = parameters;
-        _uid = new UnturnedTestUid(parameters.Test.Uid);
+        _uid = new UnturnedTestUid(parameters.Test.Instance.Uid);
         Runner = runner;
 
         CommandWindowSynchronizationHelper.FlushCommandWindow();
@@ -166,12 +167,12 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
         throw new TestResultException(TestResult.Fail);
     }
 
-    public ValueTask SpawnAllPlayersAsync()
+    public ValueTask SpawnAllPlayersAsync(Action<DummyPlayerJoinConfiguration>? configurePlayers = null)
     {
-        return _parameters.Module.Dummies.SpawnPlayersAsync(null, CancellationToken);
+        return _parameters.Module.Dummies.SpawnPlayersAsync(_parameters.Test, null, CancellationToken);
     }
 
-    public ValueTask SpawnPlayersAsync(params IServersideTestPlayer[] players)
+    public ValueTask SpawnPlayersAsync(IServersideTestPlayer[] players, Action<DummyPlayerJoinConfiguration>? configurePlayers = null)
     {
         if (players == null)
             throw new ArgumentNullException(nameof(players));
@@ -189,12 +190,12 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
             ids.Add(id);
         }
 
-        return _parameters.Module.Dummies.SpawnPlayersAsync(ids, CancellationToken);
+        return _parameters.Module.Dummies.SpawnPlayersAsync(_parameters.Test, ids, CancellationToken);
     }
 
     public ValueTask DespawnAllPlayersAsync()
     {
-        return _parameters.Module.Dummies.DespawnPlayersAsync(null, CancellationToken);
+        return _parameters.Module.Dummies.DespawnPlayersAsync(_parameters.Test, null, CancellationToken);
     }
 
     public ValueTask DespawnPlayersAsync(params IServersideTestPlayer[] players)
@@ -215,7 +216,7 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
             ids.Add(id);
         }
 
-        return _parameters.Module.Dummies.DespawnPlayersAsync(ids, CancellationToken);
+        return _parameters.Module.Dummies.DespawnPlayersAsync(_parameters.Test, ids, CancellationToken);
     }
 
     /// <inheritdoc />

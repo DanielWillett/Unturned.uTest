@@ -1,10 +1,10 @@
 ﻿using DanielWillett.ModularRpcs.Abstractions;
+using DanielWillett.ModularRpcs.Annotations;
+using DanielWillett.ModularRpcs.Async;
 using DanielWillett.ModularRpcs.Protocol;
 using System;
 using System.Diagnostics;
 using System.IO;
-using DanielWillett.ModularRpcs.Annotations;
-using DanielWillett.ModularRpcs.Async;
 
 namespace uTest.Dummies;
 

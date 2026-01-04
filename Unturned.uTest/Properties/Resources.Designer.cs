@@ -115,6 +115,51 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Duplicate value..
+        /// </summary>
+        internal static string ArgumentExceptionDuplicateItem {
+            get {
+                return ResourceManager.GetString("ArgumentExceptionDuplicateItem", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Empty value..
+        /// </summary>
+        internal static string ArgumentOutOfRangeExceptionEmpty {
+            get {
+                return ResourceManager.GetString("ArgumentOutOfRangeExceptionEmpty", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Character names must be between 2 and 32 characters and can not contain rich text or new lines or be numbers..
+        /// </summary>
+        internal static string ArgumentOutOfRangeExceptionInvalidCharacterName {
+            get {
+                return ResourceManager.GetString("ArgumentOutOfRangeExceptionInvalidCharacterName", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to All HWIDs must be non-null and exactly 20 bytes..
+        /// </summary>
+        internal static string ArgumentOutOfRangeExceptionInvalidHWIDInList {
+            get {
+                return ResourceManager.GetString("ArgumentOutOfRangeExceptionInvalidHWIDInList", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Nick names must be at most 32 characters and can not contain rich text or new lines or be numbers..
+        /// </summary>
+        internal static string ArgumentOutOfRangeExceptionInvalidNickName {
+            get {
+                return ResourceManager.GetString("ArgumentOutOfRangeExceptionInvalidNickName", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to An assertion expression for a DateTimeOffset can not both define a tolerance and check that offsets are the same..
         /// </summary>
         internal static string AssertionExpressionCombinedDateTimeOffsetComparisonWithTolerance {

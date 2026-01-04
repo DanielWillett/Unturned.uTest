@@ -34,7 +34,7 @@ internal static class TestCompiler
         }
 #endif
 
-        ref readonly UnturnedTestInstance test = ref parameters.Test;
+        ref readonly UnturnedTestInstance test = ref parameters.Test.Instance;
         DynamicMethod dynMethod = new DynamicMethod(
             test.Uid,
             MethodAttributes.Public | MethodAttributes.Static,

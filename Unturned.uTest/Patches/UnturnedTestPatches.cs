@@ -27,28 +27,40 @@ internal class UnturnedTestPatches(ILogger logger) : IDisposable
 
     public void RegisterPatch(Func<Harmony, ILogger, bool> tryPatch, Func<Harmony, bool> tryUnpatch, bool critical = false)
     {
-        if (tryPatch(_harmony!, _logger))
+        Harmony? h = _harmony;
+        if (h == null)
+            throw new ObjectDisposedException(nameof(UnturnedTestPatches));
+
+        lock (h)
         {
-            _logger.LogDebug($"Applied patch: {Accessor.Formatter.Format(tryPatch.Method.DeclaringType!)}.");
-            _unpatches.Add(tryUnpatch);
-        }
-        else if (critical)
-        {
-            Dispose();
-            throw new Exception($"Failed to apply patch {Accessor.Formatter.Format(tryPatch.Method.DeclaringType!)}.");
+            if (tryPatch(h, _logger))
+            {
+                _logger.LogDebug($"Applied patch: {Accessor.Formatter.Format(tryPatch.Method.DeclaringType!)}.");
+                _unpatches.Add(tryUnpatch);
+            }
+            else if (critical)
+            {
+                Dispose();
+                throw new Exception($"Failed to apply patch {Accessor.Formatter.Format(tryPatch.Method.DeclaringType!)}.");
+            }
         }
     }
 
     public void Dispose()
     {
-        if (_harmony == null)
+        Harmony? h = _harmony;
+        if (h == null)
             return;
 
-        foreach (Func<Harmony, bool> unpatch in _unpatches)
-            unpatch(_harmony);
+        lock (h)
+        {
+            foreach (Func<Harmony, bool> unpatch in _unpatches)
+                unpatch(h);
 
-        _unpatches.Clear();
-        _harmony.UnpatchAll(_harmony.Id);
+            _unpatches.Clear();
+            h.UnpatchAll(h.Id);
+        }
+
         _harmony = null;
     }
 }

@@ -5,7 +5,7 @@ namespace uTest.Module;
 
 internal sealed class TestRunParameters
 {
-    internal readonly UnturnedTestInstance Test;
+    internal readonly UnturnedTestInstanceData Test;
     internal readonly CancellationToken Token;
     internal readonly ILogger Logger;
 
@@ -20,7 +20,7 @@ internal sealed class TestRunParameters
     internal TestContext? Context;
 
     internal TestRunParameters(
-        in UnturnedTestInstance test,
+        UnturnedTestInstanceData test,
         CancellationToken token,
         ILogger logger,
         TestAsyncStateMachine stateMachine,

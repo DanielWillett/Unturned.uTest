@@ -18,6 +18,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Unturned.SystemEx;
 using uTest.Module;
+using uTest.Patches;
 using uTest.Protocol.DummyPlayerHost;
 // ReSharper disable LocalizableElement
 
@@ -35,16 +36,23 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
     private readonly ConcurrentDictionary<ulong, RemoteDummyPlayerActor> _remoteDummies = new ConcurrentDictionary<ulong, RemoteDummyPlayerActor>();
 
-    internal SteamIdPool SteamIdPool { get; }
-
     internal IServiceProvider ModularRpcsServices { get; private set; }
 
     public DummyPlayerLauncher(MainModule module, ILogger logger, IServiceProvider serviceProvider)
     {
         _module = module;
         _logger = logger;
-        SteamIdPool = new SteamIdPool(module.TestList?.SteamIdGenerationStyle ?? SteamIdGenerationStyle.DevUniverse);
         ModularRpcsServices = serviceProvider;
+
+        UnturnedTestPatches? p = _module.Patches;
+        if (p != null)
+        {
+            p.RegisterPatch(SkipSteamAuthenticationForDummyPlayers.TryPatch, SkipSteamAuthenticationForDummyPlayers.TryUnpatch);
+            p.RegisterPatch(RemoveWorkshopRateLimiter.TryPatch, RemoveWorkshopRateLimiter.TryUnpatch, critical: true);
+            p.RegisterPatch(RemoveReadyToConnectRateLimiter.TryPatch, RemoveReadyToConnectRateLimiter.TryUnpatch, critical: true);
+            p.RegisterPatch(IgnoreSocketExceptionsOnServer.TryPatch, IgnoreSocketExceptionsOnServer.TryUnpatch);
+            p.RegisterPatch(WorkshopItemsQueriedUpdateDummies.TryPatch, WorkshopItemsQueriedUpdateDummies.TryUnpatch);
+        }
 
         // pre-load this assembly.
         // Unturned's assembly resolution system isn't threadsafe so it corrupts the dictionary later on when loaded by ModularRPCs
@@ -214,7 +222,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         string moduleDir = _module.HomeDirectory.Replace('\\', '/');
         for (int i = 0; i < amt; ++i)
         {
-            CSteamID steamId = SteamIdPool.GetUniqueCSteamID();
+            CSteamID steamId =  _module.Dummies.SteamIdPool.GetUniqueCSteamID();
 
             string steamName = $"Dummy ({steamId.GetAccountID().m_AccountID:X8})";
 

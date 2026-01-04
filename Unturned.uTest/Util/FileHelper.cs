@@ -99,9 +99,13 @@ internal static class FileHelper
         };
     }
 
-    internal static StringComparer FileNameComparer { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+    internal static StringComparer FileNameComparer { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
         ? StringComparer.OrdinalIgnoreCase
         : StringComparer.Ordinal;
+
+    internal static StringComparison FileNameComparison { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
 
     private enum NextValueType { None = -1, Metadata, Asset, Guid, Id, Type, AssetCategory }
 

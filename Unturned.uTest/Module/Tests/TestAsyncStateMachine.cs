@@ -24,9 +24,9 @@ internal sealed class TestAsyncStateMachine
 
     public List<TestTimingStep> TimingSteps { get; }
 
-    internal static Task? TryRunTestAsync(in UnturnedTestInstance test, CancellationToken token, ILogger logger, Stopwatch sw, UnturnedTestList testList, MainModule module, out TestAsyncStateMachine machine)
+    internal static Task? TryRunTestAsync(UnturnedTestInstanceData test, CancellationToken token, ILogger logger, Stopwatch sw, UnturnedTestList testList, MainModule module, out TestAsyncStateMachine machine)
     {
-        TestAsyncStateMachine m = new TestAsyncStateMachine(in test, token, logger, sw, testList, module);
+        TestAsyncStateMachine m = new TestAsyncStateMachine(test, token, logger, sw, testList, module);
         if (m._compilationResult == null)
         {
             machine = null!;
@@ -58,10 +58,10 @@ internal sealed class TestAsyncStateMachine
         await _disconnectPlayersTask.ConfigureAwait(false);
     }
 
-    public TestAsyncStateMachine(in UnturnedTestInstance test, CancellationToken token, ILogger logger, Stopwatch sw, UnturnedTestList testList, MainModule module)
+    public TestAsyncStateMachine(UnturnedTestInstanceData test, CancellationToken token, ILogger logger, Stopwatch sw, UnturnedTestList testList, MainModule module)
     {
         _parameters = new TestRunParameters(
-            in test,
+            test,
             token,
             logger,
             this,

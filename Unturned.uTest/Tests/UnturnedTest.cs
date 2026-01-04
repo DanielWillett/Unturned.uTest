@@ -21,6 +21,8 @@ public class UnturnedTest : ITypeParamsProvider
     public required string TreePath { get; init; }
     public string[]? Categories { get; init; }
     public required MethodInfo Method { get; init; }
+    public required string? Map { get; init; }
+    public required ulong[] WorkshopItems { get; init; }
 
     /// <summary>
     /// Whether or not this test will have to be expanded into multiple tests (due to parameters, type parameters, etc).

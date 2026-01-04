@@ -36,6 +36,8 @@ internal sealed record TestMethodInfo(
     EquatableList<TestArgsAttributeInfo> ArgsAttributes,
     EquatableList<TestTypeParameterInfo>? TypeParameters,
     EquatableList<TestTypeArgsAttributeInfo>? TypeArgsAttributes,
+    EquatableList<ulong>? WorkshopItems,
+    string? Map,
     string ReturnTypeFullName,
     string ReturnTypeGloballyQualifiedName,
     DelegateType? DelegateType

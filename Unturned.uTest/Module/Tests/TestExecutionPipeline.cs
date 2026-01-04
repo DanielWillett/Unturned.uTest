@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using uTest.Discovery;
 
 namespace uTest.Module;
 
@@ -15,7 +14,7 @@ internal class TestExecutionPipeline
 
     private readonly Stopwatch _stopwatch;
 
-    internal UnturnedTestInstance CurrentTest;
+    internal UnturnedTestInstanceData? CurrentTest;
 
     public TestExecutionPipeline(TestRunner runner, ILogger logger, UnturnedTestList testList, MainModule module, CancellationToken token)
     {
@@ -27,7 +26,7 @@ internal class TestExecutionPipeline
         _stopwatch = new Stopwatch();
     }
 
-    public void InitializeCurrentTest(UnturnedTestInstance test)
+    public void InitializeCurrentTest(UnturnedTestInstanceData test)
     {
         CurrentTest = test;
     }
@@ -36,12 +35,12 @@ internal class TestExecutionPipeline
     {
         await GameThread.Switch(_token);
 
-        if (CurrentTest.Method == null)
+        if (CurrentTest == null)
             throw new InvalidOperationException("Test not loaded.");
 
         try
         {
-            RuntimeHelpers.RunClassConstructor(CurrentTest.Type.TypeHandle);
+            RuntimeHelpers.RunClassConstructor(CurrentTest.Instance.Type.TypeHandle);
         }
         catch (Exception ex)
         {
@@ -52,7 +51,7 @@ internal class TestExecutionPipeline
         TestExecutionSummary summary;
         TestContext context;
 
-        Task? task = TestAsyncStateMachine.TryRunTestAsync(in CurrentTest, _token, _logger, _stopwatch, _testList, _module, out TestAsyncStateMachine machine);
+        Task? task = TestAsyncStateMachine.TryRunTestAsync(CurrentTest, _token, _logger, _stopwatch, _testList, _module, out TestAsyncStateMachine machine);
         try
         {
 
@@ -79,7 +78,7 @@ internal class TestExecutionPipeline
             summary = new TestExecutionSummary
             {
                 SessionUid = _testList.SessionUid,
-                Uid = CurrentTest.Uid,
+                Uid = CurrentTest.Instance.Uid,
                 Artifacts = context.Artifacts,
                 TimingSteps = machine.TimingSteps,
                 OutputMessages = context.Messages
@@ -121,7 +120,7 @@ internal class TestExecutionPipeline
 
     private TestExecutionResult ReportTestException(Exception ex, TestExecutionSummary summary)
     {
-        _logger.LogError($"Test \"{CurrentTest.Uid}\" failed with exception.", ex);
+        _logger.LogError($"Test \"{CurrentTest!.Instance.Uid}\" failed with exception.", ex);
 
         if (ex is ITestResultException testResultException)
         {
@@ -135,7 +134,7 @@ internal class TestExecutionPipeline
 
     private TestExecutionResult HandleTestError(string context, Exception ex)
     {
-        _logger.LogError($"Error running test \"{CurrentTest.Uid}\" ({context}).", ex);
+        _logger.LogError($"Error running test \"{CurrentTest!.Instance.Uid}\" ({context}).", ex);
         // todo
         return new TestExecutionResult(TestResult.Fail, null);
     }

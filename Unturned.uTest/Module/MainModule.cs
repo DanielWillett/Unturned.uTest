@@ -4,6 +4,7 @@ using SDG.Framework.IO;
 using SDG.Framework.Modules;
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using uTest.Discovery;
@@ -28,9 +29,7 @@ internal class MainModule : MonoBehaviour, IDisposable
     private bool _hasAssetLoadModel;
     private float _sentLevelLoadedRealtime;
     private Task? _discoverTestsTask;
-    private Exception? _discoverTaskException;
     private CancellationTokenSource? _cancellationTokenSource;
-    private UnturnedTestPatches? _patches;
     private TaskCompletionSource<int>? _assetLoadModelTrigger;
 
     private readonly CommandLineString _clTestFile = new CommandLineString(TestFileCommandLine);
@@ -81,6 +80,16 @@ internal class MainModule : MonoBehaviour, IDisposable
     public DummyManager Dummies { get; private set; } = null!;
 
     /// <summary>
+    /// Keeps track of completed patches and unpatches.
+    /// </summary>
+    internal UnturnedTestPatches? Patches { get; private set; }
+
+    /// <summary>
+    /// List of all included workshop items.
+    /// </summary>
+    internal ulong[]? WorkshopItems { get; private set; }
+
+    /// <summary>
     /// Defines which assets are loaded.
     /// </summary>
     /// <remarks>If this property is null it means all assets should be loaded.</remarks>
@@ -100,7 +109,7 @@ internal class MainModule : MonoBehaviour, IDisposable
     /// <summary>
     /// List of tests to be ran.
     /// </summary>
-    public UnturnedTestInstance[] Tests { get; private set; } = Array.Empty<UnturnedTestInstance>();
+    public UnturnedTestInstanceData[] Tests { get; private set; } = Array.Empty<UnturnedTestInstanceData>();
 
     /// <summary>
     /// Entrypoint for module.
@@ -165,23 +174,18 @@ internal class MainModule : MonoBehaviour, IDisposable
 
         // Patches
         {
-            _patches = new UnturnedTestPatches(Logger);
-            _patches.Init(
+            Patches = new UnturnedTestPatches(Logger);
+            Patches.Init(
                 Path.Combine(ReadWrite.PATH, "Logs"),
                 p =>
                 {
                     p.RegisterPatch(SkipAddFoundAssetIfNotRequired.TryPatch, SkipAddFoundAssetIfNotRequired.TryUnpatch);
-                    //p.RegisterPatch(ListenServerAddDummies.TryPatch, ListenServerAddDummies.TryUnpatch);
-                    p.RegisterPatch(SkipSteamAuthenticationForDummyPlayers.TryPatch, SkipSteamAuthenticationForDummyPlayers.TryUnpatch);
-                    p.RegisterPatch(RemoveWorkshopRateLimiter.TryPatch, RemoveWorkshopRateLimiter.TryUnpatch, critical: true);
-                    p.RegisterPatch(RemoveReadyToConnectRateLimiter.TryPatch, RemoveReadyToConnectRateLimiter.TryUnpatch, critical: true);
-                    p.RegisterPatch(IgnoreSocketExceptionsOnServer.TryPatch, IgnoreSocketExceptionsOnServer.TryUnpatch);
-                    p.RegisterPatch(WorkshopItemsQueriedUpdateDummies.TryPatch, WorkshopItemsQueriedUpdateDummies.TryUnpatch);
                 }
             );
         }
 
         Dummies = new DummyManager(this);
+        Dummies.ClearPlayerDataFromDummies();
 
         Task t = DiscoverTestsAsync(TestList);
         if (!t.IsCompleted)
@@ -288,7 +292,7 @@ internal class MainModule : MonoBehaviour, IDisposable
         _assetLoadModelTrigger = new TaskCompletionSource<int>();
         if (testList.Tests == null || testList.Tests.Count == 0)
         {
-            Tests = Array.Empty<UnturnedTestInstance>();
+            Tests = Array.Empty<UnturnedTestInstanceData>();
             return;
         }
 
@@ -306,13 +310,37 @@ internal class MainModule : MonoBehaviour, IDisposable
             filter = new UidListFilter(uids);
         }
 
+        if (!string.IsNullOrEmpty(testList.TreeNodeFilter))
+        {
+            Logger.LogDebug($"Test filter: \"{testList.TreeNodeFilter}\"");
+        }
+
         Logger.LogInformation($"Discovering tests in \"{TestAssembly.GetName().FullName}\" ...");
 
         List<UnturnedTestInstance> tests = await list.GetMatchingTestsAsync(Logger, filter, CancellationToken).ConfigureAwait(false);
 
         Logger.LogInformation($"Found {tests.Count} test(s).");
 
-        UnturnedTestInstance[] testArray = tests.ToArray();
+        UnturnedTestInstanceData[] testArray = new UnturnedTestInstanceData[tests.Count];
+        for (int i = 0; i < testArray.Length; ++i)
+            testArray[i] = new UnturnedTestInstanceData(tests[i]);
+
+        HashSet<ulong> workshopItems = new HashSet<ulong>();
+        foreach (UnturnedTestInstanceData data in testArray)
+        {
+            foreach (ulong workshopItem in data.Instance.Test.WorkshopItems)
+            {
+                workshopItems.Add(workshopItem);
+            }
+        }
+
+        WorkshopItems = workshopItems.ToArray();
+
+        // todo: doesnt work on client and is a race condition with asset loading (see Provider.host())
+        await GameThread.RunAndWaitAsync(workshopItems, static workshopItems =>
+        {
+            WorkshopDownloadConfig.getOrLoad().File_IDs = new List<ulong>(workshopItems);
+        }, CancellationToken);
 
         AssetLoadModel = AssetLoadModel.Create(this, true);
         _hasAssetLoadModel = true;
@@ -383,8 +411,8 @@ internal class MainModule : MonoBehaviour, IDisposable
         if (_hasQuit)
             return;
 
-        _patches?.Dispose();
-        _patches = null;
+        Patches?.Dispose();
+        Patches = null;
 
         Dummies?.Dispose();
 

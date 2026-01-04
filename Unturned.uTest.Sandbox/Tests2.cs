@@ -2,6 +2,8 @@ using uTest.Logging;
 
 namespace uTest.Sandbox;
 
+
+
 [Test]
 public class Tests2 : ITestClass, ITestClassSetup
 {
@@ -13,7 +15,10 @@ public class Tests2 : ITestClass, ITestClassSetup
     public async Task Test1()
     {
         TestContext.Current.Logger.LogInformation("Waiting for players to connect.");
-        await TestContext.Current.SpawnAllPlayersAsync();
+        await TestContext.Current.SpawnAllPlayersAsync(player =>
+        {
+            player.WithSpawnLocation(PlayerTransform.FromRandomPlayerSpawn());
+        });
         TestContext.Current.Logger.LogInformation("All players connected.");
 
         Assert.Equal(Players, Provider.clients.Count);
@@ -27,7 +32,7 @@ public class Tests2 : ITestClass, ITestClassSetup
         TestContext.Current.Logger.LogInformation("All players disconnected.");
 
 
-        Assert.Equal(0, Provider.clients.Count);
+        Assert.Empty(Provider.clients);
 
         TestContext.Current.Logger.LogInformation("Passing in 5 seconds...");
         await Task.Delay(5000);
@@ -38,7 +43,7 @@ public class Tests2 : ITestClass, ITestClassSetup
     {
         testContext.ConfigureAsync(env =>
         {
-            
+
         });
         return default;
     }

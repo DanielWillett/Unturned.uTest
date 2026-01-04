@@ -7,8 +7,8 @@ using DanielWillett.ModularRpcs.Serialization;
 using System;
 using System.ComponentModel.Design;
 using System.Globalization;
+using System.IO;
 using System.Linq;
-using uTest.Discovery;
 using uTest.Module;
 
 namespace uTest.Dummies;
@@ -21,43 +21,50 @@ internal class DummyManager : IDummyPlayerController
 
     private DummyPlayerLauncher? _remoteDummyLauncher;
 
-    private PlayerSimulationMode _simMode = PlayerSimulationMode.Dummy;
+    internal SteamIdPool SteamIdPool { get; }
 
     internal IDummyPlayerController? Controller => _remoteDummyLauncher;
 
     public DummyManager(MainModule module)
     {
+        SteamIdPool = new SteamIdPool(module.TestList?.SteamIdGenerationStyle ?? SteamIdGenerationStyle.Instance);
         _module = module;
     }
 
-    public Task<bool> InitializeDummiesAsync(UnturnedTestInstance[] tests)
+    public Task<bool> InitializeDummiesAsync(UnturnedTestInstanceData[] tests)
     {
         bool needsFullPlayers = false;
         int minDummies = 0;
+        int minFullDummies = 0;
         List<PlayerCountAttribute> playerCountListTemp = new List<PlayerCountAttribute>();
         List<PlayerSimulationModeAttribute> playerModeListTemp = new List<PlayerSimulationModeAttribute>();
         for (int i = 0; i < tests.Length; ++i)
         {
-            ref UnturnedTestInstance test = ref tests[i];
+            UnturnedTestInstanceData test = tests[i];
 
-            if (!needsFullPlayers)
+            PlayerSimulationMode mode = PlayerSimulationMode.Dummy;
+            TestAttributeHelper<PlayerSimulationModeAttribute>.GetAttributes(test.Instance.Method, playerModeListTemp);
+            if (playerModeListTemp.Count > 0)
             {
-                TestAttributeHelper<PlayerSimulationModeAttribute>.GetAttributes(test.Method, playerModeListTemp);
-                if (playerModeListTemp.Count > 0)
-                {
-                    if (playerModeListTemp.Exists(x => x.Mode == PlayerSimulationMode.Full))
-                        needsFullPlayers = true;
+                if (playerModeListTemp.Exists(x => x.Mode == PlayerSimulationMode.Full))
+                    mode = PlayerSimulationMode.Full;
 
-                    playerModeListTemp.Clear();
-                }
+                playerModeListTemp.Clear();
             }
 
-            TestAttributeHelper<PlayerCountAttribute>.GetAttributes(test.Method, playerCountListTemp);
+            if (mode == PlayerSimulationMode.Full)
+                needsFullPlayers = true;
+
+            TestAttributeHelper<PlayerCountAttribute>.GetAttributes(test.Instance.Method, playerCountListTemp);
             if (playerCountListTemp.Count == 0)
                 continue;
 
             PlayerCountAttribute max = playerCountListTemp.Aggregate((a, max) => a.PlayerCount > max.PlayerCount ? a : max);
             minDummies = Math.Max(max.PlayerCount, minDummies);
+            if (mode == PlayerSimulationMode.Full)
+            {
+                minFullDummies = Math.Max(max.PlayerCount, minFullDummies);
+            }
             
             playerCountListTemp.Clear();
         }
@@ -70,7 +77,6 @@ internal class DummyManager : IDummyPlayerController
         if (!needsFullPlayers)
             return Task.FromResult(true);
 
-        _simMode = PlayerSimulationMode.Full;
         if (_remoteDummyLauncher == null)
         {
             ServiceContainer cont = new ServiceContainer();
@@ -99,12 +105,12 @@ internal class DummyManager : IDummyPlayerController
             cont.AddService(typeof(IDummyPlayerController), _remoteDummyLauncher);
         }
 
-        return _remoteDummyLauncher.StartDummiesAsync(minDummies);
+        return _remoteDummyLauncher.StartDummiesAsync(minFullDummies);
     }
 
-    internal ValueTask SpawnPlayersAsync(List<ulong>? idsOrNull, CancellationToken token)
+    internal ValueTask SpawnPlayersAsync(UnturnedTestInstanceData currentTest, List<ulong>? idsOrNull, CancellationToken token)
     {
-        if (_simMode == PlayerSimulationMode.Full)
+        if (currentTest.SimulationMode == PlayerSimulationMode.Full)
         {
             return _remoteDummyLauncher!.ConnectDummyPlayersAsync(idsOrNull, token);
         }
@@ -117,9 +123,9 @@ internal class DummyManager : IDummyPlayerController
         return default;
     }
 
-    internal ValueTask DespawnPlayersAsync(List<ulong>? idsOrNull, CancellationToken token)
+    internal ValueTask DespawnPlayersAsync(UnturnedTestInstanceData currentTest, List<ulong>? idsOrNull, CancellationToken token)
     {
-        if (_simMode == PlayerSimulationMode.Full)
+        if (currentTest.SimulationMode == PlayerSimulationMode.Full)
         {
             return _remoteDummyLauncher!.DisconnectDummyPlayersAsync(idsOrNull, token);
         }
@@ -245,6 +251,86 @@ internal class DummyManager : IDummyPlayerController
     public void Dispose()
     {
         _remoteDummyLauncher?.CloseAllDummies();
+    }
+
+    public void ClearPlayerDataFromDummies()
+    {
+        string rootDir = PlayerSavedata.hasSync
+            ? $"{ReadWrite.PATH}/Sync"
+            : $"{ReadWrite.PATH}{ServerSavedata.directory}/Players";
+
+        foreach (string dir in Directory.EnumerateDirectories(rootDir, "*", SearchOption.TopDirectoryOnly))
+        {
+            if (!IsBotPlayerDir(dir))
+                continue;
+
+            string[] subDirs = Directory.GetDirectories(dir, "*", SearchOption.TopDirectoryOnly);
+            if (subDirs.Length > 1)
+            {
+                for (int i = 0; i < subDirs.Length; ++i)
+                {
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+                    if (!Path.GetFileName(subDirs[i].AsSpan()).Equals(Level.info.name, FileHelper.FileNameComparison))
+#else
+                    if (!string.Equals(Path.GetFileName(subDirs[i]), Level.info.name, FileHelper.FileNameComparison))
+#endif
+                    {
+                        continue;
+                    }
+
+                    TryDeleteFolder(subDirs[i]);
+                    break;
+                }
+
+                continue;
+            }
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+            if (subDirs.Length == 1 && !Path.GetFileName(subDirs[0].AsSpan()).Equals(Level.info.name, FileHelper.FileNameComparison))
+#else
+            if (subDirs.Length == 1 && !string.Equals(Path.GetFileName(subDirs[0]), Level.info.name, FileHelper.FileNameComparison))
+#endif
+            {
+                continue;
+            }
+
+            TryDeleteFolder(dir);
+        }
+    }
+
+    private void TryDeleteFolder(string dir)
+    {
+        try
+        {
+            Directory.Delete(dir, true);
+        }
+        catch (Exception ex)
+        {
+            _module.Logger.LogError($"Error deleting bot player data directory \"{dir}\".", ex);
+        }
+    }
+
+    private bool IsBotPlayerDir(string dir)
+    {
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+        ReadOnlySpan<char> fn = Path.GetFileName(dir.AsSpan());
+#else
+        string fn = Path.GetFileName(dir);
+#endif
+        // 292733980074184636_0
+        int index = fn.IndexOf('_');
+        if (index is < 17 or > 18)
+            return false;
+
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
+        if (!ulong.TryParse(fn.Slice(0, index), NumberStyles.None, CultureInfo.InvariantCulture, out ulong steamId))
+#else
+        if (!ulong.TryParse(fn.Substring(0, index), NumberStyles.None, CultureInfo.InvariantCulture, out ulong steamId))
+#endif
+            return false;
+
+
+        return SteamIdPool.IsLikelyGeneratedId(new CSteamID(steamId));
     }
 }
 

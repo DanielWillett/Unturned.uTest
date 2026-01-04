@@ -1,6 +1,7 @@
 using JetBrains.Annotations;
 using System;
 using System.Reflection;
+using uTest.Dummies;
 
 namespace uTest;
 
@@ -105,7 +106,7 @@ public interface ITestContext : IUnconfiguredTestContext
     /// Notifies all allocated players that it's time to join the server and waits for them to fully spawn in and initialize.
     /// </summary>
     /// <remarks>If no players are configured this method will do nothing.</remarks>
-    ValueTask SpawnAllPlayersAsync();
+    ValueTask SpawnAllPlayersAsync(Action<DummyPlayerJoinConfiguration>? configurePlayers = null);
 
     /// <summary>
     /// Notifies the given players that it's time to join the server and waits for them to fully spawn in and initialize.
@@ -114,7 +115,7 @@ public interface ITestContext : IUnconfiguredTestContext
     /// <param name="players">The players to spawn. Duplicates are ignored.</param>
     /// <exception cref="ArgumentNullException"/>
     /// <exception cref="ActorDestroyedException">One or more elements in <paramref name="players"/> no longer exists.</exception>
-    ValueTask SpawnPlayersAsync(params IServersideTestPlayer[] players);
+    ValueTask SpawnPlayersAsync(IServersideTestPlayer[] players, Action<DummyPlayerJoinConfiguration>? configurePlayers = null);
 
     /// <summary>
     /// Notifies all allocated players that it's time to disconnect from the server and waits for them to fully disconnect and return to the main menu.
@@ -129,7 +130,7 @@ public interface ITestContext : IUnconfiguredTestContext
     /// <param name="players">The players to despawn. Duplicates are ignored.</param>
     /// <exception cref="ArgumentNullException"/>
     /// <exception cref="ActorDestroyedException">One or more elements in <paramref name="players"/> no longer exists.</exception>
-    ValueTask DespawnPlayersAsync(params IServersideTestPlayer[] players);
+    ValueTask DespawnPlayersAsync(IServersideTestPlayer[] players);
 }
 
 public static class TestContext

@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 
 namespace uTest;
 
@@ -13,6 +14,15 @@ internal static class MathHelper
         if (d >= 1)
             return 1;
         return d;
+    }
+
+    /// <summary>
+    /// Clamps an angle in degrees within the [0, 360) range.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float ClampAngle(float yaw)
+    {
+        return (yaw % 360 + 360) % 360;
     }
 
     internal static bool TryParseInt(ReadOnlySpan<char> span, out int num)

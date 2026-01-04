@@ -49,25 +49,25 @@ internal class TestRunner
 
         _logger.LogDebug($"Starting test run: {testUids.Count} test variation(s). Discovered {_module.Tests.Length} test(s).");
 
-        foreach (UnturnedTestInstance test in _module.Tests)
+        foreach (UnturnedTestInstanceData test in _module.Tests)
         {
-            int testIndex = testUids.FindIndex(x => string.Equals(x.Uid, test.Uid, StringComparison.Ordinal));
+            int testIndex = testUids.FindIndex(x => string.Equals(x.Uid, test.Instance.Uid, StringComparison.Ordinal));
             if (testIndex >= 0)
                 testUids.RemoveAt(testIndex);
 
-            await ReportTestResult(testList, test.Uid, TestResult.InProgress);
+            await ReportTestResult(testList, test.Instance.Uid, TestResult.InProgress);
 
             await GameThread.Switch(token);
 
             _logger.LogInformation("================================");
-            _logger.LogInformation($"Running test \"{test.Uid}\"...");
+            _logger.LogInformation($"Running test \"{test.Instance.Uid}\"...");
             _logger.LogInformation(string.Empty);
 
             pipeline.InitializeCurrentTest(test);
 
             TestExecutionResult execution = await pipeline.ExecuteTestAsync().ConfigureAwait(false);
 
-            await ReportTestResult(testList, test.Uid, execution);
+            await ReportTestResult(testList, test.Instance.Uid, execution);
             await GameThread.Switch(token);
 
             _logger.LogInformation(string.Empty);

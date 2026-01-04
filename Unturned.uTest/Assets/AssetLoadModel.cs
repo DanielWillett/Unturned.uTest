@@ -155,15 +155,15 @@ internal class AssetLoadModel
         bool hasAny = false;
 
         // note: may not be on main thread
-        UnturnedTestInstance[] tests = module.Tests;
+        UnturnedTestInstanceData[] tests = module.Tests;
 
         List<IRequiredAssetContributorAttribute> tempAttributeList = new List<IRequiredAssetContributorAttribute>(16);
 
         for (int i = 0; i < tests.Length && !hasAny; ++i)
         {
-            ref UnturnedTestInstance inst = ref tests[i];
+            UnturnedTestInstanceData inst = tests[i];
 
-            MethodInfo method = inst.Method;
+            MethodInfo method = inst.Instance.Method;
 
             TestAttributeHelper<IRequiredAssetContributorAttribute>.GetAttributes(method, tempAttributeList, inherit: true);
             hasAny |= CheckAttributes(tempAttributeList, patterns, guids, ids);

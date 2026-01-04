@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net471;netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>netstandard2.1;net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 	  <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
@@ -121,7 +121,7 @@ $(Pkgxunit_assert)\lib\netstandard1.1\xunit.assert.dll
   <ItemGroup>
 	  <EmbeddedResource Include="Module\**" />
     <EmbeddedResource Include="..\Unturned.uTest.DummyPlayerHost\bin\$(Configuration)\netstandard2.1\Unturned.uTest.DummyPlayerHost.dll" Link="Module/Unturned.uTest.DummyPlayerHost.dll" />
-    <EmbeddedResource Include="..\Unturned.uTest.Bootstrapper\bin\$(Configuration)\net471\Unturned.uTest.Bootstrapper.dll" Link="Module/Unturned.uTest.Bootstrapper.dll" />
+    <EmbeddedResource Include="..\Unturned.uTest.Bootstrapper\bin\$(Configuration)\netstandard2.0\Unturned.uTest.Bootstrapper.dll" Link="Module/Unturned.uTest.Bootstrapper.dll" />
     <EmbeddedResource Include="..\README.md" Link="Module/README.md" />
   </ItemGroup>
 

@@ -19,11 +19,20 @@ public class UnturnedTestGenerator : IIncrementalGenerator
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+#if RELEASE
+        // stops roslyn from running the source generator at design time
+        // so it only runs at compile time. There's no reason to run it at design time.
+        // see: https://gist.github.com/xoofx/ddcc713d941417de48524c200e74db14
+        if (Assembly.GetEntryAssembly() == null)
+            return;
+#endif
+
         IncrementalValuesProvider<TestClassInfo> testFixtures = context.SyntaxProvider.ForAttributeWithMetadataName(
             "uTest.TestAttribute",
             static (n, _) => n is ClassDeclarationSyntax or StructDeclarationSyntax,
             static (ctx, token) =>
             {
+                List<AttributeData> attributeBuffer = new List<AttributeData>(16);
                 token.ThrowIfCancellationRequested();
 
                 EquatableList<TestMethodInfo> methods = new EquatableList<TestMethodInfo>();
@@ -49,6 +58,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 INamedTypeSymbol? rangeAttribute = compilation.GetTypeByMetadataName("uTest.RangeAttribute");
                 INamedTypeSymbol? testArgsAttribute = compilation.GetTypeByMetadataName("uTest.TestArgsAttribute");
                 INamedTypeSymbol? typeArgsAttribute = compilation.GetTypeByMetadataName("uTest.TypeArgsAttribute");
+                INamedTypeSymbol? workshopItemAttribute = compilation.GetTypeByMetadataName("uTest.RequiredWorkshopItemAttribute");
+                INamedTypeSymbol? mapAttribute = compilation.GetTypeByMetadataName("uTest.RequiredMapAttribute");
 
                 EquatableList<TestTypeArgsAttributeInfo>? classTypeArgs = null;
                 EquatableList<TestTypeParameterInfo>? classTypeParameters = null;
@@ -98,6 +109,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         ImmutableArray<IParameterSymbol> parameters = method.Parameters;
                         EquatableList<TestParameterInfo>? parameterInfo = null;
                         
+                        // Method parameters (Set, Range)
                         if (!parameters.IsDefaultOrEmpty)
                         {
                             parameterInfo = new EquatableList<TestParameterInfo>(parameters.Length);
@@ -123,6 +135,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             }
                         }
 
+                        // Method parameters (TestArgs)
                         EquatableList<TestArgsAttributeInfo> argsInfo = new EquatableList<TestArgsAttributeInfo>(0);
                         foreach (AttributeData argsAttribute in methodAttributes)
                         {
@@ -137,6 +150,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                         EquatableList<TestTypeArgsAttributeInfo>? methodTypeArgs = null;
                         if (method.IsGenericMethod)
                         {
+                            // Type parameters (TestTypeArgs)
                             foreach (AttributeData argsAttribute in methodAttributes)
                             {
                                 if (!SymbolEqualityComparer.Default.Equals(argsAttribute.AttributeClass, typeArgsAttribute))
@@ -149,6 +163,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 methodTypeArgs.Add(attributeInfo);
                             }
 
+                            // Type parameters (Set)
                             ImmutableArray<ITypeParameterSymbol> tps = method.TypeParameters;
                             if (!tps.IsDefaultOrEmpty)
                             {
@@ -164,6 +179,52 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                     );
                                 }
                             }
+                        }
+
+                        EquatableList<ulong>? workshopItems = null;
+                        string? map = null;
+
+                        // Workshop items
+                        if (workshopItemAttribute != null)
+                        {
+                            method.GetTestAttributes(workshopItemAttribute, attributeBuffer);
+                            foreach (AttributeData attribute in attributeBuffer)
+                            {
+                                if (attribute.ConstructorArguments.Length > 0
+                                    && attribute.ConstructorArguments[0] is { Kind: TypedConstantKind.Primitive, Value: ulong ul })
+                                {
+                                    (workshopItems ??= new EquatableList<ulong>(attributeBuffer.Count)).Add(ul);
+                                }
+                            }
+
+                            attributeBuffer.Clear();
+                        }
+
+                        // Map name
+                        if (mapAttribute != null)
+                        {
+                            method.GetTestAttributes(mapAttribute, attributeBuffer);
+                            foreach (AttributeData attribute in attributeBuffer)
+                            {
+                                if (attribute.ConstructorArguments.Length <= 0
+                                    || attribute.ConstructorArguments[0] is not { Kind: TypedConstantKind.Primitive } arg)
+                                {
+                                    continue;
+                                }
+                                if (arg.Value is string str)
+                                {
+                                    if (string.IsNullOrEmpty(str))
+                                        map = null;
+                                    else
+                                        map = str;
+                                }
+                                else
+                                {
+                                    map = null;
+                                }
+                            }
+
+                            attributeBuffer.Clear();
                         }
 
                         methods.Add(
@@ -186,7 +247,9 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 ReturnTypeGloballyQualifiedName: method.ReturnType.ToDisplayString(FullTypeNameWithGlobalFormat),
                                 DelegateType: method.IsGenericMethod || namedType.IsGenericType ? null : new DelegateType(method),
                                 TypeParameters: methodTypeParameters,
-                                TypeArgsAttributes: methodTypeArgs
+                                TypeArgsAttributes: methodTypeArgs,
+                                WorkshopItems: workshopItems,
+                                Map: map
                             ));
                     }
 
@@ -428,6 +491,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                     {
                         bldr.Build($"Method = global::uTest.Runner.Util.SourceGenerationServices.GetMethodInfoByManagedMethod(typeof({openGlobalTestName}), methods, \"{escManagedMethod}\"),");
                     }
+                    bldr.Build($"Map = {(method.Map == null ? "null" : $"\"{StringLiteralEscaper.Escape(method.Map)}\"")},");
+                    bldr.Build($"WorkshopItems = {(method.WorkshopItems is not { Count: > 0 } ? "global::System.Array.Empty<ulong>()" : $"new ulong[] {{ {string.Join(", ", method.WorkshopItems)} }}")},");
 
                     bldr    .String("Parameters = ").In();
                     if (method.Parameters is not { Count: > 0 })

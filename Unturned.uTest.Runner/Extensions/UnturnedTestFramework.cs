@@ -20,9 +20,10 @@ using uTest.Runner.Util;
 
 namespace uTest.Runner;
 
+
+#pragma warning disable TPEXP
 internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProducer
 {
-#pragma warning disable TPEXP
     internal class GracefulStopCapability : IGracefulStopTestExecutionCapability
     {
         public Func<CancellationToken, Task>? InvokeExecution;
@@ -35,7 +36,6 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                 : InvokeExecution(cancellationToken);
         }
     }
-#pragma warning restore TPEXP
 
     private static readonly TestNodeStateProperty[] TestResultStates =
     [
@@ -175,155 +175,185 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
             
             //Debugger.Launch();
 
-            List<UnturnedTestInstance>? tests = await GetTests(r, token).ConfigureAwait(false);
-            if (tests == null)
+            List<UnturnedTestInstance>? allTests = await GetTests(r, token).ConfigureAwait(false);
+            if (allTests == null)
             {
                 return;
             }
 
             _launcher ??= new UnturnedLauncher(true, _uTestLogger);
 
-            string sessionId = r.Session.SessionUid.Value;
-
-            BitArray testReturnMask = new BitArray(tests.Count);
-
-            List<Task> runningPublishTasks = new List<Task>();
-
-            JsonSerializer serializer = JsonSerializer.CreateDefault();
-
-            using IDisposable resultHandler = _launcher.Client.AddMessageHandler<ReportTestResultMessage>(result =>
+            // group tests by map
+            List<IGrouping<string?, UnturnedTestInstance>> groupings = allTests.GroupBy(x => x.Test.Map).ToList();
+            int nullIndex = groupings.FindIndex(x => x.Key == null);
+            int nonNullIndex = groupings.FindIndex(x => x.Key != null);
+            List<List<UnturnedTestInstance>> testGroups = new List<List<UnturnedTestInstance>>(groupings.Count);
+            if (nullIndex >= 0 && nonNullIndex >= 0)
             {
-                if (!string.Equals(result.SessionUid, sessionId, StringComparison.Ordinal))
-                    return false;
-
-                int index = tests.FindIndex(x => string.Equals(x.Uid, result.Uid, StringComparison.Ordinal));
-                if (index < 0)
+                // combine all null maps with the first non-null map
+                for (int i = 0; i < groupings.Count; ++i)
                 {
-                    _logger.LogWarning($"Received unknown method UID: \"{result.Uid}\"");
-                    return true;
-                }
-
-                UnturnedTestInstance test = tests[index];
-                if (result.Result != TestResult.InProgress)
-                {
-                    testReturnMask[index] = true;
-                }
-
-                _logger.LogInformation($"reported {result.Result} result for test {test.Uid}.");
-
-                TestNode testNode = test.CreateTestNode(out TestNodeUid? parentUid);
-
-                AddResultState(testNode, result.Result);
-
-                TestExecutionSummary? summary = null;
-                if (File.Exists(result.SummaryPath))
-                {
-                    using JsonTextReader reader = new JsonTextReader(new StreamReader(result.SummaryPath, Encoding.UTF8, true)) { CloseInput = true };
-                    summary = serializer.Deserialize<TestExecutionSummary>(reader);
-                }
-
-                if (summary != null)
-                {
-                    test.AddPropertiesFromSummary(summary, testNode.Properties);
-                }
-
-                lock (runningPublishTasks)
-                {
-                    runningPublishTasks.Add(
-                        _messageBus.PublishAsync(this, new TestNodeUpdateMessage(new SessionUid(sessionId), testNode, parentUid))
-                    );
-                }
-
-                return true;
-            });
-
-            string settingsFile = _launcher.GetSettingsFile();
-            string? dir = Path.GetDirectoryName(settingsFile);
-            if (dir != null)
-                Directory.CreateDirectory(dir);
-
-            Assembly? testAssembly = null;
-
-            List<UnturnedTestReference> exportedTests = new List<UnturnedTestReference>(tests.Count);
-
-            foreach (UnturnedTestInstance test in tests)
-            {
-                if (testAssembly == null)
-                    testAssembly = test.Test.Method.DeclaringType!.Assembly;
-
-                exportedTests.Add(new UnturnedTestReference { Uid = test.Uid });
-            }
-
-            using (JsonTextWriter writer = new JsonTextWriter(new StreamWriter(settingsFile)))
-            {
-                writer.CloseOutput = true;
-#if DEBUG
-                writer.Formatting = Formatting.Indented;
-                writer.IndentChar = ' ';
-                writer.Indentation = 4;
-#else
-                writer.Formatting = Formatting.None;
-#endif
-
-                serializer.Serialize(writer, new UnturnedTestList
-                {
-                    SessionUid = r.Session.SessionUid.Value,
-                    Tests = exportedTests,
-                    TestListTypeName = typeof(GeneratedTestRegistrationList).AssemblyQualifiedName,
-                    IsAllTests = r.Filter == null,
-                    CollectTrxProperties = TrxSwitch.HasTrx,
-                    TestAssembly = testAssembly!.FullName
-                });
-            }
-
-            Process process = await _launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssembly, token);
-
-            _logger.LogInformation("Launched.");
-
-            if (isAlreadyLaunched)
-            {
-                await _logger.LogInformationAsync("Unturned already launched.");
-                await _launcher.Client.SendAsync(new RefreshTestsMessage(), token);
-            }
-
-            _logger.LogInformation("Running tests.");
-            await _launcher.Client.SendAsync(new RunTestsMessage(), token);
-
-            // wait for all tests to execute
-
-            using (token.Register(() =>
-            {
-                _logger.LogInformation("Kill requested.");
-                KillProcess(process);
-            }))
-            {
-                await Task.Factory.StartNew(() =>
-                {
-                    _logger.LogInformation("Waiting for exit.");
-                    process.WaitForExit();
-                    _logger.LogInformation("Done.");
-                }, TaskCreationOptions.LongRunning);
-            }
-
-            Task allPublished = Task.WhenAll(runningPublishTasks);
-
-            await Task.WhenAny(
-                Task.Delay(TimeSpan.FromSeconds(2), CancellationToken.None),
-                allPublished
-            );
-
-            if (!allPublished.IsCompleted)
-            {
-                _logger.LogInformation("All not published.");
-                for (int i = 0; i < tests.Count; ++i)
-                {
-                    if (testReturnMask[i])
+                    if (i == nullIndex)
                         continue;
 
-                    TestNode testNode = tests[i].CreateTestNode();
-                    AddResultState(testNode, TestResult.Skipped);
-                    _logger.LogInformation($"Skipped {testNode.Uid}.");
-                    await _messageBus.PublishAsync(this, new TestNodeUpdateMessage(new SessionUid(sessionId), testNode));
+                    testGroups.Add(i == nonNullIndex
+                        ? groupings[nullIndex].Concat(groupings[i]).ToList()
+                        : groupings[i].ToList()
+                    );
+                }
+            }
+            else
+            {
+                testGroups.AddRange(groupings.Select(x => x.ToList()));
+            }
+
+            string sessionId = r.Session.SessionUid.Value;
+
+            foreach (List<UnturnedTestInstance> tests in testGroups)
+            {
+                BitArray testReturnMask = new BitArray(tests.Count);
+
+                List<Task> runningPublishTasks = new List<Task>();
+
+                JsonSerializer serializer = JsonSerializer.CreateDefault();
+
+                using IDisposable resultHandler = _launcher.Client.AddMessageHandler<ReportTestResultMessage>(result =>
+                {
+                    if (!string.Equals(result.SessionUid, sessionId, StringComparison.Ordinal))
+                        return false;
+
+                    int index = tests.FindIndex(x => string.Equals(x.Uid, result.Uid, StringComparison.Ordinal));
+                    if (index < 0)
+                    {
+                        _logger.LogWarning($"Received unknown method UID: \"{result.Uid}\"");
+                        return true;
+                    }
+
+                    UnturnedTestInstance test = tests[index];
+                    if (result.Result != TestResult.InProgress)
+                    {
+                        testReturnMask[index] = true;
+                    }
+
+                    _logger.LogInformation($"reported {result.Result} result for test {test.Uid}.");
+
+                    TestNode testNode = test.CreateTestNode(out TestNodeUid? parentUid);
+
+                    AddResultState(testNode, result.Result);
+
+                    TestExecutionSummary? summary = null;
+                    if (File.Exists(result.SummaryPath))
+                    {
+                        using JsonTextReader reader = new JsonTextReader(new StreamReader(result.SummaryPath, Encoding.UTF8, true)) { CloseInput = true };
+                        summary = serializer.Deserialize<TestExecutionSummary>(reader);
+                    }
+
+                    if (summary != null)
+                    {
+                        test.AddPropertiesFromSummary(summary, testNode.Properties);
+                    }
+
+                    lock (runningPublishTasks)
+                    {
+                        runningPublishTasks.Add(
+                            _messageBus.PublishAsync(this, new TestNodeUpdateMessage(new SessionUid(sessionId), testNode, parentUid))
+                        );
+                    }
+
+                    return true;
+                });
+
+                string settingsFile = _launcher.GetSettingsFile();
+                string? dir = Path.GetDirectoryName(settingsFile);
+                if (dir != null)
+                    Directory.CreateDirectory(dir);
+
+                Assembly? testAssembly = null;
+
+                List<UnturnedTestReference> exportedTests = new List<UnturnedTestReference>(tests.Count);
+
+                foreach (UnturnedTestInstance test in tests)
+                {
+                    if (testAssembly == null)
+                        testAssembly = test.Test.Method.DeclaringType!.Assembly;
+
+                    exportedTests.Add(new UnturnedTestReference { Uid = test.Uid });
+                }
+
+                using (JsonTextWriter writer = new JsonTextWriter(new StreamWriter(settingsFile)))
+                {
+                    writer.CloseOutput = true;
+    #if DEBUG
+                    writer.Formatting = Formatting.Indented;
+                    writer.IndentChar = ' ';
+                    writer.Indentation = 4;
+    #else
+                    writer.Formatting = Formatting.None;
+    #endif
+
+                    serializer.Serialize(writer, new UnturnedTestList
+                    {
+                        SessionUid = r.Session.SessionUid.Value,
+                        Tests = exportedTests,
+                        TestListTypeName = typeof(GeneratedTestRegistrationList).AssemblyQualifiedName,
+                        IsAllTests = r.Filter == null,
+                        TreeNodeFilter = (r.Filter as TreeNodeFilter)?.Filter,
+                        CollectTrxProperties = TrxSwitch.HasTrx,
+                        TestAssembly = testAssembly!.FullName,
+                        // null grp + specific grp for first set so has to be from last test
+                        Map = tests[^1].Test.Map
+                    });
+                }
+
+                Process process = await _launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssembly, token);
+
+                _logger.LogInformation("Launched.");
+
+                if (isAlreadyLaunched)
+                {
+                    await _logger.LogInformationAsync("Unturned already launched.");
+                    await _launcher.Client.SendAsync(new RefreshTestsMessage(), token);
+                }
+
+                _logger.LogInformation("Running tests.");
+                await _launcher.Client.SendAsync(new RunTestsMessage(), token);
+
+                // wait for all tests to execute
+
+                using (token.Register(() =>
+                {
+                    _logger.LogInformation("Kill requested.");
+                    KillProcess(process);
+                }))
+                {
+                    await Task.Factory.StartNew(() =>
+                    {
+                        _logger.LogInformation("Waiting for exit.");
+                        process.WaitForExit();
+                        _logger.LogInformation("Done.");
+                    }, TaskCreationOptions.LongRunning);
+                }
+
+                Task allPublished = Task.WhenAll(runningPublishTasks);
+
+                await Task.WhenAny(
+                    Task.Delay(TimeSpan.FromSeconds(2), CancellationToken.None),
+                    allPublished
+                );
+
+                if (!allPublished.IsCompleted)
+                {
+                    _logger.LogInformation("All not published.");
+                    for (int i = 0; i < tests.Count; ++i)
+                    {
+                        if (testReturnMask[i])
+                            continue;
+
+                        TestNode testNode = tests[i].CreateTestNode();
+                        AddResultState(testNode, TestResult.Skipped);
+                        _logger.LogInformation($"Skipped {testNode.Uid}.");
+                        await _messageBus.PublishAsync(this, new TestNodeUpdateMessage(new SessionUid(sessionId), testNode));
+                    }
                 }
             }
         }
