@@ -11,6 +11,7 @@ using uTest.Discovery;
 using uTest.Dummies;
 using uTest.Patches;
 using uTest.Protocol;
+using uTest.Util;
 using Component = UnityEngine.Component;
 
 namespace uTest.Module;
@@ -180,12 +181,17 @@ internal class MainModule : MonoBehaviour, IDisposable
                 p =>
                 {
                     p.RegisterPatch(SkipAddFoundAssetIfNotRequired.TryPatch, SkipAddFoundAssetIfNotRequired.TryUnpatch);
+                    p.RegisterPatch(SocketMessageLayerFix.TryPatchServer, SocketMessageLayerFix.TryUnpatchServer);
+                    if (!Dedicator.isStandaloneDedicatedServer)
+                        p.RegisterPatch(SocketMessageLayerFix.TryPatchClient, SocketMessageLayerFix.TryUnpatchClient);
                 }
             );
         }
 
         Dummies = new DummyManager(this);
         Dummies.ClearPlayerDataFromDummies();
+
+        Environment = new TestEnvironmentServer(Logger);
 
         Task t = DiscoverTestsAsync(TestList);
         if (!t.IsCompleted)
@@ -202,7 +208,6 @@ internal class MainModule : MonoBehaviour, IDisposable
 
         Level.onPostLevelLoaded += OnPostLevelLoaded;
 
-        Environment = new TestEnvironmentServer(Logger);
         Environment.Disconnected += () =>
         {
             if (_hasQuit)
@@ -211,7 +216,7 @@ internal class MainModule : MonoBehaviour, IDisposable
             Logger.LogWarning("Lost contact with runner, shutting down...");
             GameThread.Run(this, me =>
             {
-                me.ForceQuitGame("Shutdown due to losing contact with runner.", UnturnedTestExitCode.GracefulShutdown);
+                me.ForceQuitGame("Shutdown due to losing contact with runner", UnturnedTestExitCode.GracefulShutdown);
             });
         };
 
@@ -249,7 +254,7 @@ internal class MainModule : MonoBehaviour, IDisposable
 
                 GameThread.Run(
                     exitCode,
-                    exitCode => ForceQuitGame("Test run completed.", exitCode)
+                    exitCode => ForceQuitGame("Test run completed", exitCode)
                 );
             }, CancellationToken);
 
@@ -260,7 +265,7 @@ internal class MainModule : MonoBehaviour, IDisposable
         {
             GameThread.Run(this, me =>
             {
-                me.ForceQuitGame("Graceful shutdown from uTest.", UnturnedTestExitCode.GracefulShutdown);
+                me.ForceQuitGame("Graceful shutdown from uTest", UnturnedTestExitCode.GracefulShutdown);
             });
             return true;
         });
@@ -392,7 +397,7 @@ internal class MainModule : MonoBehaviour, IDisposable
 
         if (!_hasReceivedRunTests && _sentLevelLoadedRealtime - Time.realtimeSinceStartup > 2)
         {
-            ForceQuitGame("Timed out waiting for RunTests message from runner.", UnturnedTestExitCode.StartupFailure);
+            ForceQuitGame("Timed out waiting for RunTests message from runner", UnturnedTestExitCode.StartupFailure);
         }
     }
 
@@ -542,7 +547,7 @@ internal class MainModuleLoader : IModuleNexus
             module.Initialize(_homeDir!, _sdgModule!);
             if (module.IsFaulted)
             {
-                module.ForceQuitGame("uTest initialization failed. See log.", UnturnedTestExitCode.StartupFailure);
+                module.ForceQuitGame("uTest initialization failed. See log", UnturnedTestExitCode.StartupFailure);
             }
         }
         catch (QuitGameException)
@@ -552,7 +557,7 @@ internal class MainModuleLoader : IModuleNexus
         catch (Exception ex)
         {
             CommandWindow.LogError(ex);
-            module.ForceQuitGame("Exception thrown during uTest initialization. See log.", UnturnedTestExitCode.StartupFailure);
+            module.ForceQuitGame("Exception thrown during uTest initialization. See log", UnturnedTestExitCode.StartupFailure);
         }
     }
 

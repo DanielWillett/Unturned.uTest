@@ -27,6 +27,7 @@ using Unturned.SystemEx;
 using uTest.Dummies.Host.Facades;
 using uTest.Dummies.Host.Patches;
 using uTest.Module;
+using uTest.Util;
 
 namespace uTest.Dummies.Host;
 
@@ -51,8 +52,6 @@ internal partial class DummyPlayerHost : IDisposable
 
     public static DummyPlayerHost Instance { get; private set; }
 
-    public AssetLoadModel AssetLoadModel { get; private set; }
-
     public CSteamID SteamId { get; private set; }
 
     public string TemporaryDataPath { get; private set; }
@@ -69,6 +68,8 @@ internal partial class DummyPlayerHost : IDisposable
     public nint WindowHandle { get; internal set; }
 
 #nullable restore
+
+    public AssetLoadModel? AssetLoadModel { get; private set; }
 
     internal void Initialize(IServiceProvider serviceProvider)
     {
@@ -90,6 +91,8 @@ internal partial class DummyPlayerHost : IDisposable
             throw new InvalidOperationException($"Missing \"{_dataDirArg.key}\" command line arg.");
         }
 
+        Instance = this;
+
         TemporaryDataPath = Path.GetFullPath(_dataDirArg.value);
         Logs.setLogFilePath(Path.Combine(TemporaryDataPath, "Client.log"));
         string configFile = Path.Combine(TemporaryDataPath, "startup.json");
@@ -108,22 +111,10 @@ internal partial class DummyPlayerHost : IDisposable
 
         WorkshopItems = LaunchConfig.WorkshopIds;
 
-        Instance = this;
-
         ProxyGenerator.Instance.SetLogger(DefaultLoggerReflectionTools.Logger);
-
-        AssetLoadModel = new AssetLoadModel();
 
         // Patches
         {
-            try
-            {
-                TranspileContext ctx = new TranspileContext(null, null, null);
-            }
-            catch (ArgumentNullException)
-            {
-
-            }
             HarmonyLog.Reset(Path.Combine(TemporaryDataPath, "harmony.log"));
             _patches = new uTest.Patches.UnturnedTestPatches(Logger);
             _patches.Init(
@@ -132,9 +123,30 @@ internal partial class DummyPlayerHost : IDisposable
                 {
                     p.RegisterPatch(SkipAddFoundAssetIfNotRequired.TryPatch, SkipAddFoundAssetIfNotRequired.TryUnpatch);
                     p.RegisterPatch(IgnoreSocketExceptionsOnClient.TryPatch, IgnoreSocketExceptionsOnClient.TryUnpatch);
+                    p.RegisterPatch(DisableConvenientSavedata.TryPatch, DisableConvenientSavedata.TryUnpatch);
+                    p.RegisterPatch(uTest.Patches.SocketMessageLayerFix.TryPatchClient, uTest.Patches.SocketMessageLayerFix.TryUnpatchClient);
                 }
             );
         }
+
+        if (File.Exists(LaunchConfig.AssetConfig))
+        {
+            using JsonTextReader reader = new JsonTextReader(new StreamReader(LaunchConfig.AssetConfig!, Encoding.UTF8, false))
+            {
+                CloseInput = true
+            };
+
+            if (AssetLoadModel.TryReadFromJson(reader, out AssetLoadModel? alm))
+            {
+                AssetLoadModel = alm;
+            }
+            else
+            {
+                Logger.LogError($"Failed to read JSON from asset load config at \"{LaunchConfig.AssetConfig}\".");
+            }
+        }
+
+        ConvenientSavedata.instance = new ConvenientSavedataImplementation();
 
         _rpcEndpoint = NamedPipeEndpoint.AsClient(serviceProvider, LaunchConfig.PipeName);
 
@@ -170,6 +182,32 @@ internal partial class DummyPlayerHost : IDisposable
             RemoteDummyWindowsManager.SetWindowTitle(WindowHandle, windowTitle);
         }
 
+        if (GraphicsSettings.fullscreenMode != FullScreenMode.Windowed)
+        {
+            GraphicsSettings.fullscreenMode = FullScreenMode.Windowed;
+        }
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            && LaunchConfig.DisplayHandle.HasValue
+            && WindowHandle != 0)
+        {
+            TimeUtility.updated += AlignWindowToGridOnFirstFrame;
+        }
+
+        TimeUtility.updated += UpdateSettingsOnFirstFrame;
+
+        // apply is ran on MenuStartup.Start() anyways
+        // GraphicsSettings.apply("Lower options for test clients.");
+
+        StartStatusNotificationUpdate(DummyReadyStatus.StartedUp);
+
+        Provider.onQueuePositionUpdated += HandleQueuePositionUpdated;
+
+        SceneManager.sceneLoaded += HandleSceneLoaded;
+    }
+
+    private static void UpdateSettingsOnFirstFrame()
+    {
         if (GraphicsSettings.fullscreenMode != FullScreenMode.Windowed)
         {
             GraphicsSettings.fullscreenMode = FullScreenMode.Windowed;
@@ -211,20 +249,12 @@ internal partial class DummyPlayerHost : IDisposable
         GraphicsSettings.userInterfaceScale = 0.5f;
         GraphicsSettings.triplanar = false;
         GraphicsSettings.isAmbientOcclusionEnabled = false;
+        GraphicsSettings.apply("uTest default settings.");
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            && LaunchConfig.DisplayHandle.HasValue
-            && WindowHandle != 0)
-        {
-            TimeUtility.updated += AlignWindowToGridOnFirstFrame;
-        }
-
-        // apply is ran on MenuStartup.Start() anyways
-        // GraphicsSettings.apply("Lower options for test clients.");
-
-        StartStatusNotificationUpdate(DummyReadyStatus.StartedUp);
-
-        SceneManager.sceneLoaded += HandleSceneLoaded;
+        OptionsSettings.UnfocusedVolume = 0f;
+        OptionsSettings.MusicMasterVolume = 0f;
+        OptionsSettings.MainMenuMusicVolume = 0f;
+        TimeUtility.updated -= UpdateSettingsOnFirstFrame;
     }
 
     private int _delayedTicks;
@@ -284,8 +314,23 @@ internal partial class DummyPlayerHost : IDisposable
         StartStatusNotificationUpdate(DummyReadyStatus.InMenu);
     }
 
+    private void HandleQueuePositionUpdated()
+    {
+        try
+        {
+            SendInQueueBump(SteamId.m_SteamID);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Error bumping queue position.", ex);
+        }
+    }
+
+    [RpcSend(typeof(DummyPlayerLauncher), "ReceiveInQueueBump")]
+    private partial void SendInQueueBump(ulong steam64);
+
     [RpcSend(typeof(DummyPlayerLauncher), "ReceiveStatusNotification")]
-    [RpcTimeout(2 * Timeouts.Seconds)]
+    [RpcTimeout(14 * Timeouts.Seconds)]
     private partial RpcTask SendStatusNotification(ulong id, DummyReadyStatus status, nint hWnd);
 
     [RpcReceive]
@@ -382,6 +427,7 @@ internal partial class DummyPlayerHost : IDisposable
     {
         TimeUtility.updated -= GameThread.RunContinuations;
         SceneManager.sceneLoaded -= HandleSceneLoaded;
+        Provider.onQueuePositionUpdated -= HandleQueuePositionUpdated;
         _patches?.Dispose();
         _patches = null;
         if (Instance == this)

@@ -92,6 +92,12 @@
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.DedicatedUGC.itemsToDownload" />
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPluginAdvertising" />
 		<Publicize Include="Assembly-CSharp:SDG.Framework.Modules.ModuleHook.discoveredNameToPath" />
+		<Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer" />
+		<Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.internalBuffer" />
+		<Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.pendingMessage" />
+    <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.pendingMessageOffset" />
+    <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.messageQueue" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.verifyNextPlayerInQueue" />
 
 	</ItemGroup>
 

@@ -20,6 +20,7 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
     internal TaskCompletionSource<RemoteDummyPlayerActor>? ConnectedCondition;
     internal IModularRpcRemoteConnection? ConnectionIntl;
     internal StreamWriter? LogFileWriter;
+    internal int QueueBumpVersion;
 
     /// <summary>
     /// The 'home' directory for this client, storing startup config, cloud files, etc.

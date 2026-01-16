@@ -83,6 +83,9 @@
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.pluginFramework" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.thumbnailURL" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.descText" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.ConvenientSavedata.instance" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.ConvenientSavedataImplementation" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.ConvenientSavedataImplementation..ctor" />
 
   </ItemGroup>
 

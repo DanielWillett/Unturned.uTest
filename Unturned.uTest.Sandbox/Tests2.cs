@@ -7,19 +7,19 @@ namespace uTest.Sandbox;
 [Test]
 public class Tests2 : ITestClass, ITestClassSetup
 {
-    private const int Players = 8;
+    private const int Players = 15;
 
     [PlayerSimulationMode(PlayerSimulationMode.Full)]
     [PlayerCount(Players)]
     [Test]
     public async Task Test1()
     {
-        TestContext.Current.Logger.LogInformation("Waiting for players to connect.");
+        TestContext.Logger.LogInformation("Waiting for players to connect.");
         await TestContext.Current.SpawnAllPlayersAsync(player =>
         {
             player.WithSpawnLocation(PlayerTransform.FromRandomPlayerSpawn());
         });
-        TestContext.Current.Logger.LogInformation("All players connected.");
+        TestContext.Logger.LogInformation("All players connected.");
 
         Assert.Equal(Players, Provider.clients.Count);
 
@@ -27,14 +27,14 @@ public class Tests2 : ITestClass, ITestClassSetup
         await Task.Delay(2000);
 
 
-        TestContext.Current.Logger.LogInformation("Waiting for players to disconnect.");
+        TestContext.Logger.LogInformation("Waiting for players to disconnect.");
         await TestContext.Current.DespawnAllPlayersAsync();
-        TestContext.Current.Logger.LogInformation("All players disconnected.");
+        TestContext.Logger.LogInformation("All players disconnected.");
 
 
         Assert.Empty(Provider.clients);
 
-        TestContext.Current.Logger.LogInformation("Passing in 5 seconds...");
+        TestContext.Logger.LogInformation("Passing in 5 seconds...");
         await Task.Delay(5000);
     }
 

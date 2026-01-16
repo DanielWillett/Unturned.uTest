@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.FileSystemGlobbing;
+using Newtonsoft.Json;
 using System;
 using System.IO;
 using System.Reflection;
-using uTest.Discovery;
 using uTest.Module;
 
 namespace uTest;
@@ -28,7 +28,7 @@ internal class AssetLoadModel
         _mapsPath = Path.Combine(UnturnedPaths.RootDirectory.FullName, "Maps");
     }
 
-    internal AssetLoadModel(HashSet<Guid> guidsToLoad, HashSet<IdEntry> idsToLoad, FileGlobPattern[] fileGlobs) : this()
+    internal AssetLoadModel(HashSet<Guid>? guidsToLoad, HashSet<IdEntry>? idsToLoad, FileGlobPattern[]? fileGlobs) : this()
     {
         _requiresAll = false; // overrides other ctor, dont remove
         _guidsToLoad = guidsToLoad;
@@ -36,12 +36,249 @@ internal class AssetLoadModel
         _idsToLoad = idsToLoad;
     }
 
+    internal void WriteToJson(JsonWriter json)
+    {
+        json.WriteStartObject();
+        if (_requiresAll)
+        {
+            json.WritePropertyName("all");
+            json.WriteValue(true);
+        }
+        else
+        {
+            if (_guidsToLoad != null)
+            {
+                json.WritePropertyName("guids");
+                json.WriteStartArray();
+                foreach (Guid guid in _guidsToLoad)
+                {
+                    json.WriteValue(guid);
+                }
+                json.WriteEndArray();
+            }
+
+            if (_idsToLoad != null)
+            {
+                json.WritePropertyName("ids");
+                json.WriteStartArray();
+                foreach (IdEntry id in _idsToLoad)
+                {
+                    json.WriteStartObject();
+                    json.WritePropertyName("id");
+                    json.WriteValue(id.Id);
+                    json.WritePropertyName("type");
+                    json.WriteValue((int)id.Type);
+                    json.WriteEndObject();
+                }
+                json.WriteEndArray();
+            }
+
+            if (_fileGlobs != null)
+            {
+                json.WritePropertyName("files");
+                json.WriteStartArray();
+                foreach (FileGlobPattern pattern in _fileGlobs)
+                {
+                    json.WriteStartObject();
+
+                    json.WritePropertyName("match");
+                    json.WriteValue(pattern.OriginalGlob);
+
+                    switch (pattern.Source)
+                    {
+                        case RequiredAssetsAttribute.SourceMod:
+                            json.WritePropertyName("mod-id");
+                            json.WriteValue(pattern.ModId);
+                            break;
+
+                        case RequiredAssetsAttribute.SourceMap:
+                            json.WritePropertyName("map-name");
+                            json.WriteValue(pattern.MapName);
+                            break;
+
+                        default:
+                            json.WritePropertyName("source");
+                            json.WriteValue((int)pattern.Source);
+                            break;
+                    }
+
+                    json.WriteEndObject();
+                }
+                json.WriteEndArray();
+            }
+        }
+
+        json.WriteEndObject();
+    }
+
+    internal static bool TryReadFromJson(JsonReader jsonReader, [NotNullWhen(true)] out AssetLoadModel? model)
+    {
+        model = null;
+
+        bool isAll = false;
+        HashSet<Guid>? guids = null;
+        HashSet<IdEntry>? ids = null;
+        List<FileGlobPattern>? globs = null;
+        if (jsonReader.TokenType == JsonToken.None && !jsonReader.Read())
+            return false;
+        while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndObject)
+        {
+            if (jsonReader.TokenType != JsonToken.PropertyName)
+                return false;
+
+            switch ((string?)jsonReader.Value)
+            {
+                case "all":
+                    if (!jsonReader.Read() || jsonReader.TokenType != JsonToken.Boolean)
+                        return false;
+
+                    isAll = (bool)jsonReader.Value;
+                    break;
+
+                case "guids":
+                    if (!jsonReader.Read() || jsonReader.TokenType != JsonToken.StartArray)
+                        return false;
+
+                    guids = new HashSet<Guid>();
+                    while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndArray)
+                    {
+                        if (jsonReader.TokenType != JsonToken.String || !Guid.TryParse((string)jsonReader.Value, out Guid guid))
+                            return false;
+
+                        guids.Add(guid);
+                    }
+                    break;
+
+                case "ids":
+                    if (!jsonReader.Read() || jsonReader.TokenType != JsonToken.StartArray)
+                        return false;
+
+                    ids = new HashSet<IdEntry>();
+                    while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndArray)
+                    {
+                        if (jsonReader.TokenType != JsonToken.StartObject)
+                            return false;
+
+                        ushort id = 0;
+                        EAssetType type = EAssetType.NONE;
+                        while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndObject)
+                        {
+                            if (jsonReader.TokenType != JsonToken.PropertyName)
+                                return false;
+
+                            switch ((string?)jsonReader.Value)
+                            {
+                                case "id":
+                                    if (!jsonReader.Read() || jsonReader.TokenType != JsonToken.Integer)
+                                        return false;
+
+                                    id = Convert.ToUInt16(jsonReader.Value);
+                                    break;
+
+                                case "type":
+                                    if (!jsonReader.Read() || jsonReader.TokenType != JsonToken.Integer)
+                                        return false;
+
+                                    type = (EAssetType)Convert.ToInt32(jsonReader.Value);
+                                    break;
+                            }
+                        }
+
+                        if (id == 0 || type is <= EAssetType.NONE or > EAssetType.NPC)
+                            return false;
+
+                        ids.Add(new IdEntry(id, type));
+                    }
+                    break;
+
+                case "files":
+                    if (!jsonReader.Read() || jsonReader.TokenType != JsonToken.StartArray)
+                        return false;
+
+                    globs = new List<FileGlobPattern>();
+                    while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndArray)
+                    {
+                        if (jsonReader.TokenType != JsonToken.StartObject)
+                            return false;
+
+                        string? match = null, mapName = null;
+                        ulong modId = 0;
+                        RequiredAssetsAttribute.Source src = RequiredAssetsAttribute.Source.Core;
+                        while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndObject)
+                        {
+                            if (jsonReader.TokenType != JsonToken.PropertyName)
+                                return false;
+
+                            switch ((string?)jsonReader.Value)
+                            {
+                                case "match":
+                                    if (!jsonReader.Read() || jsonReader.TokenType != JsonToken.String)
+                                        return false;
+
+                                    match = (string)jsonReader.Value;
+                                    break;
+                                    
+                                case "mod-id":
+                                    if (!jsonReader.Read() || jsonReader.TokenType != JsonToken.Integer)
+                                        return false;
+
+                                    modId = Convert.ToUInt64(jsonReader.Value);
+                                    src = RequiredAssetsAttribute.SourceMod;
+                                    break;
+                                    
+                                case "map-name":
+                                    if (!jsonReader.Read() || jsonReader.TokenType != JsonToken.String)
+                                        return false;
+
+                                    mapName = (string)jsonReader.Value;
+                                    src = RequiredAssetsAttribute.SourceMap;
+                                    break;
+                                    
+                                case "source":
+                                    if (!jsonReader.Read() || jsonReader.TokenType != JsonToken.Integer)
+                                        return false;
+
+                                    src = (RequiredAssetsAttribute.Source)Convert.ToInt32(jsonReader.Value);
+                                    break;
+                            }
+                        }
+
+                        if (src is < RequiredAssetsAttribute.SourceMod or > RequiredAssetsAttribute.Source.Sandbox
+                            || src == RequiredAssetsAttribute.SourceMod && modId == 0
+                            || src == RequiredAssetsAttribute.SourceMap && string.IsNullOrEmpty(mapName)
+                            || string.IsNullOrEmpty(match))
+                        {
+                            return false;
+                        }
+
+                        Matcher matcher = new Matcher(StringComparison.Ordinal);
+                        string glob = match;
+                        bool exclude = glob[0] == '-';
+                        if (exclude)
+                        {
+                            if (glob.Length == 1)
+                                continue;
+                            glob = glob[1..];
+                        }
+
+                        if (exclude)
+                            matcher.AddExclude(glob);
+                        else
+                            matcher.AddInclude(glob);
+                        globs.Add(new FileGlobPattern(match, matcher, mapName, modId, src));
+                    }
+                    break;
+            }
+        }
+
+        model = isAll ? new AssetLoadModel() : new AssetLoadModel(guids, ids, globs?.ToArray());
+        return true;
+    }
+
     public bool Includes(string assetFile)
     {
         if (_requiresAll)
             return true;
-
-        Assets.shouldLoadAnyAssets.value = false;
 
         if (_fileGlobs != null)
         {
@@ -111,6 +348,8 @@ internal class AssetLoadModel
                     return true;
             }
         }
+
+        Assets.shouldLoadAnyAssets.value = false;
 
         return false;
     }
@@ -233,7 +472,7 @@ internal class AssetLoadModel
                                 matcher.AddExclude(glob);
                             else
                                 matcher.AddInclude(glob);
-                            FileGlobPattern p = new FileGlobPattern(matcher, assetPattern.MapName, assetPattern.ModId, assetPattern.RootFolderSource);
+                            FileGlobPattern p = new FileGlobPattern(assetPattern.GlobPattern, matcher, assetPattern.MapName, assetPattern.ModId, assetPattern.RootFolderSource);
                             patterns.Add(p);
                         }
                         break;
@@ -251,15 +490,17 @@ internal class AssetLoadModel
     {
         public readonly Matcher Matcher;
         public readonly string? MapName;
+        public readonly string? OriginalGlob;
         public readonly ulong ModId;
         public readonly RequiredAssetsAttribute.Source Source;
 
-        public FileGlobPattern(Matcher matcher, string? mapName, ulong modId, RequiredAssetsAttribute.Source source)
+        public FileGlobPattern(string glob, Matcher matcher, string? mapName, ulong modId, RequiredAssetsAttribute.Source source)
         {
             Matcher = matcher;
             MapName = mapName;
             ModId = modId;
             Source = source;
+            OriginalGlob = glob;
         }
 
         public bool SourceEquals(RequiredAssetsAttribute attribute)

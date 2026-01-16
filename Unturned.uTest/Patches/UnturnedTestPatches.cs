@@ -15,6 +15,8 @@ internal class UnturnedTestPatches(ILogger logger) : IDisposable
     private Harmony? _harmony;
     private List<Func<Harmony, bool>> _unpatches = null!;
 
+    internal Harmony Harmony => _harmony ?? throw new InvalidOperationException("Not initialized.");
+
     internal void Init(string logDir, Action<UnturnedTestPatches> register)
     {
         HarmonyLog.ResetConditional(Path.Combine(logDir, "harmony.log"));

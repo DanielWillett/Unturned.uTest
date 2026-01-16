@@ -44,27 +44,25 @@ internal class UnturnedTestReference
 
 /// <summary>
 /// Used to determine how steam IDs are generated.
-/// <see cref="Instance"/> or <see cref="DevUniverse"/> is ideal but some plugins may not be compatible.
+/// <see cref="DevUniverse"/> is ideal but some plugins may not be compatible. Any plugins which rely on either the Steam ID starting with 765 or being exactly 17 characters long will not be compatible with <see cref="DevUniverse"/>.
 /// </summary>
 public enum SteamIdGenerationStyle
 {
-
     /// <summary>
-    /// Creates SteamIDs with the 'account instance' bits set to 9034 instead of the default value of 1.
-    /// <para>
-    /// 9034 is the largest number with the maximum account number where the first 3 digits will be '765'.
-    /// </para>
+    /// Creates SteamIDs with a very large random account number.
     /// </summary>
     /// <remarks>
-    /// This ensures all steam IDs will not be assigned to a player,
-    /// be exactly 17 characters long,
+    /// This ensures all steam IDs will be exactly 17 characters long,
     /// be of the 'Individual' account type,
     /// and will always begin with the digits '765' which some developers use to verify a SteamID belongs to a player.
+    /// <para>
+    /// It's possible for a real user account to have the same ID as a generated one, although very unlikely.
+    /// </para>
     /// <para>
     /// All generated Steam IDs end in '0418'.
     /// </para>
     /// </remarks>
-    Instance,
+    Random,
 
     /// <summary>
     /// Creates SteamIDs in the 'Dev' universe.
@@ -80,21 +78,5 @@ public enum SteamIdGenerationStyle
     /// All generated Steam IDs end in '0418'.
     /// </para>
     /// </remarks>
-    DevUniverse,
-
-    /// <summary>
-    /// Creates SteamIDs with a very large random account number.
-    /// </summary>
-    /// <remarks>
-    /// This ensures all steam IDs will be exactly 17 characters long,
-    /// be of the 'Individual' account type,
-    /// and will always begin with the digits '765' which some developers use to verify a SteamID belongs to a player.
-    /// <para>
-    /// It's possible for a real user account to have the same ID as a generated one, although very unlikely.
-    /// </para>
-    /// <para>
-    /// All generated Steam IDs end in '0418'.
-    /// </para>
-    /// </remarks>
-    Random
+    DevUniverse
 }

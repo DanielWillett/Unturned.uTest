@@ -41,7 +41,17 @@ public static class GameThread
     {
         return IsCurrent
             ? GameThreadTask.CompletedTask
-            : new GameThreadTask(false);
+            : new GameThreadTask(false, false, token);
+    }
+
+    /// <summary>
+    /// Awaitable method that switches the currently running async method to the game thread, or skips the current frame if on the main thread already.
+    /// </summary>
+    public static GameThreadTask SwitchOrSkip(CancellationToken token = default)
+    {
+        return IsCurrent
+            ? GameThreadTask.CompletedTask
+            : new GameThreadTask(false, true, token);
     }
 
     /// <summary>

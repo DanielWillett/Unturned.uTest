@@ -499,7 +499,8 @@ internal static class TestCompiler
         }
 
         il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Ldflda, TestRunParameters_Test);
+        il.Emit(OpCodes.Ldfld, TestRunParameters_Test);
+        il.Emit(OpCodes.Ldflda, UnturnedTestInstanceData_Instance);
         il.Emit(OpCodes.Call, UnturnedTestInstance_Arguments_Get);
         il.Emit(OpCodes.Ldc_I4, index);
         il.Emit(OpCodes.Ldelem_Ref);
@@ -525,6 +526,8 @@ internal static class TestCompiler
     private static readonly MethodInfo INotifyCompletion_OnCompleted;
     private static readonly MethodInfo ICriticalNotifyCompletion_UnsafeOnCompleted;
     private static readonly MethodInfo GC_Collect4;
+
+    private static readonly FieldInfo UnturnedTestInstanceData_Instance;
 
     private static readonly MethodInfo UnturnedTestInstance_Arguments_Get;
     private static readonly MethodInfo TestContext_Runner_Get;
@@ -584,6 +587,10 @@ internal static class TestCompiler
         ICriticalNotifyCompletion_UnsafeOnCompleted = typeof(ICriticalNotifyCompletion)
             .GetMethod(nameof(ICriticalNotifyCompletion.UnsafeOnCompleted), BindingFlags.Public | BindingFlags.Instance)
             ?? throw new MissingMethodException(nameof(ICriticalNotifyCompletion), nameof(ICriticalNotifyCompletion.UnsafeOnCompleted));
+
+        UnturnedTestInstanceData_Instance = typeof(UnturnedTestInstanceData)
+            .GetField(nameof(UnturnedTestInstanceData.Instance), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new MissingFieldException(nameof(UnturnedTestInstanceData), nameof(UnturnedTestInstanceData.Instance));
 
         UnturnedTestInstance_Arguments_Get = typeof(UnturnedTestInstance)
             .GetProperty(nameof(UnturnedTestInstance.Arguments), BindingFlags.Public | BindingFlags.Instance)?.GetMethod

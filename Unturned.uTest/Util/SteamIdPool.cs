@@ -25,13 +25,8 @@ internal sealed class SteamIdPool
     // having the last digits all the same makes it easier to tell its a bot
     // obv real accounts can also end in 0418 but not likely to happen much.
     // 418 is from the april fools HTTP status code, also C418
-    private const int FinalDigitsFactor = 10000;
-    private const uint FinalDigits = 0418;
-
-    private const ulong MaxIdInstance = (ulong)EUniverse.k_EUniversePublic << 56
-                                      | ((ulong)EAccountType.k_EAccountTypeIndividual & 0b1111) << 52
-                                      | ((ulong)InstanceIdInstance & 0b11111111111111111111) << 32
-                                      | uint.MaxValue;
+    internal const int FinalDigitsFactor = 10000;
+    internal const uint FinalDigits = 0418;
 
     private const ulong MaxIdDev = (ulong)EUniverse.k_EUniverseDev << 56
                                    | ((ulong)EAccountType.k_EAccountTypeIndividual & 0b1111) << 52
@@ -73,15 +68,11 @@ internal sealed class SteamIdPool
 
     private void ResetPoolCounter()
     {
-        uint inst = _style == SteamIdGenerationStyle.Instance
-            ? InstanceIdInstance
-            : InstanceIdNormal;
-
         EUniverse univ = _style == SteamIdGenerationStyle.DevUniverse
             ? EUniverse.k_EUniverseDev
             : EUniverse.k_EUniversePublic;
 
-        ulong id = (ulong)univ << 56 | ((ulong)EAccountType.k_EAccountTypeIndividual & 0b1111) << 52 | ((ulong)inst & 0b11111111111111111111) << 32;
+        ulong id = (ulong)univ << 56 | (((ulong)EAccountType.k_EAccountTypeIndividual & 0b1111) << 52 | ((ulong)InstanceIdNormal & 0b11111111111111111111) << 32);
         _nextAccountNumber = (long)(id / FinalDigitsFactor) + new Random().Next(MinAccountId / FinalDigitsFactor, MaxAccountId / FinalDigitsFactor);
     }
 
@@ -94,7 +85,6 @@ internal sealed class SteamIdPool
             acctNum = acctNum * FinalDigitsFactor + FinalDigits;
             if (acctNum <= _style switch
             {
-                SteamIdGenerationStyle.Instance => MaxIdInstance,
                 SteamIdGenerationStyle.DevUniverse => MaxIdDev,
                 _ => MaxIdRandom
             })
@@ -109,7 +99,6 @@ internal sealed class SteamIdPool
         return new CSteamID(
             (_style switch
             {
-                SteamIdGenerationStyle.Instance => MaxIdInstance,
                 SteamIdGenerationStyle.DevUniverse => MaxIdDev,
                 _ => MaxIdRandom
             } & 0xFFFFFFFF00000000) / FinalDigitsFactor * FinalDigitsFactor + FinalDigits

@@ -27,7 +27,7 @@ internal class DummyManager : IDummyPlayerController
 
     public DummyManager(MainModule module)
     {
-        SteamIdPool = new SteamIdPool(module.TestList?.SteamIdGenerationStyle ?? SteamIdGenerationStyle.Instance);
+        SteamIdPool = new SteamIdPool(module.TestList?.SteamIdGenerationStyle ?? SteamIdGenerationStyle.Random);
         _module = module;
     }
 
@@ -52,6 +52,8 @@ internal class DummyManager : IDummyPlayerController
                 playerModeListTemp.Clear();
             }
 
+            test.SimulationMode = mode;
+
             if (mode == PlayerSimulationMode.Full)
                 needsFullPlayers = true;
 
@@ -65,9 +67,18 @@ internal class DummyManager : IDummyPlayerController
             {
                 minFullDummies = Math.Max(max.PlayerCount, minFullDummies);
             }
-            
+
+            test.Dummies = max.PlayerCount;
             playerCountListTemp.Clear();
         }
+
+        if (minDummies > byte.MaxValue)
+        {
+            _module.Logger.LogError($"At least one test requires more dummies than players supported by Unturned: {minDummies}. There should not be more than {byte.MaxValue} dummies.");
+            return Task.FromResult(false);
+        }
+
+        GameThread.Run(minDummies, minDummies => Provider.maxPlayers = (byte)minDummies);
 
         if (minDummies <= 0)
         {
@@ -110,6 +121,7 @@ internal class DummyManager : IDummyPlayerController
 
     internal ValueTask SpawnPlayersAsync(UnturnedTestInstanceData currentTest, List<ulong>? idsOrNull, CancellationToken token)
     {
+        _module.Logger.LogInformation($"Spawning players: (mode: {currentTest.SimulationMode}, simCt: {_simulatedDummies.Count}).");
         if (currentTest.SimulationMode == PlayerSimulationMode.Full)
         {
             return _remoteDummyLauncher!.ConnectDummyPlayersAsync(idsOrNull, token);
@@ -120,6 +132,11 @@ internal class DummyManager : IDummyPlayerController
             return new ValueTask(ConnectDummyPlayersAsync(idsOrNull, token));
         }
 
+        if (idsOrNull is { Count: > 0 })
+        {
+            throw new ActorNotFoundException(idsOrNull[0].ToString("D17", CultureInfo.InvariantCulture));
+        }
+            
         return default;
     }
 
@@ -133,6 +150,11 @@ internal class DummyManager : IDummyPlayerController
         if (_simulatedDummies.Count > 0)
         {
             return default;// todo new ValueTask(ConnectDummyPlayersAsync(idsOrNull, token));
+        }
+
+        if (idsOrNull is { Count: > 0 })
+        {
+            throw new ActorNotFoundException(idsOrNull[0].ToString("D17", CultureInfo.InvariantCulture));
         }
 
         return default;
@@ -257,7 +279,10 @@ internal class DummyManager : IDummyPlayerController
     {
         string rootDir = PlayerSavedata.hasSync
             ? $"{ReadWrite.PATH}/Sync"
-            : $"{ReadWrite.PATH}{ServerSavedata.directory}/Players";
+            : $"{ReadWrite.PATH}{ServerSavedata.directory}/{Provider.serverID}/Players";
+
+        if (!Directory.Exists(rootDir))
+            return;
 
         foreach (string dir in Directory.EnumerateDirectories(rootDir, "*", SearchOption.TopDirectoryOnly))
         {
@@ -270,9 +295,9 @@ internal class DummyManager : IDummyPlayerController
                 for (int i = 0; i < subDirs.Length; ++i)
                 {
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
-                    if (!Path.GetFileName(subDirs[i].AsSpan()).Equals(Level.info.name, FileHelper.FileNameComparison))
+                    if (!Path.GetFileName(subDirs[i].AsSpan()).Equals(Provider.map, FileHelper.FileNameComparison))
 #else
-                    if (!string.Equals(Path.GetFileName(subDirs[i]), Level.info.name, FileHelper.FileNameComparison))
+                    if (!string.Equals(Path.GetFileName(subDirs[i]), Provider.map, FileHelper.FileNameComparison))
 #endif
                     {
                         continue;
@@ -286,9 +311,9 @@ internal class DummyManager : IDummyPlayerController
             }
 
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER
-            if (subDirs.Length == 1 && !Path.GetFileName(subDirs[0].AsSpan()).Equals(Level.info.name, FileHelper.FileNameComparison))
+            if (subDirs.Length == 1 && !Path.GetFileName(subDirs[0].AsSpan()).Equals(Provider.map, FileHelper.FileNameComparison))
 #else
-            if (subDirs.Length == 1 && !string.Equals(Path.GetFileName(subDirs[0]), Level.info.name, FileHelper.FileNameComparison))
+            if (subDirs.Length == 1 && !string.Equals(Path.GetFileName(subDirs[0]), Provider.map, FileHelper.FileNameComparison))
 #endif
             {
                 continue;

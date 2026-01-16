@@ -144,6 +144,11 @@ public static class TestContext
         get => field ?? throw new InvalidOperationException("Not in test.");
         internal set;
     }
+
+    /// <summary>
+    /// The logger for the currently running test. Identical to accessing <see cref="IUnconfiguredTestContext.Logger"/> from <see cref="Current"/>.
+    /// </summary>
+    public static ILogger Logger => Current.Logger;
 }
 
 /// <summary>

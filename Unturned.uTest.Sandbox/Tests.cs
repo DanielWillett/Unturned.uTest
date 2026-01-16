@@ -1,9 +1,9 @@
-[assembly:
-    RequiredWorkshopItem(3456355722 /* Yellowknife */),
-    RequiredMap("Yellowknife"),
-    RequiredWorkshopItem(2839462324 /* Uncreated Content */),
-    RequiredWorkshopItem(2407740920 /* Uncreated Assets */)
-]
+//[assembly:
+//    RequiredWorkshopItem(3456355722 /* Yellowknife */),
+//    RequiredMap("Yellowknife"),
+//    RequiredWorkshopItem(2839462324 /* Uncreated Content */),
+//    RequiredWorkshopItem(2407740920 /* Uncreated Assets */)
+//]
 
 namespace uTest.Sandbox;
 

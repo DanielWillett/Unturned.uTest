@@ -108,7 +108,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
     [RpcSend("uTest.Dummies.Host.DummyPlayerHost, Unturned.uTest.DummyPlayerHost", "ReceiveWorkshopItemsUpdate")]
     private partial RpcTask SendWorkshopItemsUpdate(IEnumerable<IModularRpcRemoteConnection> connections, ulong[] files);
 
-    [RpcReceive, UsedImplicitly]
+    [RpcReceive]
     private async Task ReceiveStatusNotification(IModularRpcRemoteConnection connection, ulong id, DummyReadyStatus status, nint hwnd)
     {
         CSteamID steamId = new CSteamID(id);
@@ -139,6 +139,39 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         }
 
         _logger.LogInformation($"Remote actor status update: {actor.Steam64.m_SteamID} (PID {actor.ProcessId}): {status}.");
+    }
+
+    /// <summary>
+    /// For some reason players can get stuck in queue so this re-calls verifyNextPlayerInQueue().
+    /// </summary>
+    [RpcReceive]
+    private async Task ReceiveInQueueBump(ulong steam64)
+    {
+        if (!_remoteDummies.TryGetValue(steam64, out RemoteDummyPlayerActor? player))
+        {
+            return;
+        }
+
+        int queueBumpVersion = Interlocked.Increment(ref player.QueueBumpVersion);
+        _logger.LogTrace($"Received in-queue notification from player \"{player.DisplayName}\" (PID {player.ProcessId}).");
+        await Task.Delay(2500);
+        await GameThread.Switch();
+        if (player.IsOnline)
+            return;
+
+        if (Provider.pending.Count > 0 && Provider.pending[0].playerID.steamID.m_SteamID == steam64 && queueBumpVersion == player.QueueBumpVersion)
+        {
+            _logger.LogWarning($"Player \"{player.DisplayName}\" (PID {player.ProcessId}) did not exit the queue in a reasonable amount of time, attempting to re-verify.");
+            Provider.verifyNextPlayerInQueue();
+        }
+        else if (queueBumpVersion == player.QueueBumpVersion)
+        {
+            _logger.LogWarning($"Player \"{player.DisplayName}\" (PID {player.ProcessId}) did not exit the queue in a reasonable amount of time, but is not at the end of the queue.");
+        }
+        else
+        {
+            _logger.LogTrace($"Player \"{player.DisplayName}\" (PID {player.ProcessId}) in-queue notification was replaced by a new one.");
+        }
     }
 
     public async Task<bool> StartDummiesAsync(int amt)
@@ -211,6 +244,37 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         }
         catch (DirectoryNotFoundException) { }
 
+        string? assetConfig = Path.Combine(_module.HomeDirectory, "asset-load.json");
+        AssetLoadModel? assetLoadModel = _module.AssetLoadModel;
+        if (assetLoadModel != null)
+        {
+            try
+            {
+                using JsonTextWriter jsonWriter = new JsonTextWriter(new StreamWriter(assetConfig, false, Encoding.UTF8));
+                jsonWriter.Formatting = Formatting.None;
+                assetLoadModel.WriteToJson(jsonWriter);
+                jsonWriter.Flush();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"Failed to write asset config to {assetConfig}:{System.Environment.NewLine}{ex}.");
+            }
+        }
+        else
+        {
+            try
+            {
+                File.Delete(assetConfig);
+            }
+            catch (FileNotFoundException) { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning($"Failed to delete asset config at {assetConfig}:{System.Environment.NewLine}{ex}.");
+            }
+
+            assetConfig = null;
+        }
+
         if (Path.DirectorySeparatorChar == '\\')
             baseDummyPath = baseDummyPath.Replace('\\', '/');
 
@@ -224,7 +288,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         {
             CSteamID steamId =  _module.Dummies.SteamIdPool.GetUniqueCSteamID();
 
-            string steamName = $"Dummy ({steamId.GetAccountID().m_AccountID:X8})";
+            string steamName = $"Dummy ({(steamId.GetAccountID().m_AccountID / SteamIdPool.FinalDigitsFactor).ToString("X8", CultureInfo.InvariantCulture)})";
 
             string configDir = baseDummyPath + steamId.GetAccountID().m_AccountID.ToString("X8", CultureInfo.InvariantCulture);
             Directory.CreateDirectory(configDir);
@@ -251,7 +315,8 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
                     Index = i,
                     Count = amt,
                     DisplayHandle = display == 0 ? null : display,
-                    TileOffset = didTileConsole ? 1 : 0
+                    TileOffset = didTileConsole ? 1 : 0,
+                    AssetConfig = assetConfig
                 });
             }
 
@@ -289,6 +354,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
                 process.OutputDataReceived += actor.HandleOutputDataReceived;
                 process.ErrorDataReceived += actor.HandleOutputDataReceived;
 
+                _logger.LogInformation($"Starting simulated player {i}...");
                 if (!process.Start())
                 {
                     _logger.LogError($"Failed to start process for actor {i} {steamId.m_SteamID}.");
@@ -318,7 +384,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
                     );
                     if (!actor.LoadedCondition.Task.IsCompleted || process.HasExited)
                     {
-                        _logger.LogWarning($"Still waiting after 15 seconds for simulated player {i} (PID {actor.ProcessId}) to start loading (or was closed).");
+                        _logger.LogWarning($"Still waiting after 15 seconds for simulated player {i} (PID {actor.ProcessId}) to start loading (or it was closed).");
 
                         if (!process.HasExited)
                         {
@@ -394,9 +460,16 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
     public ValueTask ConnectDummyPlayersAsync(List<ulong>? idsOrNull, CancellationToken token)
     {
+        _logger.LogTrace("Connecting players...");
         if (_remoteDummies.Count > 0)
         {
+            _logger.LogTrace("Connecting remote dummies...");
             return new ValueTask(ConnectDummyPlayersAsyncIntl(idsOrNull, token));
+        }
+
+        if (idsOrNull is { Count: > 0 })
+        {
+            throw new ActorNotFoundException(idsOrNull[0].ToString("D17", CultureInfo.InvariantCulture));
         }
 
         return default;
@@ -407,6 +480,11 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         if (_remoteDummies.Count > 0)
         {
             return new ValueTask(DisconnectDummyPlayersAsyncIntl(idsOrNull, token));
+        }
+
+        if (idsOrNull is { Count: > 0 })
+        {
+            throw new ActorNotFoundException(idsOrNull[0].ToString("D17", CultureInfo.InvariantCulture));
         }
 
         return default;
@@ -421,7 +499,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
         if (!IPv4Address.TryParse(Provider.bindAddress, out IPv4Address address))
         {
-            address = new IPv4Address(127u << 24 | 1 /* 127.0.0.1 */);
+            address = new IPv4Address((127u << 24) | 1 /* 127.0.0.1 */);
         }
 
         if (idsOrNull == null)
@@ -474,6 +552,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
     private async Task ConnectDummyAsync(RemoteDummyPlayerActor actor, CancellationToken token, uint ipv4, ushort port, ulong serverCode)
     {
+        _logger.LogTrace($"Connecting {actor.Steam64.m_SteamID}...");
         if (actor.Status is DummyReadyStatus.Connected or DummyReadyStatus.Connecting)
         {
             throw new InvalidOperationException($"Actor {actor.Steam64.m_SteamID} is already connected or connecting.");
@@ -502,6 +581,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
         _logger.LogInformation($"Notifying dummy {actor.Steam64.m_SteamID} to connect to server.");
         actor.Status = DummyReadyStatus.Connecting;
+        Interlocked.Increment(ref actor.QueueBumpVersion);
         await actor.Connect(ipv4, port, Provider.serverPassword, serverCode,
             Provider.map,
             Provider.cameraMode,
@@ -647,6 +727,7 @@ internal class DummyLauncherConfig
     public required ulong Steam64 { get; set; }
     public required string Name { get; set; }
     public required string PipeName { get; set; }
+    public required string? AssetConfig { get; set; }
     public required int Index { get; set; }
     public required int Count { get; set; }
     public required long? DisplayHandle { get; set; }
