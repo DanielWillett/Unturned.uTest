@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 
 namespace uTest.Module;
 
-internal class TestExecutionPipeline
+internal class TestExecutionPipeline : IExceptionFormatter
 {
     private readonly TestRunner _runner;
     private readonly ILogger _logger;
@@ -16,7 +16,9 @@ internal class TestExecutionPipeline
 
     internal UnturnedTestInstanceData? CurrentTest;
 
-    public TestExecutionPipeline(TestRunner runner, ILogger logger, UnturnedTestList testList, MainModule module, CancellationToken token)
+    public IExceptionFormatter ExceptionFormatter { get; set; }
+
+    public TestExecutionPipeline(TestRunner runner, ILogger logger, UnturnedTestList testList, MainModule module, IExceptionFormatter? exceptionFormatter, CancellationToken token)
     {
         _runner = runner;
         _logger = logger;
@@ -24,6 +26,7 @@ internal class TestExecutionPipeline
         _module = module;
         _token = token;
         _stopwatch = new Stopwatch();
+        ExceptionFormatter = exceptionFormatter ?? this;
     }
 
     public void InitializeCurrentTest(UnturnedTestInstanceData test)
@@ -50,6 +53,11 @@ internal class TestExecutionPipeline
         Exception? testException;
         TestExecutionSummary summary;
         TestContext context;
+
+        if (CurrentTest.Dummies > 0)
+        {
+            await _module.Dummies.InitializeDummiesForTestAsync(CurrentTest);
+        }
 
         Task? task = TestAsyncStateMachine.TryRunTestAsync(CurrentTest, _token, _logger, _stopwatch, _testList, _module, out TestAsyncStateMachine machine);
         try
@@ -98,6 +106,17 @@ internal class TestExecutionPipeline
                 disposable.Dispose();
         }
 
+        if (testException != null)
+        {
+            if (context.Configuration.CollectTrxProperties)
+            {
+                summary.StackTrace = testException.StackTrace;
+                summary.ExceptionMessage = testException.Message;
+                summary.ExceptionType = testException.GetType().FullName;
+            }
+            summary.ExceptionFullString = ExceptionFormatter.FormatException(testException);
+        }
+
         summary.StandardOutput = context.StandardOutput?.ToString();
         if (string.IsNullOrEmpty(summary.StandardOutput)) summary.StandardOutput = null;
 
@@ -106,13 +125,6 @@ internal class TestExecutionPipeline
 
         if (testException == null)
             return new TestExecutionResult(TestResult.Pass, summary);
-
-        if (context.Configuration.CollectTrxProperties)
-        {
-            summary.StackTrace = testException.StackTrace;
-            summary.ExceptionMessage = testException.Message;
-            summary.ExceptionType = testException.GetType().FullName;
-        }
 
         return ReportTestException(testException, summary);
 
@@ -138,4 +150,6 @@ internal class TestExecutionPipeline
         // todo
         return new TestExecutionResult(TestResult.Fail, null);
     }
+
+    string IExceptionFormatter.FormatException(Exception ex) => ex.ToString();
 }

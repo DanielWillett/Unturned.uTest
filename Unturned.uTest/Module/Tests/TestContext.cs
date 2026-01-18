@@ -14,8 +14,8 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
 
     internal List<TestArtifact>? Artifacts;
     internal bool HasStarted = false;
-    internal StringBuilder? StandardOutput;
-    internal StringBuilder? StandardError;
+    internal StringBuilder StandardOutput;
+    internal StringBuilder StandardError;
     internal List<TestOutputMessage>? Messages;
 
     private readonly UnturnedTestUid _uid;
@@ -24,6 +24,8 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     public UnturnedTestList Configuration => _parameters.Configuration;
 
     public ITestClass Runner { get; }
+
+    public IReadOnlyList<IServersideTestPlayer> Players { get; internal set; }
 
     public Type TestClass => _parameters.Test.Instance.Type;
 
@@ -42,6 +44,7 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
         _parameters = parameters;
         _uid = new UnturnedTestUid(parameters.Test.Instance.Uid);
         Runner = runner;
+        Players = parameters.Dummies ?? Array.Empty<IServersideTestPlayer>();
 
         CommandWindowSynchronizationHelper.FlushCommandWindow();
         Dedicator.commandWindow.addIOHandler(this);
@@ -167,56 +170,51 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
         throw new TestResultException(TestResult.Fail);
     }
 
-    public ValueTask SpawnAllPlayersAsync(Action<DummyPlayerJoinConfiguration>? configurePlayers = null)
+    public ValueTask SpawnAllPlayersAsync(Action<DummyPlayerJoinConfiguration>? configurePlayers = null, CancellationToken token = default)
     {
-        return _parameters.Module.Dummies.SpawnPlayersAsync(_parameters.Test, null, CancellationToken);
-    }
+        return _parameters.Test.AllocatedDummies is not { Length: > 0 }
+            ? default
+            : new ValueTask(Core(configurePlayers, token));
 
-    public ValueTask SpawnPlayersAsync(IServersideTestPlayer[] players, Action<DummyPlayerJoinConfiguration>? configurePlayers = null)
-    {
-        if (players == null)
-            throw new ArgumentNullException(nameof(players));
-
-        if (players.Length == 0)
-            return default;
-
-        List<ulong> ids = new List<ulong>(players.Length);
-        foreach (IServersideTestPlayer pl in players)
+        async Task Core(Action<DummyPlayerJoinConfiguration>? configurePlayers, CancellationToken token)
         {
-            ulong id = pl.Steam64.m_SteamID;
-            if (ids.Contains(id))
-                continue;
+            foreach (IServersideTestPlayer player in _parameters.Test.AllocatedDummies)
+            {
+                if (player.IsOnline)
+                    continue;
 
-            ids.Add(id);
+                await player.SpawnAsync(configurePlayers, ignoreAlreadyConnected: true, token).ConfigureAwait(false);
+            }
         }
-
-        return _parameters.Module.Dummies.SpawnPlayersAsync(_parameters.Test, ids, CancellationToken);
     }
 
-    public ValueTask DespawnAllPlayersAsync()
+    public ValueTask DespawnAllPlayersAsync(CancellationToken token = default)
     {
-        return _parameters.Module.Dummies.DespawnPlayersAsync(_parameters.Test, null, CancellationToken);
-    }
+        return _parameters.Test.AllocatedDummies is not { Length: > 0 }
+            ? default
+            : new ValueTask(Core(token));
 
-    public ValueTask DespawnPlayersAsync(params IServersideTestPlayer[] players)
-    {
-        if (players == null)
-            throw new ArgumentNullException(nameof(players));
-
-        if (players.Length == 0)
-            return default;
-
-        List<ulong> ids = new List<ulong>(players.Length);
-        foreach (IServersideTestPlayer pl in players)
+        async Task Core(CancellationToken token)
         {
-            ulong id = pl.Steam64.m_SteamID;
-            if (ids.Contains(id))
-                continue;
+            List<Exception>? exceptions = null;
+            foreach (IServersideTestPlayer player in _parameters.Test.AllocatedDummies)
+            {
+                if (!player.IsOnline)
+                    continue;
 
-            ids.Add(id);
+                try
+                {
+                    await player.DespawnAsync(ignoreAlreadyDisconnected: true, token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    (exceptions ??= new List<Exception>()).Add(ex);
+                }
+            }
+
+            if (exceptions != null)
+                throw new AggregateException(exceptions);
         }
-
-        return _parameters.Module.Dummies.DespawnPlayersAsync(_parameters.Test, ids, CancellationToken);
     }
 
     /// <inheritdoc />

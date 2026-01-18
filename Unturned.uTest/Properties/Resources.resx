@@ -117,6 +117,9 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="ActorDestroyedDisconnectedWhileConnecting" xml:space="preserve">
+    <value>Actor {0} wasn't able to successfully connect. Reason: {1}.</value>
+  </data>
   <data name="ActorDestroyedExceptionDefaultMessage" xml:space="preserve">
     <value>Unable to modify "{0}", this actor has been destroyed.</value>
   </data>
@@ -158,6 +161,24 @@
   </data>
   <data name="AssertionExpressionMissingParent" xml:space="preserve">
     <value>Assertion expression "{0}" missing terminal point. This can happen when a modifier expression is used without supplying a constant value, such as 'Is.Not' (in NUnit style).</value>
+  </data>
+  <data name="Assertion_Message_PlayerConnected" xml:space="preserve">
+    <value>Expected player {0} to be connected.</value>
+  </data>
+  <data name="Assertion_Message_PlayerRejected" xml:space="preserve">
+    <value>Expected that player {0} was rejected.</value>
+  </data>
+  <data name="Exception_Formatter_InnerExceptionNum" xml:space="preserve">
+    <value>== Inner Exception #{0} ==</value>
+  </data>
+  <data name="Exception_Formatter_InnerExceptions" xml:space="preserve">
+    <value>Inner exception(s)</value>
+  </data>
+  <data name="Exception_Formatter_NoStackTrace" xml:space="preserve">
+    <value>no stack trace</value>
+  </data>
+  <data name="Exception_Formatter_RPCRemoteException" xml:space="preserve">
+    <value>Remote Stack Trace</value>
   </data>
   <data name="GameThreadExceptionDefault" xml:space="preserve">
     <value>This feature can only be used on the game thread.</value>

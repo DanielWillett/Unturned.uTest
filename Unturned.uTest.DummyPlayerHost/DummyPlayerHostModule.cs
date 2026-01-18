@@ -8,6 +8,7 @@ using DanielWillett.ModularRpcs.Reflection;
 using DanielWillett.ModularRpcs.Routing;
 using DanielWillett.ModularRpcs.Serialization;
 using DanielWillett.ReflectionTools;
+using DanielWillett.ReflectionTools.Formatting;
 using HarmonyLib;
 using Newtonsoft.Json;
 using SDG.Framework.Modules;
@@ -21,13 +22,11 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using DanielWillett.ReflectionTools.Formatting;
 using UnityEngine.SceneManagement;
 using Unturned.SystemEx;
 using uTest.Dummies.Host.Facades;
 using uTest.Dummies.Host.Patches;
 using uTest.Module;
-using uTest.Util;
 
 namespace uTest.Dummies.Host;
 
@@ -37,6 +36,8 @@ namespace uTest.Dummies.Host;
 [GenerateRpcSource]
 internal partial class DummyPlayerHost : IDisposable
 {
+    internal byte[]? HWIDs;
+
     public Harmony Harmony { get; } = new Harmony("DanielWillett.uTest.Dummies");
 
     public ILogger Logger => DefaultLogger.Logger;
@@ -67,6 +68,8 @@ internal partial class DummyPlayerHost : IDisposable
     /// </summary>
     public nint WindowHandle { get; internal set; }
 
+    internal ReadyToConnectInfo ReadyToConnectInfo { get; private set; }
+
 #nullable restore
 
     public AssetLoadModel? AssetLoadModel { get; private set; }
@@ -90,6 +93,8 @@ internal partial class DummyPlayerHost : IDisposable
         {
             throw new InvalidOperationException($"Missing \"{_dataDirArg.key}\" command line arg.");
         }
+
+        Assembly.Load("ModularRPCs.Unity, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null");
 
         Instance = this;
 
@@ -125,6 +130,8 @@ internal partial class DummyPlayerHost : IDisposable
                     p.RegisterPatch(IgnoreSocketExceptionsOnClient.TryPatch, IgnoreSocketExceptionsOnClient.TryUnpatch);
                     p.RegisterPatch(DisableConvenientSavedata.TryPatch, DisableConvenientSavedata.TryUnpatch);
                     p.RegisterPatch(uTest.Patches.SocketMessageLayerFix.TryPatchClient, uTest.Patches.SocketMessageLayerFix.TryUnpatchClient);
+                    p.RegisterPatch(ChangeHardwareIDs.TryPatch, ChangeHardwareIDs.TryUnpatch);
+                    p.RegisterPatch(ReadyToConnectOverride.TryPatch, ReadyToConnectOverride.TryUnpatch);
                 }
             );
         }
@@ -311,7 +318,28 @@ internal partial class DummyPlayerHost : IDisposable
         if (scene.buildIndex != Level.BUILD_INDEX_MENU)
             return;
 
-        StartStatusNotificationUpdate(DummyReadyStatus.InMenu);
+        if (Provider.connectionFailureInfo == ESteamConnectionFailureInfo.NONE)
+        {
+            StartStatusNotificationUpdate(DummyReadyStatus.InMenu);
+            return;
+        }
+
+        try
+        {
+            Task.Run(async () =>
+            {
+                await SendRejectedStatusNotification(SteamId.m_SteamID, Provider.connectionFailureInfo, Provider.connectionFailureReason, Provider.connectionFailureDuration);
+            }).Wait(TimeSpan.FromSeconds(3));
+        }
+        catch (Exception ex)
+        {
+            DefaultLogger.Logger.LogError("Error communicating with server.", ex);
+            DummyPlayerHostModule.InstantShutdown(
+                "Error communicating with server.",
+                UnturnedTestExitCode.StartupFailure,
+                () => ((IDisposable)this).Dispose()
+            );
+        }
     }
 
     private void HandleQueuePositionUpdated()
@@ -333,6 +361,9 @@ internal partial class DummyPlayerHost : IDisposable
     [RpcTimeout(14 * Timeouts.Seconds)]
     private partial RpcTask SendStatusNotification(ulong id, DummyReadyStatus status, nint hWnd);
 
+    [RpcSend(typeof(DummyPlayerLauncher), "ReceiveRejectedStatusNotification")]
+    private partial RpcTask SendRejectedStatusNotification(ulong id, ESteamConnectionFailureInfo rejection, string? reason, uint duration);
+
     [RpcReceive]
     private void ReceiveWorkshopItemsUpdate(ulong[] workshopItems)
     {
@@ -343,7 +374,10 @@ internal partial class DummyPlayerHost : IDisposable
     }
 
     [RpcReceive]
-    private async Task ReceiveConnect(uint ipv4, ushort port, string? password,
+    private async Task ReceiveConnect(
+        uint ipv4,
+        ushort port,
+        string? password,
         ulong serverCode,
         string map,
         ECameraMode cameraMode,
@@ -362,13 +396,104 @@ internal partial class DummyPlayerHost : IDisposable
         bool battleyeSecure,
         SteamServerAdvertisement.EPluginFramework pluginFramework,
         string thumbnailUrl,
-        string descText
+        string descText,
+        byte[]? hwids,
+        string characterName,
+        string nickName,
+        byte characterIndex,
+        ulong shirt,
+        ulong pants,
+        ulong hat,
+        ulong backpack,
+        ulong vest,
+        ulong mask,
+        ulong glasses,
+        ulong group,
+        ulong lobby,
+        byte face,
+        byte hair,
+        byte beard,
+        Color32 skinColor,
+        Color32 hairColor,
+        Color32 markerColor,
+        Color32 beardColor,
+        EClientPlatform platform,
+        ushort reportedPing,
+        bool isLeftHanded,
+        ulong[]? activeSkins,
+        EPlayerSkillset skillset,
+        string? requiredModulesString,
+        string language,
+        uint? gameVersion,
+        uint? mapVersion,
+        bool correctGameVersion,
+        bool correctMapVersion,
+        bool correctLevelHash,
+        bool correctAssemblyHash,
+        bool correctResourceHash,
+        bool correctEconHash
     )
     {
         await GameThread.Switch();
 
         IPv4Address addr = new IPv4Address(ipv4);
         Logger.LogInformation($"Received connection request to {addr}:{port} (ID {serverCode}).");
+
+        if (characterIndex >= Characters.list.Length)
+        {
+            Logger.LogWarning($"Out of range character index: {characterIndex}.");
+            characterIndex = 0;
+        }
+
+        Characters.selected = characterIndex;
+
+        Character character = Characters.active;
+        character.name = characterName;
+        character.nick = nickName;
+        character.group = new CSteamID(group);
+        character.face = face;
+        character.hair = hair;
+        character.beard = beard;
+        character.skin = skinColor;
+        character.color = hairColor;
+        character.markerColor = markerColor;
+        character.BeardColor = beardColor;
+        character.hand = isLeftHanded;
+        character.packageShirt = shirt;
+        character.packagePants = pants;
+        character.packageHat = hat;
+        character.packageBackpack = backpack;
+        character.packageVest = vest;
+        character.packageMask = mask;
+        character.packageGlasses = glasses;
+        if (activeSkins != null)
+        {
+            Characters._packageSkins = new List<ulong>(activeSkins);
+        }
+
+        character.skillset = skillset;
+
+        HWIDs = hwids;
+
+        ReadyToConnectInfo = ReadyToConnectInfo.Default;
+
+        if (gameVersion.HasValue)
+            ReadyToConnectInfo.GameVersion = gameVersion.Value;
+        else if (!correctGameVersion)
+            --ReadyToConnectInfo.GameVersion;
+
+        ReadyToConnectInfo.Modules = requiredModulesString;
+        ReadyToConnectInfo.Platform = platform;
+        ReadyToConnectInfo.Language = language;
+        ReadyToConnectInfo.IsGold = isPro;
+        ReadyToConnectInfo.LobbyId = new CSteamID(lobby);
+        ReadyToConnectInfo.ReportedPing = reportedPing;
+        ReadyToConnectInfo.MixupLevelHash = !correctLevelHash;
+        ReadyToConnectInfo.MixupAssemblyHash = !correctAssemblyHash;
+        ReadyToConnectInfo.MixupResourceHash = !correctResourceHash;
+        ReadyToConnectInfo.MixupEconHash = !correctEconHash;
+        ReadyToConnectInfo.OverrideLevelVersion = mapVersion;
+        ReadyToConnectInfo.MixupLevelVersion = !correctMapVersion;
 
         Provider.connect(
             new ServerConnectParameters(addr, (ushort)(port - 1u), port, password ?? string.Empty),
@@ -419,7 +544,7 @@ internal partial class DummyPlayerHost : IDisposable
     private Task ReceiveGracefullyClose()
     {
         Logger.LogInformation("Received graceful shutdown request from uTest server.");
-        return GameThread.RunAndWaitAsync(Provider.shutdown);
+        return GameThread.RunAndWaitAsync(() => Provider.QuitGame("Tests completed."));
     }
 
     /// <inheritdoc />

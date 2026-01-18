@@ -70,7 +70,7 @@ internal class UnturnedLauncher : IDisposable
         ModuleFiles.IsServer = _u3ds;
         if (!ModuleFiles.WriteModuleFiles(moduleRoot, _logger, testAssembly))
         {
-            throw new NotSupportedException("Unable to write test module.");
+            throw new NotSupportedException("Unable to write test module. Ensure that the server and all clients closed correctly.");
         }
     }
 

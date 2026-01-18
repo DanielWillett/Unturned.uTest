@@ -19,6 +19,7 @@ public sealed class TestExecutionSummary
     public string? StackTrace { get; set; }
     public string? ExceptionMessage { get; set; }
     public string? ExceptionType { get; set; }
+    public string? ExceptionFullString { get; set; }
 
     public string? StandardOutput { get; set; }
     public string? StandardError { get; set; }

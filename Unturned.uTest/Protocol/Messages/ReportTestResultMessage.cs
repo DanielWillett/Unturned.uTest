@@ -34,7 +34,7 @@ public class ReportTestResultMessage : ITransportMessage
         ushort methodIdLen  = checked ( (ushort)Encoding.UTF8.GetByteCount(Uid) );
         ushort logPathLen   = checked ( (ushort)Encoding.UTF8.GetByteCount(SummaryPath) );
 
-        int length = sessionIdLen + methodIdLen + logPathLen + 7;
+        int length = sessionIdLen + methodIdLen + logPathLen + 9;
 
         byte[] data = ArrayPool<byte>.Shared.Rent(length);
 

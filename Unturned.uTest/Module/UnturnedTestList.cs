@@ -32,6 +32,7 @@ internal class UnturnedTestList
     /// </summary>
     public string Map { get; set; }
     public bool CollectTrxProperties { get; set; }
+    public bool UseColorfulStackTrace { get; set; }
     public SteamIdGenerationStyle SteamIdGenerationStyle { get; set; }
     public string ClientInstallDir { get; set; }
 }

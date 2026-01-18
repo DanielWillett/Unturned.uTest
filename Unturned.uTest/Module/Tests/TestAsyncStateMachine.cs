@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Diagnostics;
-using uTest.Discovery;
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
 
 namespace uTest.Module;
@@ -27,6 +26,19 @@ internal sealed class TestAsyncStateMachine
     internal static Task? TryRunTestAsync(UnturnedTestInstanceData test, CancellationToken token, ILogger logger, Stopwatch sw, UnturnedTestList testList, MainModule module, out TestAsyncStateMachine machine)
     {
         TestAsyncStateMachine m = new TestAsyncStateMachine(test, token, logger, sw, testList, module);
+
+        if (module.Dummies != null && test.Dummies > 0)
+        {
+            m._parameters.Dummies = module.Dummies.AllocateDummiesToTest(test, out bool overflow);
+            if (overflow)
+            {
+                module.Dummies.DeallocateDummies(test);
+                module.Logger.LogInformation("Somehow attempted to allocate more dummies then was originally created.");
+                machine = null!;
+                return null;
+            }
+        }
+
         if (m._compilationResult == null)
         {
             machine = null!;
@@ -56,6 +68,7 @@ internal sealed class TestAsyncStateMachine
     private async Task CleanupTestAsync()
     {
         await _disconnectPlayersTask.ConfigureAwait(false);
+        _parameters.Module.Dummies?.DeallocateDummies(_parameters.Test);
     }
 
     public TestAsyncStateMachine(UnturnedTestInstanceData test, CancellationToken token, ILogger logger, Stopwatch sw, UnturnedTestList testList, MainModule module)

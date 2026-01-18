@@ -1,3 +1,7 @@
+using System;
+using uTest.Dummies;
+using uTest.Module;
+
 namespace uTest;
 
 /// <summary>
@@ -49,6 +53,32 @@ public interface IServersideTestPlayer : ITestPlayer
     /// Whether or not the player has been connected to the server. Serverside test players may not have been connected yet.
     /// </summary>
     bool IsOnline { get; }
+
+    internal UnturnedTestInstanceData? Test { get; set; }
+
+    /// <summary>
+    /// If the player was rejected, outputs the reason information for the rejection.
+    /// </summary>
+    /// <param name="info">The category of reason the player was rejected.</param>
+    /// <param name="reason">Specific information about the rejection, depending on the category.</param>
+    /// <param name="duration">If <paramref name="info"/> is <see cref="ESteamConnectionFailureInfo.BANNED"/>, the duration of the ban in seconds.</param>
+    /// <returns><see langword="true"/> if the player was rejected, otherwise <see langword="false"/>.</returns>
+    bool TryGetRejectionInfo(out ESteamConnectionFailureInfo info, out string? reason, out TimeSpan? duration);
+
+    /// <summary>
+    /// Spawns this player into the world.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Actor is already spawned in.</exception>
+    /// <exception cref="TimeoutException">An actor did not connect in time.</exception>
+    /// <exception cref="ActorDestroyedException">An actor disconnected/was rejected while connecting.</exception>
+    Task SpawnAsync(Action<DummyPlayerJoinConfiguration>? configurePlayers = null, bool ignoreAlreadyConnected = false, CancellationToken token = default);
+
+    /// <summary>
+    /// Disconnects this player from the world.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Actor is not spawned in.</exception>
+    /// <exception cref="TimeoutException">An actor did not disconnect in time.</exception>
+    Task DespawnAsync(bool ignoreAlreadyDisconnected = false, CancellationToken token = default);
 }
 
 public interface ITestPlayerLook

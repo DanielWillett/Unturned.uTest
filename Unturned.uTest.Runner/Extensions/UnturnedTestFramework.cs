@@ -37,7 +37,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         }
     }
 
-    private static readonly TestNodeStateProperty[] TestResultStates =
+    private static readonly TestNodeStateProperty[] BasicTestResultStates =
     [
         new SkippedTestNodeStateProperty(uTest.Properties.Resources.TestResultInconclusive),
         new PassedTestNodeStateProperty(uTest.Properties.Resources.TestResultPass),
@@ -48,12 +48,49 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         new SkippedTestNodeStateProperty(uTest.Properties.Resources.TestResultSkipped)
     ];
 
-    private static void AddResultState(TestNode node, TestResult result)
+    private static readonly Func<string, TestNodeStateProperty>[] TestResultStateFactories =
+    [
+        msg => new SkippedTestNodeStateProperty(msg),
+        msg => new PassedTestNodeStateProperty(msg),
+        msg => new FailedTestNodeStateProperty(msg),
+        msg => new CancelledTestNodeStateProperty(msg),
+        msg => new TimeoutTestNodeStateProperty(msg),
+        msg => new InProgressTestNodeStateProperty(msg),
+        msg => new SkippedTestNodeStateProperty(msg)
+    ];
+
+    private static void AddResultState(TestNode node, TestResult result, TestExecutionSummary? summary = null)
     {
-        if ((int)result >= TestResultStates.Length)
+        if ((int)result >= BasicTestResultStates.Length)
             result = TestResult.Inconclusive;
 
-        node.Properties.Add(TestResultStates[(int)result]);
+        if (summary != null && (!string.IsNullOrEmpty(summary.ExceptionFullString) || !string.IsNullOrEmpty(summary.ExceptionType)))
+        {
+            Func<string, TestNodeStateProperty> factory = TestResultStateFactories[(int)result];
+            StringBuilder msg = new StringBuilder();
+            msg.AppendLine(BasicTestResultStates[(int)result].Explanation);
+
+            if (!string.IsNullOrEmpty(summary.ExceptionFullString))
+            {
+                msg.Append(summary.ExceptionFullString);
+            }
+            else
+            {
+                msg.Append(summary.ExceptionType!);
+                if (!string.IsNullOrEmpty(summary.ExceptionMessage))
+                    msg.AppendLine().Append(summary.ExceptionMessage);
+                
+                if (!string.IsNullOrEmpty(summary.StackTrace))
+                    msg.AppendLine().Append(summary.StackTrace);
+            }
+
+
+            node.Properties.Add(factory(msg.ToString()));
+        }
+        else
+        {
+            node.Properties.Add(BasicTestResultStates[(int)result]);
+        }
     }
 
     private readonly UnturnedTestExtension _uTest;
@@ -239,14 +276,14 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
                     TestNode testNode = test.CreateTestNode(out TestNodeUid? parentUid);
 
-                    AddResultState(testNode, result.Result);
-
                     TestExecutionSummary? summary = null;
                     if (File.Exists(result.SummaryPath))
                     {
                         using JsonTextReader reader = new JsonTextReader(new StreamReader(result.SummaryPath, Encoding.UTF8, true)) { CloseInput = true };
                         summary = serializer.Deserialize<TestExecutionSummary>(reader);
                     }
+
+                    AddResultState(testNode, result.Result, summary);
 
                     if (summary != null)
                     {

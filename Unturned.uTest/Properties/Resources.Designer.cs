@@ -61,6 +61,15 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Actor {0} wasn&apos;t able to successfully connect. Reason: {1}..
+        /// </summary>
+        internal static string ActorDestroyedDisconnectedWhileConnecting {
+            get {
+                return ResourceManager.GetString("ActorDestroyedDisconnectedWhileConnecting", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Unable to modify &quot;{0}&quot;, this actor has been destroyed..
         /// </summary>
         internal static string ActorDestroyedExceptionDefaultMessage {
@@ -160,6 +169,24 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Expected player {0} to be connected..
+        /// </summary>
+        internal static string Assertion_Message_PlayerConnected {
+            get {
+                return ResourceManager.GetString("Assertion_Message_PlayerConnected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Expected that player {0} was rejected..
+        /// </summary>
+        internal static string Assertion_Message_PlayerRejected {
+            get {
+                return ResourceManager.GetString("Assertion_Message_PlayerRejected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to An assertion expression for a DateTimeOffset can not both define a tolerance and check that offsets are the same..
         /// </summary>
         internal static string AssertionExpressionCombinedDateTimeOffsetComparisonWithTolerance {
@@ -183,6 +210,42 @@ namespace uTest.Properties {
         internal static string AssertionExpressionMissingParent {
             get {
                 return ResourceManager.GetString("AssertionExpressionMissingParent", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to == Inner Exception #{0} ==.
+        /// </summary>
+        internal static string Exception_Formatter_InnerExceptionNum {
+            get {
+                return ResourceManager.GetString("Exception_Formatter_InnerExceptionNum", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Inner exception(s).
+        /// </summary>
+        internal static string Exception_Formatter_InnerExceptions {
+            get {
+                return ResourceManager.GetString("Exception_Formatter_InnerExceptions", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to no stack trace.
+        /// </summary>
+        internal static string Exception_Formatter_NoStackTrace {
+            get {
+                return ResourceManager.GetString("Exception_Formatter_NoStackTrace", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Remote Stack Trace.
+        /// </summary>
+        internal static string Exception_Formatter_RPCRemoteException {
+            get {
+                return ResourceManager.GetString("Exception_Formatter_RPCRemoteException", resourceCulture);
             }
         }
         

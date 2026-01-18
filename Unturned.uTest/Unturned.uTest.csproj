@@ -29,7 +29,7 @@
 	  <PublicizerClearCacheOnClean>true</PublicizerClearCacheOnClean>
     <DebugType>portable</DebugType>
 
-  </PropertyGroup> 
+  </PropertyGroup>
 
   <ItemGroup>
     <Using Include="System.ComponentModel" />
@@ -61,7 +61,7 @@
     <!-- Update ModuleLibraryHelper if any of the versions of the fallback assemblies change. -->
     <PackageReference Include="DanielWillett.ReflectionTools" Version="4.0.0" />
     <PackageReference Include="DanielWillett.ReflectionTools.Harmony" Version="4.0.0" />
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease26,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease27,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" ExcludeAssets="all" />
@@ -73,6 +73,7 @@
 		<PackageReference Include="xunit.assert" Version="2.9.3" PrivateAssets="none" />
     <PackageReference Include="xunit.analyzers" Version="1.24.0" PrivateAssets="none" ExcludeAssets="all" />
     <PackageReference Include="Lib.Harmony" Version="[2.3.3,3.0)" PrivateAssets="all" />
+    <PackageReference Include="DanielWillett.StackCleaner" Version="1.5.1" PrivateAssets="all" />
 
     <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
 	    <PrivateAssets>all</PrivateAssets>
@@ -98,6 +99,9 @@
     <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.pendingMessageOffset" />
     <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.messageQueue" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.verifyNextPlayerInQueue" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.ServerMessageHandler_ReadyToConnect.joinRateLimiter" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.TransportConnectionRateLimiter.steamIdRateLimitingLog" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.TransportConnectionRateLimiter+SteamIdRateLimitingEntry" />
 
 	</ItemGroup>
 

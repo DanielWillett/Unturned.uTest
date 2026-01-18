@@ -56,6 +56,11 @@ public interface IUnconfiguredTestContext
 public interface ITestContext : IUnconfiguredTestContext
 {
     /// <summary>
+    /// List of all dummies allocated to this test.
+    /// </summary>
+    IReadOnlyList<IServersideTestPlayer> Players { get; }
+
+    /// <summary>
     /// Configure the testing environment for this test.
     /// </summary>
     /// <exception cref="InvalidOperationException">Test has already started.</exception>
@@ -104,33 +109,24 @@ public interface ITestContext : IUnconfiguredTestContext
 
     /// <summary>
     /// Notifies all allocated players that it's time to join the server and waits for them to fully spawn in and initialize.
+    /// <para>
+    /// To spawn individual players use <see cref="IServersideTestPlayer.SpawnAsync"/>.
+    /// </para>
     /// </summary>
     /// <remarks>If no players are configured this method will do nothing.</remarks>
-    ValueTask SpawnAllPlayersAsync(Action<DummyPlayerJoinConfiguration>? configurePlayers = null);
-
-    /// <summary>
-    /// Notifies the given players that it's time to join the server and waits for them to fully spawn in and initialize.
-    /// </summary>
-    /// <remarks>If <paramref name="players"/> is empty this method will do nothing.</remarks>
-    /// <param name="players">The players to spawn. Duplicates are ignored.</param>
-    /// <exception cref="ArgumentNullException"/>
-    /// <exception cref="ActorDestroyedException">One or more elements in <paramref name="players"/> no longer exists.</exception>
-    ValueTask SpawnPlayersAsync(IServersideTestPlayer[] players, Action<DummyPlayerJoinConfiguration>? configurePlayers = null);
+    /// <exception cref="TimeoutException">An actor did not connect in time.</exception>
+    /// <exception cref="ActorDestroyedException">An actor disconnected/was rejected while connecting.</exception>
+    ValueTask SpawnAllPlayersAsync(Action<DummyPlayerJoinConfiguration>? configurePlayers = null, CancellationToken token = default);
 
     /// <summary>
     /// Notifies all allocated players that it's time to disconnect from the server and waits for them to fully disconnect and return to the main menu.
+    /// <para>
+    /// To despawn individual players use <see cref="IServersideTestPlayer.DespawnAsync"/>.
+    /// </para>
     /// </summary>
     /// <remarks>If no players are configured this method will do nothing.</remarks>
-    ValueTask DespawnAllPlayersAsync();
-
-    /// <summary>
-    /// Notifies the given players that it's time to disconnect from the server and waits for them to fully disconnect and return to the main menu.
-    /// </summary>
-    /// <remarks>If <paramref name="players"/> is empty this method will do nothing.</remarks>
-    /// <param name="players">The players to despawn. Duplicates are ignored.</param>
-    /// <exception cref="ArgumentNullException"/>
-    /// <exception cref="ActorDestroyedException">One or more elements in <paramref name="players"/> no longer exists.</exception>
-    ValueTask DespawnPlayersAsync(IServersideTestPlayer[] players);
+    /// <exception cref="AggregateException">Exceptions were thrown while disconnecting some players.</exception>
+    ValueTask DespawnAllPlayersAsync(CancellationToken token = default);
 }
 
 public static class TestContext

@@ -21,6 +21,8 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
     internal IModularRpcRemoteConnection? ConnectionIntl;
     internal StreamWriter? LogFileWriter;
     internal int QueueBumpVersion;
+    internal byte[]? HWIDs;
+    internal DummyPlayerJoinConfiguration Configuration;
 
     /// <summary>
     /// The 'home' directory for this client, storing startup config, cloud files, etc.
@@ -43,20 +45,42 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
     public nint WindowHandle { get; internal set; }
 
     /// <summary>
+    /// The zero-based index of this remote player.
+    /// </summary>
+    public int Index { get; }
+
+    /// <summary>
     /// The ModularRPCs connection used to communicate with the client.
     /// </summary>
     public IModularRpcRemoteConnection Connection => ConnectionIntl ?? throw new InvalidOperationException("Not yet connected.");
 
-    internal DummyReadyStatus Status { get; set; }
+    /// <summary>
+    /// The dummy's connection status.
+    /// </summary>
+    public DummyReadyStatus Status { get; set; }
 
     public override bool IsRemotePlayer => true;
 
     /// <inheritdoc />
-    internal RemoteDummyPlayerActor(CSteamID steam64, string displayName, DummyPlayerLauncher dummyLauncher, Process process, string homeDirectory)
+    internal RemoteDummyPlayerActor(CSteamID steam64, string displayName, DummyPlayerLauncher dummyLauncher, Process process, string homeDirectory, int index)
         : base(steam64, displayName, dummyLauncher)
     {
         Process = process;
         HomeDirectory = homeDirectory;
+        Index = index;
+    }
+
+    [MemberNotNull(nameof(Configuration))]
+    internal void Configure(Action<DummyPlayerJoinConfiguration>? configurer)
+    {
+        DummyPlayerJoinConfiguration c = new DummyPlayerJoinConfiguration(Index, Steam64, DisplayName);
+        if (configurer != null)
+        {
+            configurer(c);
+        }
+
+        HWIDs = c.GetHwidPacked();
+        Configuration = c;
     }
 
     internal void HandleOutputDataReceived(object sender, DataReceivedEventArgs e)
@@ -90,10 +114,15 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
     }
 
     [RpcSend("uTest.Dummies.Host.DummyPlayerHost, Unturned.uTest.DummyPlayerHost", "ReceiveGracefullyClose")]
+    [RpcTimeout(2 * Timeouts.Seconds)]
     internal partial RpcTask SendGracefullyClose();
 
     [RpcSend("uTest.Dummies.Host.DummyPlayerHost, Unturned.uTest.DummyPlayerHost", "ReceiveConnect")]
-    internal partial RpcTask Connect(uint ipv4, ushort port, string? password, ulong serverCode,
+    internal partial RpcTask Connect(
+        uint ipv4,
+        ushort port,
+        string? password,
+        ulong serverCode,
         string map,
         ECameraMode cameraMode,
         bool isPvP,
@@ -111,7 +140,43 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
         bool battleyeSecure,
         SteamServerAdvertisement.EPluginFramework pluginFramework,
         string thumbnailUrl,
-        string descText);
+        string descText,
+        byte[]? hwids,
+        string characterName,
+        string nickName,
+        byte characterIndex,
+        ulong shirt,
+        ulong pants,
+        ulong hat,
+        ulong backpack,
+        ulong vest,
+        ulong mask,
+        ulong glasses,
+        ulong group,
+        ulong lobby,
+        byte face,
+        byte hair,
+        byte beard,
+        Color32 skinColor,
+        Color32 hairColor,
+        Color32 markerColor,
+        Color32 beardColor,
+        EClientPlatform platform,
+        ushort reportedPing,
+        bool isLeftHanded,
+        ulong[] activeSkins,
+        EPlayerSkillset skillset,
+        string? requiredModulesString,
+        string language,
+        uint? gameVersion,
+        uint? mapVersion,
+        bool correctGameVersion,
+        bool correctMapVersion,
+        bool correctLevelHash,
+        bool correctAssemblyHash,
+        bool correctResourceHash,
+        bool correctEconHash
+    );
 
     [RpcSend("uTest.Dummies.Host.DummyPlayerHost, Unturned.uTest.DummyPlayerHost", "ReceiveDisconnect")]
     internal partial RpcTask Disconnect();

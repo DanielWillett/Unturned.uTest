@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text;
 using Unturned.SystemEx;
 using uTest.Util;
 using Random = System.Random;
@@ -33,6 +34,75 @@ public class DummyPlayerJoinConfiguration
     /// </summary>
     /// <remarks>Defaults to a name generated from the player's randomly assigned Steam64 ID.</remarks>
     public string PlayerName { get; }
+
+    /// <summary>
+    /// Whether or not the joining player should use the correct password.
+    /// This is ignored if the server doesn't have a password.
+    /// </summary>
+    /// <remarks>Defaults to <see langword="true"/>.</remarks>
+    public bool UseCorrectPassword { get; set; } = true;
+
+    /// <summary>
+    /// Whether or not the joining player should report the correct level hash to the server.
+    /// </summary>
+    /// <remarks>Defaults to <see langword="true"/>.</remarks>
+    public bool UseCorrectLevelHash { get; set; } = true;
+
+    /// <summary>
+    /// Whether or not the joining player should report the correct Assembly-CSharp.dll hash to the server.
+    /// </summary>
+    /// <remarks>Defaults to <see langword="true"/>.</remarks>
+    public bool UseCorrectAssemblyHash { get; set; } = true;
+
+    /// <summary>
+    /// Whether or not the joining player should report the correct Unity resource hash to the server.
+    /// </summary>
+    /// <remarks>Defaults to <see langword="true"/>.</remarks>
+    public bool UseCorrectResourceHash { get; set; } = true;
+
+    /// <summary>
+    /// Whether or not the joining player should report the correct Steam economy data hash to the server.
+    /// </summary>
+    /// <remarks>Defaults to <see langword="true"/>.</remarks>
+    public bool UseCorrectEconHash { get; set; } = true;
+
+    /// <summary>
+    /// Whether or not the joining player should report the correct Unturned version to the server.
+    /// </summary>
+    /// <remarks>Defaults to <see langword="true"/>.</remarks>
+    public bool UseCorrectGameVersion { get; set; } = true;
+
+    /// <summary>
+    /// Whether or not the joining player should report the correct map version to the server.
+    /// </summary>
+    /// <remarks>Defaults to <see langword="true"/>.</remarks>
+    public bool UseCorrectMapVersion { get; set; } = true;
+
+    /// <summary>
+    /// The version of the game reported to the server. Takes priority over <see cref="UseCorrectGameVersion"/> if set.
+    /// </summary>
+    /// <remarks>Defaults to the currently installed game version on the client.</remarks>
+    public string? ReportedGameVersion { get; set; }
+
+    /// <summary>
+    /// The version of the level reported to the server. Takes priority over <see cref="UseCorrectMapVersion"/> if set.
+    /// </summary>
+    /// <remarks>Defaults to the currently installed map version on the client.</remarks>
+    public string? ReportedMapVersion { get; set; }
+
+    /// <summary>
+    /// The connection ping reported to the server in milliseconds.
+    /// If this value is over <see cref="ServerConfigData.Max_Ping_Milliseconds"/> the player will be kicked.
+    /// </summary>
+    /// <remarks>Defaults to <c>50</c>.</remarks>
+    public ushort ReportedPing { get; set; } = 50;
+
+    /// <summary>
+    /// The present required modules this player will report to the server.
+    /// If <see langword="null"/>, the reported modules are unchanged from whatever is installed in the client at the time of running the tests.
+    /// </summary>
+    /// <remarks>Defaults to <see langword="null"/>.</remarks>
+    public RequiredModule[]? ReportedRequiredModules { get; set; }
 
     /// <summary>
     /// The player's spawn location and angle.
@@ -259,43 +329,43 @@ public class DummyPlayerJoinConfiguration
     /// <summary>
     /// The steam inventory item equipped as a shirt for this player's character.
     /// </summary>
-    /// <remarks>Defaults to 0.</remarks>
+    /// <remarks>Defaults to <c>0</c>.</remarks>
     public SteamItemInstanceID_t ShirtItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as pants for this player's character.
     /// </summary>
-    /// <remarks>Defaults to 0.</remarks>
+    /// <remarks>Defaults to <c>0</c>.</remarks>
     public SteamItemInstanceID_t PantsItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as a hat for this player's character.
     /// </summary>
-    /// <remarks>Defaults to 0.</remarks>
+    /// <remarks>Defaults to <c>0</c>.</remarks>
     public SteamItemInstanceID_t HatItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as a backpack for this player's character.
     /// </summary>
-    /// <remarks>Defaults to 0.</remarks>
+    /// <remarks>Defaults to <c>0</c>.</remarks>
     public SteamItemInstanceID_t BackpackItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as a vest for this player's character.
     /// </summary>
-    /// <remarks>Defaults to 0.</remarks>
+    /// <remarks>Defaults to <c>0</c>.</remarks>
     public SteamItemInstanceID_t VestItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as a mask for this player's character.
     /// </summary>
-    /// <remarks>Defaults to 0.</remarks>
+    /// <remarks>Defaults to <c>0</c>.</remarks>
     public SteamItemInstanceID_t MaskItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as glasses for this player's character.
     /// </summary>
-    /// <remarks>Defaults to 0.</remarks>
+    /// <remarks>Defaults to <c>0</c>.</remarks>
     public SteamItemInstanceID_t GlassesItem { get; set; }
 
     /// <summary>
@@ -430,6 +500,28 @@ public class DummyPlayerJoinConfiguration
         }
     }
 
+    internal string? GetRequiredModulesString()
+    {
+        RequiredModule[]? modules = ReportedRequiredModules;
+        if (modules == null)
+            return null;
+
+        if (modules.Length == 0)
+            return string.Empty;
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < modules.Length; i++)
+        {
+            if (i != 0)
+                sb.Append(';');
+
+            ref DummyPlayerJoinConfiguration.RequiredModule module = ref modules[i];
+            sb.Append(module.Name).Append(',').Append(module.Version);
+        }
+
+        return sb.ToString();
+    }
+
     private byte[][] GenerateRandomHWIDs(int amt)
     {
         byte[][] outArr = new byte[amt][];
@@ -485,6 +577,18 @@ public class DummyPlayerJoinConfiguration
         }
 
         _customizationUserSetMask = mask;
+    }
+
+    internal byte[] GetHwidPacked()
+    {
+        byte[][] hwids = _reportedHardwareIds;
+        byte[] newArray = new byte[hwids.Length * 20];
+        for (int i = 0; i < hwids.Length; ++i)
+        {
+            Buffer.BlockCopy(hwids[i], 0, newArray, i * 20, 20);
+        }
+
+        return newArray;
     }
 
     /// <summary>
@@ -833,5 +937,26 @@ public class DummyPlayerJoinConfiguration
     {
         CharacterIndex = value;
         return this;
+    }
+
+    /// <summary>
+    /// Defines a required module.
+    /// </summary>
+    public struct RequiredModule
+    {
+        public string Name;
+        public uint Version;
+
+        public RequiredModule(string name, string version)
+        {
+            Name = name;
+            Version = Parser.getUInt32FromIP(version);
+        }
+
+        public RequiredModule(string name, uint version)
+        {
+            Name = name;
+            Version = version;
+        }
     }
 }

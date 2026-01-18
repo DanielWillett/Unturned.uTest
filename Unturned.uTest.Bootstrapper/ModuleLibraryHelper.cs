@@ -19,6 +19,7 @@ internal class ModuleLibraryHelper(string moduleHomePath)
         Version _3100 = new Version(3, 1, 0, 0);
         Version _4000 = new Version(4, 0, 0, 0);
 
+        Log("=== BOOTSTRAPPING uTEST ===");
         Log("Adding fallback libraries for uTest.");
 
         TryAddFallback(_3100, "Microsoft.Extensions.FileSystemGlobbing.exe", out _);
@@ -63,9 +64,7 @@ internal class ModuleLibraryHelper(string moduleHomePath)
         TryAddFallback(_4000, "System.Threading.Tasks.exe", out _);
         TryAddFallback(new Version(4, 2, 0, 1), "System.Threading.Tasks.Extensions.exe", out _);
         TryAddFallback(new Version(4, 0, 5, 0), "System.Buffers.exe", out _);
-#if DEBUG
-        Log("Done.");
-#endif
+        Log("=== BOOTSTRAPPING uTEST ===");
     }
 
     internal bool TryAddFallback(Version referencedVersion, string fileName, out AssemblyName an, bool load = false)
@@ -109,6 +108,7 @@ internal class ModuleLibraryHelper(string moduleHomePath)
 
     private static void Log(string msg)
     {
+        msg = "[uTest Bootstrapper] " + msg;
         if (Dedicator.isStandaloneDedicatedServer)
         {
             CommandWindow.Log(msg);

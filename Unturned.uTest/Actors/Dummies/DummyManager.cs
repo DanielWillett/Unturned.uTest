@@ -119,66 +119,103 @@ internal class DummyManager : IDummyPlayerController
         return _remoteDummyLauncher.StartDummiesAsync(minFullDummies);
     }
 
-    internal ValueTask SpawnPlayersAsync(UnturnedTestInstanceData currentTest, List<ulong>? idsOrNull, CancellationToken token)
+    internal Task InitializeDummiesForTestAsync(UnturnedTestInstanceData test, CancellationToken token = default)
     {
-        _module.Logger.LogInformation($"Spawning players: (mode: {currentTest.SimulationMode}, simCt: {_simulatedDummies.Count}).");
-        if (currentTest.SimulationMode == PlayerSimulationMode.Full)
-        {
-            return _remoteDummyLauncher!.ConnectDummyPlayersAsync(idsOrNull, token);
-        }
-        
-        if (_simulatedDummies.Count > 0)
-        {
-            return new ValueTask(ConnectDummyPlayersAsync(idsOrNull, token));
-        }
+        // clear steam ID cache for ReadyToConnect message so it doesn't interfere with next test
+        ServerMessageHandler_ReadyToConnect.joinRateLimiter.steamIdRateLimitingLog.Clear();
 
-        if (idsOrNull is { Count: > 0 })
-        {
-            throw new ActorNotFoundException(idsOrNull[0].ToString("D17", CultureInfo.InvariantCulture));
-        }
-            
-        return default;
+        _remoteDummyLauncher?.ClearServerDetailsCache();
+        return Task.CompletedTask;
     }
 
-    internal ValueTask DespawnPlayersAsync(UnturnedTestInstanceData currentTest, List<ulong>? idsOrNull, CancellationToken token)
+    internal IReadOnlyList<IServersideTestPlayer>? AllocateDummiesToTest(UnturnedTestInstanceData test, out bool overflow)
     {
-        if (currentTest.SimulationMode == PlayerSimulationMode.Full)
+        if (test.Dummies <= 0)
         {
-            return _remoteDummyLauncher!.DisconnectDummyPlayersAsync(idsOrNull, token);
-        }
-        
-        if (_simulatedDummies.Count > 0)
-        {
-            return default;// todo new ValueTask(ConnectDummyPlayersAsync(idsOrNull, token));
+            test.AllocatedDummies = null;
+            overflow = false;
+            return null;
         }
 
-        if (idsOrNull is { Count: > 0 })
+        IServersideTestPlayer[] players = new IServersideTestPlayer[test.Dummies];
+        int ct = 0;
+        if (test.SimulationMode == PlayerSimulationMode.Full)
         {
-            throw new ActorNotFoundException(idsOrNull[0].ToString("D17", CultureInfo.InvariantCulture));
-        }
-
-        return default;
-    }
-
-    private async Task ConnectDummyPlayersAsync(List<ulong>? idsOrNull, CancellationToken token)
-    {
-        List<SimulatedDummyPlayerActor> playersToConnect = new List<SimulatedDummyPlayerActor>();
-        if (idsOrNull == null)
-            playersToConnect.AddRange(_simulatedDummies.Values);
-        else
-        {
-            foreach (ulong pl in idsOrNull)
+            if (_remoteDummyLauncher == null)
             {
-                if (!_simulatedDummies.TryGetValue(pl, out SimulatedDummyPlayerActor simPl))
+                test.AllocatedDummies = null;
+                overflow = true;
+                return null;
+            }
+
+            foreach (RemoteDummyPlayerActor actor in _remoteDummyLauncher.RemoteDummies.Values)
+            {
+                if (actor.Status is not (DummyReadyStatus.StartedUp or DummyReadyStatus.InMenu or DummyReadyStatus.Disconnecting)
+                    || actor.Test != null)
                 {
-                    throw new ActorNotFoundException(pl.ToString("D17", CultureInfo.InvariantCulture));
+                    continue;
                 }
 
-                playersToConnect.Add(simPl);
+                players[ct] = actor;
+                actor.Test = test;
+                ++ct;
+                if (ct >= test.Dummies)
+                    break;
+            }
+        }
+        else
+        {
+            foreach (SimulatedDummyPlayerActor actor in _simulatedDummies.Values)
+            {
+                if (actor.IsOnline || actor.Test != null)
+                    continue;
+
+                players[ct] = actor;
+                actor.Test = test;
+                ++ct;
+                if (ct >= test.Dummies)
+                    break;
             }
         }
 
-        // todo: BeginDummyConnect()
+        if (ct < test.Dummies)
+        {
+            Array.Resize(ref players, ct);
+            overflow = true;
+        }
+        else
+        {
+            overflow = false;
+        }
+
+        test.AllocatedDummies = players;
+        return players;
+    }
+
+    internal void DeallocateDummies(UnturnedTestInstanceData test)
+    {
+        IServersideTestPlayer[]? oldDummies = Interlocked.Exchange(ref test.AllocatedDummies, null);
+        if (oldDummies == null)
+            return;
+
+        foreach (IServersideTestPlayer player in oldDummies)
+        {
+            player.Test = null;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task SpawnPlayerAsync(IServersideTestPlayer player, Action<DummyPlayerJoinConfiguration>? configurePlayers, bool ignoreAlreadyConnected, CancellationToken token)
+    {
+        // todo
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task DespawnPlayerAsync(IServersideTestPlayer player, bool ignoreAlreadyDisconnected, CancellationToken token)
+    {
+        // todo
+        return Task.CompletedTask;
     }
 
     public bool TryGetDummy(Player player, [MaybeNullWhen(false)] out BaseServersidePlayerActor dummy)

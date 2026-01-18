@@ -43,7 +43,7 @@ internal class TestRunner
         bool allPass = true;
 
         UnturnedTestList testList = _module.TestList!;
-        TestExecutionPipeline pipeline = new TestExecutionPipeline(this, _logger, testList, _module, token);
+        TestExecutionPipeline pipeline = new TestExecutionPipeline(this, _logger, testList, _module, _module.ExceptionFormatter, token);
 
         List<UnturnedTestReference> testUids = testList.Tests.ToList();
 

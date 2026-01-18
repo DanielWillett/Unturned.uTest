@@ -11,7 +11,6 @@ using uTest.Discovery;
 using uTest.Dummies;
 using uTest.Patches;
 using uTest.Protocol;
-using uTest.Util;
 using Component = UnityEngine.Component;
 
 namespace uTest.Module;
@@ -54,6 +53,11 @@ internal class MainModule : MonoBehaviour, IDisposable
     /// List of all tests to be ran.
     /// </summary>
     public UnturnedTestList? TestList { get; private set; }
+
+    /// <summary>
+    /// The exception formatter to use when printing exceptions to your IDE.
+    /// </summary>
+    public IExceptionFormatter? ExceptionFormatter { get; set; }
 
     /// <summary>
     /// Server used to communicate with the test runner.
@@ -130,6 +134,8 @@ internal class MainModule : MonoBehaviour, IDisposable
         _cancellationTokenSource = new CancellationTokenSource();
         CancellationToken = _cancellationTokenSource.Token;
 
+        //Assembly.Load("ModularRPCs.Unity, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null");
+
         bool failedToParse = false;
         if (!_clTestFile.hasValue || !TryRefreshTestFile(out failedToParse))
         {
@@ -172,6 +178,10 @@ internal class MainModule : MonoBehaviour, IDisposable
                       """;
 
         CommandWindow.Log(log);
+
+        CommandWindow.Log("If you see a dependency error below this about StackCleaner it can be ignored.");
+        ExceptionFormatter ??= StackCleanerExceptionFormatter.GetStackCleanerFormatterIfInstalled(TestList.UseColorfulStackTrace);
+
 
         // Patches
         {
@@ -291,7 +301,6 @@ internal class MainModule : MonoBehaviour, IDisposable
         }
     }
 
-    [MemberNotNull(nameof(Tests))]
     private async Task DiscoverTestsAsync(UnturnedTestList testList)
     {
         _assetLoadModelTrigger = new TaskCompletionSource<int>();
@@ -340,12 +349,16 @@ internal class MainModule : MonoBehaviour, IDisposable
         }
 
         WorkshopItems = workshopItems.ToArray();
-
         // todo: doesnt work on client and is a race condition with asset loading (see Provider.host())
         await GameThread.RunAndWaitAsync(workshopItems, static workshopItems =>
         {
             WorkshopDownloadConfig.getOrLoad().File_IDs = new List<ulong>(workshopItems);
         }, CancellationToken);
+
+        if (WorkshopItems.Length > 0)
+        {
+            Logger.LogInformation($"Workshop items: {string.Join(", ", WorkshopDownloadConfig.getOrLoad().File_IDs)}.");
+        }
 
         AssetLoadModel = AssetLoadModel.Create(this, true);
         _hasAssetLoadModel = true;

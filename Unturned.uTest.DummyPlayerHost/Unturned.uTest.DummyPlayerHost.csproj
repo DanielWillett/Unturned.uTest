@@ -6,6 +6,7 @@
 		<LangVersion>preview</LangVersion>
 		<RootNamespace>uTest.Dummies.Host</RootNamespace>
     <DebugType>portable</DebugType>
+    <UnturnedBuild>Client</UnturnedBuild>
   </PropertyGroup>
 
 	<ItemGroup>
@@ -23,7 +24,7 @@
 
     <PackageReference Include="DanielWillett.ReflectionTools" Version="4.0.0" />
     <PackageReference Include="DanielWillett.ReflectionTools.Harmony" Version="4.0.0" />
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease26,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease27,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" Aliases="JBA" />
@@ -86,6 +87,19 @@
     <Publicize Include="Assembly-CSharp:SDG.Unturned.ConvenientSavedata.instance" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.ConvenientSavedataImplementation" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.ConvenientSavedataImplementation..ctor" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending._isPro" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending._face" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending._hair" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending._beard" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending._skin" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending._color" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending._markerColor" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending._skillset" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending._language" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending.clientPlatform" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending.lobbyID" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Lobbies.currentLobby" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Characters._packageSkins" />
 
   </ItemGroup>
 
@@ -93,6 +107,7 @@
 
 		<UnturnedReference Include="Assembly-CSharp" />
 		<UnturnedReference Include="SystemEx" />
+		<UnturnedReference Include="UnityEx" />
     <UnturnedReference Include="com.rlabrecque.steamworks.net" />
 		<UnturnedReference Include="SDG.NetTransport" />
 		<UnturnedReference Include="SDG.NetPak.Runtime" />

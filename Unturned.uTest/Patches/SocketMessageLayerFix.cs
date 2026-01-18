@@ -257,9 +257,10 @@ internal class SocketMessageLayerFixed : SocketMessageLayer
     private byte _sizePart;
     private bool _hasSizePart;
 
-    public void ReceiveMessages_Fix(Socket socket)
+    public void ReceiveMessages_Fix(Socket? socket)
     {
-        if (socket.Available <= 0)
+        // socket can be null on disconnect
+        if (socket is not { Available: > 0 })
             return;
 
         int bytesReceived = socket.Receive(internalBuffer, 0, internalBuffer.Length, SocketFlags.None, out SocketError errorCode);

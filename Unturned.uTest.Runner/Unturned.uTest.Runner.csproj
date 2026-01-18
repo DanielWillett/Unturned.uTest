@@ -65,7 +65,7 @@
     <PackageReference Include="xunit.assert" Version="*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease26, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease27, 2.0.0)" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="DanielWillett.SpeedBytes" Version="1.*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />
     <PackageReference Include="DanielWillett.ReflectionTools" Version="*" GeneratePathProperty="True" />
     <PackageReference Include="DanielWillett.ReflectionTools.Harmony" Version="*" ExcludeAssets="all" PrivateAssets="all" GeneratePathProperty="True" />

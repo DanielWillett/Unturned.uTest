@@ -19,6 +19,8 @@ internal sealed class TestRunParameters
     // created by compiled test
     internal TestContext? Context;
 
+    internal IReadOnlyList<IServersideTestPlayer>? Dummies;
+
     internal TestRunParameters(
         UnturnedTestInstanceData test,
         CancellationToken token,
