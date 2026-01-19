@@ -279,7 +279,7 @@ internal class SocketMessageLayerFixed : SocketMessageLayer
                     _hasSizePart = false;
                     ++offset;
                 }
-                else if (offset == internalBuffer.Length - 1)
+                else if (offset == bytesReceived - 1)
                 {
                     _hasSizePart = true;
                     _sizePart = internalBuffer[offset];
