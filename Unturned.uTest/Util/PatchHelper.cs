@@ -4,12 +4,58 @@ using JetBrains.Annotations;
 using System;
 using System.Reflection;
 using System.Reflection.Emit;
+using DanielWillett.ReflectionTools.Emit;
 using DanielWillett.ReflectionTools.Formatting;
 
 namespace uTest.Util;
 
 internal static class PatchHelper
 {
+    internal static LocalReference GetLocalReference(this CodeInstruction instruction)
+    {
+        if (instruction.opcode == OpCodes.Ldloc_0 || instruction.opcode == OpCodes.Stloc_0)
+            return new LocalReference(0);
+
+        if (instruction.opcode == OpCodes.Ldloc_1 || instruction.opcode == OpCodes.Stloc_1)
+            return new LocalReference(1);
+
+        if (instruction.opcode == OpCodes.Ldloc_2 || instruction.opcode == OpCodes.Stloc_2)
+            return new LocalReference(2);
+
+        if (instruction.opcode == OpCodes.Ldloc_3 || instruction.opcode == OpCodes.Stloc_3)
+            return new LocalReference(3);
+
+        if (instruction.opcode == OpCodes.Ldloc_S || instruction.opcode == OpCodes.Ldloca_S
+            || instruction.opcode == OpCodes.Ldloc || instruction.opcode == OpCodes.Ldloc_S
+            || instruction.opcode == OpCodes.Stloc || instruction.opcode == OpCodes.Stloc_S)
+        {
+            return new LocalReference((LocalBuilder)instruction.operand);
+        }
+
+        return default;
+    }
+
+    /// <summary>
+    /// Moves to the previous instruction.
+    /// </summary>
+    internal static bool MoveBack(this TranspileContext ctx)
+    {
+        if (ctx.CaretIndex == 0)
+        {
+            return false;
+        }
+
+        for (int i = 1; i < ctx.Count; ++i)
+        {
+            int newIndex = ctx.CaretIndex - i;
+            ctx.CaretIndex = newIndex;
+            if (ctx.CaretIndex <= newIndex)
+                return true;
+        }
+
+        return false;
+    }
+
 #if DEBUG
     /// <summary>
     /// Transpiles a method to add logging for entry and exit of the method.

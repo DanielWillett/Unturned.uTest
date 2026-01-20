@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using uTest.Compat.Logging;
 using uTest.Dummies;
 using uTest.Environment;
 
@@ -15,11 +16,14 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     internal List<TestArtifact>? Artifacts;
     internal bool HasStarted = false;
     internal StringBuilder StandardOutput;
-    internal StringBuilder StandardError;
+    internal StringBuilder? StandardError;
     internal List<TestOutputMessage>? Messages;
 
+    private bool _didHookDedicatedIO;
+    private bool _didHookConsole;
+
     private readonly UnturnedTestUid _uid;
-    private readonly TextWriter _prevStdOut, _prevStdErr;
+    private TextWriter? _prevStdOut, _prevStdErr;
 
     public UnturnedTestList Configuration => _parameters.Configuration;
 
@@ -35,7 +39,7 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
 
     public CancellationToken CancellationToken => _parameters.Token;
 
-    public ILogger Logger => CommandWindowLogger.Instance;
+    public ILogger Logger { get; }
 
     // invoked by TestCompiler's generated code before the test starts
     [UsedImplicitly]
@@ -46,33 +50,57 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
         Runner = runner;
         Players = parameters.Dummies ?? Array.Empty<IServersideTestPlayer>();
 
-        CommandWindowSynchronizationHelper.FlushCommandWindow();
-        Dedicator.commandWindow.addIOHandler(this);
+        MainModule module = _parameters.Module;
 
-        TextWriter stdOut = Console.Out;
-        TextWriter stdErr = Console.Error;
-        _prevStdOut = stdOut;
-        _prevStdErr = stdErr;
-        Console.SetOut(new StringWriter(StandardOutput = new StringBuilder()));
-        Console.SetError(new StringWriter(StandardError = new StringBuilder()));
+        Logger = module.GetOrCreateLogger("uTest: " + parameters.Test.Instance.Test.DisplayName);
+        
+        CommandWindowSynchronizationHelper.FlushCommandWindow();
+
+        ILoggerIntegration? loggerIntegration = module.LoggerIntegration;
+        if (loggerIntegration == null || loggerIntegration.ShouldHookDedicatedIO)
+        {
+            Dedicator.commandWindow.addIOHandler(this);
+            _didHookDedicatedIO = true;
+        }
+
+        StandardOutput = new StringBuilder();
+        if (loggerIntegration == null || loggerIntegration.ShouldHookConsole)
+        {
+            TextWriter stdOut = Console.Out;
+            TextWriter stdErr = Console.Error;
+            _prevStdOut = stdOut;
+            _prevStdErr = stdErr;
+            Console.SetOut(new StringWriter(StandardOutput));
+            Console.SetError(new StringWriter(StandardError = new StringBuilder()));
+            _didHookConsole = true;
+        }
+
+        loggerIntegration?.BeginHook((logLvl, msg) =>
+        {
+            AddMessage(logLvl, msg);
+            if (_didHookConsole)
+                return;
+
+            StandardOutput.AppendLine(msg);
+        });
     }
 
     public void outputInformation(string information)
     {
-        AddMessage((int)LogLevel.Information, information);
+        AddMessage(LogLevel.Information, information);
     }
 
     public void outputWarning(string warning)
     {
-        AddMessage((int)LogLevel.Warning, warning);
+        AddMessage(LogLevel.Warning, warning);
     }
 
     public void outputError(string error)
     {
-        AddMessage((int)LogLevel.Error, error);
+        AddMessage(LogLevel.Error, error);
     }
 
-    private void AddMessage(int severity, string message)
+    private void AddMessage(LogLevel severity, string message)
     {
         if (!_parameters.Configuration.CollectTrxProperties)
             return;
@@ -84,7 +112,7 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
 
         lock (Messages)
         {
-            Messages.Add(new TestOutputMessage(severity, message));
+            Messages.Add(new TestOutputMessage((int)severity, message));
         }
     }
 
@@ -120,7 +148,7 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     {
         if (GameThread.IsCurrent)
         {
-            inputCommitted?.Invoke(command);
+            SendTerminalInputIntl(command);
         }
         else
         {
@@ -129,8 +157,20 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
             state.Context = this;
             GameThread.RunAndWait(state, static state =>
             {
-                state.Context.inputCommitted?.Invoke(state.Command);
+                state.Context.SendTerminalInputIntl(state.Command);
             }, _parameters.Token);
+        }
+    }
+
+    private void SendTerminalInputIntl(string command)
+    {
+        if (_didHookDedicatedIO)
+        {
+            inputCommitted?.Invoke(command);
+        }
+        else
+        {
+            Dedicator.commandWindow.onInputCommitted(command);
         }
     }
 
@@ -221,9 +261,26 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     public void Dispose()
     {
         CommandWindowSynchronizationHelper.FlushCommandWindow();
-        Dedicator.commandWindow.removeIOHandler(this);
-        Console.SetOut(_prevStdOut);
-        Console.SetError(_prevStdErr);
+
+        _parameters.Module.LoggerIntegration?.EndHook();
+
+        if (_didHookDedicatedIO)
+        {
+            Dedicator.commandWindow.removeIOHandler(this);
+            _didHookDedicatedIO = false;
+        }
+        
+        if (_prevStdOut != null)
+        {
+            Console.SetOut(_prevStdOut);
+            _prevStdOut = null;
+        }
+        if (_prevStdErr != null)
+        {
+            Console.SetError(_prevStdErr);
+            _prevStdErr = null;
+        }
+        _didHookConsole = false;
     }
 
     public event CommandInputHandler? inputCommitted;

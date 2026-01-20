@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>uTest.Compat.OpenMod</RootNamespace>
+    <DebugType>portable</DebugType>
+
+    <Version>0.0.1</Version>
+    <PackageVersion>$(Version)</PackageVersion>
+
+    <FileVersion>$(Version).0</FileVersion>
+    <AssemblyVersion>$(Version).0</AssemblyVersion>
+
+  </PropertyGroup>
+
+  <ItemGroup>
+
+    <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
+
+    <!--<PackageReference Include="OpenMod.API" Version="1.0.1"/>-->
+    <PackageReference Include="Serilog" Version="2.9.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="3.0.0" />
+
+  </ItemGroup>
+
+</Project>

@@ -21,6 +21,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
+    <ProjectReference Include="../Unturned.uTest.Compat/Unturned.uTest.Compat.csproj" />
 
     <PackageReference Include="DanielWillett.ReflectionTools" Version="4.0.0" />
     <PackageReference Include="DanielWillett.ReflectionTools.Harmony" Version="4.0.0" />
@@ -99,7 +100,6 @@
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending.clientPlatform" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPending.lobbyID" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.Lobbies.currentLobby" />
-    <Publicize Include="Assembly-CSharp:SDG.Unturned.Characters._packageSkins" />
 
   </ItemGroup>
 

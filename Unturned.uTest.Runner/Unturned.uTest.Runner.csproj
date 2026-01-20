@@ -121,7 +121,13 @@ $(Pkgxunit_assert)\lib\netstandard1.1\xunit.assert.dll
   <ItemGroup>
 	  <EmbeddedResource Include="Module\**" />
     <EmbeddedResource Include="..\Unturned.uTest.DummyPlayerHost\bin\$(Configuration)\netstandard2.1\Unturned.uTest.DummyPlayerHost.dll" Link="Module/Unturned.uTest.DummyPlayerHost.dll" />
+    <EmbeddedResource Include="..\Unturned.uTest.DummyPlayerHost\bin\$(Configuration)\netstandard2.1\Unturned.uTest.DummyPlayerHost.pdb" Link="Module/Unturned.uTest.DummyPlayerHost.pdb" />
+    <EmbeddedResource Include="..\Unturned.uTest.Compat\bin\$(Configuration)\netstandard2.0\Unturned.uTest.Compat.dll" Link="Module/Unturned.uTest.Compat.dll" />
+    <EmbeddedResource Include="..\Unturned.uTest.Compat\bin\$(Configuration)\netstandard2.0\Unturned.uTest.Compat.pdb" Link="Module/Unturned.uTest.Compat.pdb" />
+    <EmbeddedResource Include="..\Unturned.uTest.Compat.OpenMod\bin\$(Configuration)\netstandard2.0\Unturned.uTest.Compat.OpenMod.dll" Link="Module/Unturned.uTest.Compat.OpenMod.dll" />
+    <EmbeddedResource Include="..\Unturned.uTest.Compat.OpenMod\bin\$(Configuration)\netstandard2.0\Unturned.uTest.Compat.OpenMod.pdb" Link="Module/Unturned.uTest.Compat.OpenMod.pdb" />
     <EmbeddedResource Include="..\Unturned.uTest.Bootstrapper\bin\$(Configuration)\netstandard2.0\Unturned.uTest.Bootstrapper.dll" Link="Module/Unturned.uTest.Bootstrapper.dll" />
+    <EmbeddedResource Include="..\Unturned.uTest.Bootstrapper\bin\$(Configuration)\netstandard2.0\Unturned.uTest.Bootstrapper.pdb" Link="Module/Unturned.uTest.Bootstrapper.pdb" />
     <EmbeddedResource Include="..\README.md" Link="Module/README.md" />
   </ItemGroup>
 

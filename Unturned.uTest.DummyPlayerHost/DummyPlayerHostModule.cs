@@ -354,14 +354,14 @@ internal partial class DummyPlayerHost : IDisposable
         }
     }
 
-    [RpcSend(typeof(DummyPlayerLauncher), "ReceiveInQueueBump")]
+    [RpcSend(typeof(RemoteDummyManager), "ReceiveInQueueBump")]
     private partial void SendInQueueBump(ulong steam64);
 
-    [RpcSend(typeof(DummyPlayerLauncher), "ReceiveStatusNotification")]
+    [RpcSend(typeof(RemoteDummyManager), "ReceiveStatusNotification")]
     [RpcTimeout(14 * Timeouts.Seconds)]
     private partial RpcTask SendStatusNotification(ulong id, DummyReadyStatus status, nint hWnd);
 
-    [RpcSend(typeof(DummyPlayerLauncher), "ReceiveRejectedStatusNotification")]
+    [RpcSend(typeof(RemoteDummyManager), "ReceiveRejectedStatusNotification")]
     private partial RpcTask SendRejectedStatusNotification(ulong id, ESteamConnectionFailureInfo rejection, string? reason, uint duration);
 
     [RpcReceive]
@@ -459,17 +459,16 @@ internal partial class DummyPlayerHost : IDisposable
         character.markerColor = markerColor;
         character.BeardColor = beardColor;
         character.hand = isLeftHanded;
-        character.packageShirt = shirt;
-        character.packagePants = pants;
-        character.packageHat = hat;
-        character.packageBackpack = backpack;
-        character.packageVest = vest;
-        character.packageMask = mask;
-        character.packageGlasses = glasses;
-        if (activeSkins != null)
-        {
-            Characters._packageSkins = new List<ulong>(activeSkins);
-        }
+
+        // prevents steam from querying for TempSteamworksEconomy.wearingResult
+        character.packageShirt = 0ul;
+        character.packagePants = 0ul;
+        character.packageHat = 0ul;
+        character.packageBackpack = 0ul;
+        character.packageVest = 0ul;
+        character.packageMask = 0ul;
+        character.packageGlasses = 0ul;
+        Characters.packageSkins.Clear();
 
         character.skillset = skillset;
 

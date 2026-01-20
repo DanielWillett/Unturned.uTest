@@ -22,7 +22,8 @@ internal class UnturnedLauncher : IDisposable
 
     public TestEnvironmentClient Client { get; }
 
-    public TimeSpan StartupTimeout { get; set; } = TimeSpan.FromSeconds(30);
+    // originally did a short amount of time here but OpenMod can start up pretty slowly the first time
+    public TimeSpan StartupTimeout { get; set; } = TimeSpan.FromMinutes(1.5);
     public TimeSpan LoadTimeout { get; set; } = TimeSpan.FromMinutes(5);
 
     public string? UnturnedDirectoryOverride

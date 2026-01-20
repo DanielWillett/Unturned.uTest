@@ -40,6 +40,8 @@
 
   <ItemGroup>
 
+    <ProjectReference Include="../Unturned.uTest.Compat/Unturned.uTest.Compat.csproj" />
+
     <PackageReference Include="PolySharp" Version="1.15.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
@@ -87,10 +89,20 @@
 	<ItemGroup>
 
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.ServerMessageHandler_GetWorkshopFiles" />
-		<Publicize Include="Assembly-CSharp:SDG.Unturned.NetMessages" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.NetMessages" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.NetMessages.GetInvokableReader" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.NetReflection" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.NetReflection.clientMethodsBitCount" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.NetReflection.clientMethodsLength" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.NetReflection.clientMethods" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.ClientMethodInfo.declaringType" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.ClientMethodInfo.debugName" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.ClientMethodInfo.readMethod" />
+		<Publicize Include="Assembly-CSharp:SDG.Unturned.ClientInvocationContext..ctor" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.buffer" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.IsBattlEyeActiveOnCurrentServer" />
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.DedicatedUGC.itemsToDownload" />
+		<Publicize Include="Assembly-CSharp:SDG.Unturned.CommandWindow.onInputCommitted" />
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPluginAdvertising" />
 		<Publicize Include="Assembly-CSharp:SDG.Framework.Modules.ModuleHook.discoveredNameToPath" />
 		<Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer" />
@@ -98,6 +110,7 @@
 		<Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.pendingMessage" />
     <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.pendingMessageOffset" />
     <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.messageQueue" />
+    <Publicize Include="Assembly-CSharp:SDG.NetTransport.SteamNetworkingSockets.ServerTransport_SteamNetworkingSockets.clUseIpSocket" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.verifyNextPlayerInQueue" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.ServerMessageHandler_ReadyToConnect.joinRateLimiter" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.TransportConnectionRateLimiter.steamIdRateLimitingLog" />

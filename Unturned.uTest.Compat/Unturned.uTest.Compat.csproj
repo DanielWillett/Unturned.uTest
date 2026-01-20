@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>uTest.Compat</RootNamespace>
+    <DebugType>portable</DebugType>
+
+    <Version>0.0.1</Version>
+    <PackageVersion>$(Version)</PackageVersion>
+
+    <FileVersion>$(Version).0</FileVersion>
+    <AssemblyVersion>$(Version).0</AssemblyVersion>
+
+  </PropertyGroup>
+
+
+</Project>

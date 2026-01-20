@@ -9,21 +9,34 @@ using System.ComponentModel.Design;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using DanielWillett.ReflectionTools;
+using SDG.NetTransport.SteamNetworkingSockets;
+using Unturned.SystemEx;
 using uTest.Module;
 
 namespace uTest.Dummies;
 
-// 'Dummy' players are inspired by DiFFoZ's Dummy plugin: https://github.com/EvolutionPlugins/Dummy 
-internal class DummyManager : IDummyPlayerController
+/// <summary>
+/// Class responsible for dispatching calls between simulated or remote dummies, depending on the test.
+/// <para> <br/>
+/// Simulated dummies are ran in-process and can do simple things but aren't as realistic or flexable as remote bots. <br/>
+/// Remote bots are literally an instance of the Unturned client that connects to the server and can do pretty much everything a player can.
+/// </para>
+/// </summary>
+internal class DummyManager : IDisposable
 {
     private readonly MainModule _module;
-    private readonly Dictionary<ulong, SimulatedDummyPlayerActor> _simulatedDummies = new Dictionary<ulong, SimulatedDummyPlayerActor>();
 
-    private DummyPlayerLauncher? _remoteDummyLauncher;
+    internal readonly SteamIdPool SteamIdPool;
 
-    internal SteamIdPool SteamIdPool { get; }
+    internal RemoteDummyManager? RemoteDummies;
+    internal SimulatedDummyManager? SimulatedDummies;
 
-    internal IDummyPlayerController? Controller => _remoteDummyLauncher;
+    internal bool HasServerDetails;
+    internal ulong ServerDetailsCode;
+    internal ushort ServerDetailsPort;
+    internal IPv4Address ServerDetailsAddress;
+    internal bool ServerHideClientIp;
 
     public DummyManager(MainModule module)
     {
@@ -31,10 +44,12 @@ internal class DummyManager : IDummyPlayerController
         _module = module;
     }
 
+
     public Task<bool> InitializeDummiesAsync(UnturnedTestInstanceData[] tests)
     {
         bool needsFullPlayers = false;
-        int minDummies = 0;
+        bool needsSimulatedPlayers = false;
+        int maxDummyCount = 0;
         int minFullDummies = 0;
         List<PlayerCountAttribute> playerCountListTemp = new List<PlayerCountAttribute>();
         List<PlayerSimulationModeAttribute> playerModeListTemp = new List<PlayerSimulationModeAttribute>();
@@ -56,13 +71,15 @@ internal class DummyManager : IDummyPlayerController
 
             if (mode == PlayerSimulationMode.Full)
                 needsFullPlayers = true;
+            else
+                needsSimulatedPlayers = true;
 
             TestAttributeHelper<PlayerCountAttribute>.GetAttributes(test.Instance.Method, playerCountListTemp);
             if (playerCountListTemp.Count == 0)
                 continue;
 
             PlayerCountAttribute max = playerCountListTemp.Aggregate((a, max) => a.PlayerCount > max.PlayerCount ? a : max);
-            minDummies = Math.Max(max.PlayerCount, minDummies);
+            maxDummyCount = Math.Max(max.PlayerCount, maxDummyCount);
             if (mode == PlayerSimulationMode.Full)
             {
                 minFullDummies = Math.Max(max.PlayerCount, minFullDummies);
@@ -72,32 +89,41 @@ internal class DummyManager : IDummyPlayerController
             playerCountListTemp.Clear();
         }
 
-        if (minDummies > byte.MaxValue)
+        if (maxDummyCount > byte.MaxValue)
         {
-            _module.Logger.LogError($"At least one test requires more dummies than players supported by Unturned: {minDummies}. There should not be more than {byte.MaxValue} dummies.");
+            _module.Logger.LogError($"At least one test requires more dummies than players supported by Unturned: {maxDummyCount}. There should not be more than {byte.MaxValue} dummies.");
             return Task.FromResult(false);
         }
 
-        GameThread.Run(minDummies, minDummies => Provider.maxPlayers = (byte)minDummies);
+        GameThread.Run(maxDummyCount, minDummies => Provider.maxPlayers = (byte)minDummies);
 
-        if (minDummies <= 0)
+        if (maxDummyCount <= 0)
         {
             return Task.FromResult(true);
         }
 
-        if (!needsFullPlayers)
-            return Task.FromResult(true);
+        if (needsSimulatedPlayers)
+        {
+            SimulatedDummies ??= new SimulatedDummyManager(_module, _module.Logger);
+        }
 
-        if (_remoteDummyLauncher == null)
+        if (!needsFullPlayers)
+        {
+            return Task.FromResult(true);
+        }
+
+        if (RemoteDummies == null)
         {
             ServiceContainer cont = new ServiceContainer();
 
-            ProxyGenerator.Instance.SetLogger(DefaultLoggerReflectionTools.Logger);
+            IReflectionToolsLogger logger = Accessor.Logger ?? DefaultLoggerReflectionTools.Logger;
+
+            ProxyGenerator.Instance.SetLogger(logger);
             ServerRpcConnectionLifetime lifetime = new ServerRpcConnectionLifetime();
             DefaultSerializer serializer = new DefaultSerializer(new SerializationConfiguration
             {
                 MaximumGlobalArraySize = 256,
-                MaximumArraySizes = { { typeof(byte), 16384 }, { typeof(string), 16384 } }, // todo
+                MaximumArraySizes = { { typeof(byte), 16384 } },
                 MaximumStringLength = 16384
             });
 
@@ -106,17 +132,17 @@ internal class DummyManager : IDummyPlayerController
             cont.AddService(typeof(IRpcSerializer), serializer);
 
             DependencyInjectionRpcRouter router = new DependencyInjectionRpcRouter(cont);
-            lifetime.SetLogger(DefaultLoggerReflectionTools.Logger);
-            router.SetLogger(DefaultLoggerReflectionTools.Logger);
+            lifetime.SetLogger(logger);
+            router.SetLogger(logger);
 
             cont.AddService(typeof(IRpcRouter), router);
 
-            _remoteDummyLauncher = ProxyGenerator.Instance.CreateProxy<DummyPlayerLauncher>(router, true, _module, _module.Logger, cont);
-            cont.AddService(typeof(DummyPlayerLauncher), _remoteDummyLauncher);
-            cont.AddService(typeof(IDummyPlayerController), _remoteDummyLauncher);
+            RemoteDummies = ProxyGenerator.Instance.CreateProxy<RemoteDummyManager>(router, true, _module, _module.Logger, cont);
+            cont.AddService(typeof(RemoteDummyManager), RemoteDummies);
+            cont.AddService(typeof(IDummyPlayerController), RemoteDummies);
         }
 
-        return _remoteDummyLauncher.StartDummiesAsync(minFullDummies);
+        return RemoteDummies.StartDummiesAsync(minFullDummies);
     }
 
     internal Task InitializeDummiesForTestAsync(UnturnedTestInstanceData test, CancellationToken token = default)
@@ -124,7 +150,7 @@ internal class DummyManager : IDummyPlayerController
         // clear steam ID cache for ReadyToConnect message so it doesn't interfere with next test
         ServerMessageHandler_ReadyToConnect.joinRateLimiter.steamIdRateLimitingLog.Clear();
 
-        _remoteDummyLauncher?.ClearServerDetailsCache();
+        ClearServerDetailsCache();
         return Task.CompletedTask;
     }
 
@@ -141,14 +167,14 @@ internal class DummyManager : IDummyPlayerController
         int ct = 0;
         if (test.SimulationMode == PlayerSimulationMode.Full)
         {
-            if (_remoteDummyLauncher == null)
+            if (RemoteDummies == null)
             {
                 test.AllocatedDummies = null;
                 overflow = true;
                 return null;
             }
 
-            foreach (RemoteDummyPlayerActor actor in _remoteDummyLauncher.RemoteDummies.Values)
+            foreach (RemoteDummyPlayerActor actor in RemoteDummies.Dummies.Values)
             {
                 if (actor.Status is not (DummyReadyStatus.StartedUp or DummyReadyStatus.InMenu or DummyReadyStatus.Disconnecting)
                     || actor.Test != null)
@@ -158,6 +184,7 @@ internal class DummyManager : IDummyPlayerController
 
                 players[ct] = actor;
                 actor.Test = test;
+                actor.Index = ct;
                 ++ct;
                 if (ct >= test.Dummies)
                     break;
@@ -165,13 +192,21 @@ internal class DummyManager : IDummyPlayerController
         }
         else
         {
-            foreach (SimulatedDummyPlayerActor actor in _simulatedDummies.Values)
+            if (SimulatedDummies == null)
+            {
+                test.AllocatedDummies = null;
+                overflow = true;
+                return null;
+            }
+
+            foreach (SimulatedDummyPlayerActor actor in SimulatedDummies.Dummies.Values)
             {
                 if (actor.IsOnline || actor.Test != null)
                     continue;
 
                 players[ct] = actor;
                 actor.Test = test;
+                actor.Index = ct;
                 ++ct;
                 if (ct >= test.Dummies)
                     break;
@@ -201,21 +236,34 @@ internal class DummyManager : IDummyPlayerController
         foreach (IServersideTestPlayer player in oldDummies)
         {
             player.Test = null;
+            player.Index = -1;
         }
     }
 
-    /// <inheritdoc />
-    public Task SpawnPlayerAsync(IServersideTestPlayer player, Action<DummyPlayerJoinConfiguration>? configurePlayers, bool ignoreAlreadyConnected, CancellationToken token)
+    internal void ClearServerDetailsCache()
     {
-        // todo
-        return Task.CompletedTask;
+        HasServerDetails = false;
     }
 
-    /// <inheritdoc />
-    public Task DespawnPlayerAsync(IServersideTestPlayer player, bool ignoreAlreadyDisconnected, CancellationToken token)
+    internal void EnsureServerDetailsCached()
     {
-        // todo
-        return Task.CompletedTask;
+        if (HasServerDetails)
+            return;
+
+        ulong serverCode = SteamGameServer.GetSteamID().m_SteamID;
+        ushort port = Provider.GetServerConnectionPort();
+
+        if (!IPv4Address.TryParse(Provider.bindAddress, out IPv4Address address))
+        {
+            address = new IPv4Address((127u << 24) | 1 /* 127.0.0.1 */);
+        }
+
+        ServerDetailsCode = serverCode;
+        ServerDetailsPort = port;
+        ServerDetailsAddress = address;
+        ServerHideClientIp = Provider.configData.Server.Use_FakeIP
+                             || !ServerTransport_SteamNetworkingSockets.clUseIpSocket.value;
+        HasServerDetails = true;
     }
 
     public bool TryGetDummy(Player player, [MaybeNullWhen(false)] out BaseServersidePlayerActor dummy)
@@ -225,13 +273,13 @@ internal class DummyManager : IDummyPlayerController
 
     public bool TryGetDummy(ulong steam64, [MaybeNullWhen(false)] out BaseServersidePlayerActor dummy)
     {
-        if (_simulatedDummies.TryGetValue(steam64, out SimulatedDummyPlayerActor simDummy))
+        if (SimulatedDummies != null && SimulatedDummies.TryGetSimulatedDummy(steam64, out SimulatedDummyPlayerActor? simDummy))
         {
             dummy = simDummy;
             return true;
         }
 
-        if (_remoteDummyLauncher != null && _remoteDummyLauncher.TryGetRemoteDummy(steam64, out RemoteDummyPlayerActor? remDummy))
+        if (RemoteDummies != null && RemoteDummies.TryGetRemoteDummy(steam64, out RemoteDummyPlayerActor? remDummy))
         {
             dummy = remDummy;
             return true;
@@ -241,77 +289,9 @@ internal class DummyManager : IDummyPlayerController
         return false;
     }
 
-    internal void ListenOnServer()
-    {
-        foreach (SimulatedDummyPlayerActor dummy in _simulatedDummies.Values)
-        {
-            while (dummy.ClientTransportIntl.TryDequeueOutgoingMessage(Provider.buffer, out long size))
-            {
-                NetMessages.ReceiveMessageFromClient(dummy.ClientTransportIntl.ServerSideConnection, Provider.buffer, 0, (int)size);
-            }
-        }
-    }
-
-    internal void ListenOnDummies()
-    {
-        foreach (SimulatedDummyPlayerActor dummy in _simulatedDummies.Values)
-        {
-            while (dummy.ClientTransportIntl.Receive(Provider.buffer, out long size))
-            {
-                NetMessages.ReceiveMessageFromServer(Provider.buffer, 0, (int)size);
-            }
-        }
-    }
-
-    public IAsyncResult BeginDummyConnect(DummyConnectionParameters parameters, AsyncCallback connectedCallback, object? state, CancellationToken token = default)
-    {
-        GameThread.Assert();
-
-        DummyConnectionState result = new DummyConnectionState(state);
-
-        return result;
-    }
-
-    public static void SendMessageToServer(EServerMessage index, ENetReliability reliability, NetMessages.ClientWriteHandler callback, SimulatedDummyPlayerActor actor)
-    {
-
-    }
-
-    public SimulatedDummyPlayerActor EndDummyConnect(IAsyncResult result)
-    {
-        if (result is not DummyConnectionState state)
-            throw new ArgumentException("IAsyncResult did not come from BeginDummyConnect.", nameof(result));
-
-        if (!state.IsCompleted)
-        {
-            bool timedOut;
-            try
-            {
-                timedOut = !state.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(10d), true);
-            }
-            catch (ObjectDisposedException)
-            {
-                timedOut = false;
-            }
-            if (!state.IsCompleted)
-            {
-                state.Dispose();
-                if (timedOut)
-                    throw new TimeoutException("Timed out connecting player.", state.Exception);
-                throw state.Exception ?? new Exception("Failed to connect player.");
-            }
-        }
-
-        state.Dispose();
-
-        return state.Actor;
-    }
-
-    public void Dispose()
-    {
-        _remoteDummyLauncher?.CloseAllDummies();
-    }
-
+    /// <summary>
+    /// Deletes any player data belonging to dummy players.
+    /// </summary>
     public void ClearPlayerDataFromDummies()
     {
         string rootDir = PlayerSavedata.hasSync
@@ -393,6 +373,11 @@ internal class DummyManager : IDummyPlayerController
 
 
         return SteamIdPool.IsLikelyGeneratedId(new CSteamID(steamId));
+    }
+
+    public void Dispose()
+    {
+        RemoteDummies?.CloseAllDummies();
     }
 }
 

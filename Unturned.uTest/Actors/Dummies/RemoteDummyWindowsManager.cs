@@ -7,42 +7,6 @@ namespace uTest.Dummies;
 
 internal static unsafe class RemoteDummyWindowsManager
 {
-    ///// <summary>
-    ///// Distributes the windows corresponding to the given window handles into a tile/grid.
-    ///// </summary>
-    ///// <returns>The number of windows arranged.</returns>
-    //public static int TileWindows(bool horizontal, ReadOnlySpan<nint> windows)
-    //{
-    //    return TileWindows(0, horizontal, null, windows);
-    //}
-    //
-    ///// <summary>
-    ///// Distributes the windows corresponding to the given window handles into a tile/grid.
-    ///// </summary>
-    ///// <returns>The number of windows arranged.</returns>
-    //public static unsafe int TileWindows(nint parent, bool horizontal, RectInt? tileArea, ReadOnlySpan<nint> windows)
-    //{
-    //    RECT* ptr = null;
-    //
-    //    // ReSharper disable once TooWideLocalVariableScope
-    //    RECT r;
-    //
-    //    if (tileArea.HasValue)
-    //    {
-    //        RectInt r2 = tileArea.Value;
-    //        r.left = r2.x;
-    //        r.right = r2.x + r2.width;
-    //        r.top = r2.y;
-    //        r.bottom = r2.y + r2.height;
-    //        ptr = &r;
-    //    }
-    //
-    //    fixed (nint* kids = windows)
-    //    {
-    //        return TileWindows(parent, horizontal ? MDITILE_HORIZONTAL : MDITILE_VERTICAL, ptr, (uint)windows.Length, kids);
-    //    }
-    //}
-
     /// <summary>
     /// Fetches the window handle (HWND) of the Unity window for the currently-running application.
     /// </summary>

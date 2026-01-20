@@ -73,6 +73,8 @@ internal static class ModuleFiles
         new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, uTestAssembly,                                                              "uTest.dll") { ModuleReferenceMode = ModuleFileReferenceMode.Both },
         new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, uTestRunnerAssembly,                                                        "uTest.Runner.dll"),
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.DummyPlayerHost.dll",                         "uTest.DummyPlayerHost.dll", hasSymbols: true) { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.Compat.dll",                                  "uTest.Compat.dll", hasSymbols: true) { ModuleReferenceMode = ModuleFileReferenceMode.Both },
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.Compat.OpenMod.dll",                          "uTest.Compat.OpenMod.dll", hasSymbols: true) { ModuleReferenceMode = ModuleFileReferenceMode.None },
         
         new ModuleConfigFile()
     ];
@@ -90,8 +92,7 @@ internal static class ModuleFiles
         ExpectedFiles = new HashSet<string>(FileHelper.FileNameComparer)
 #endif
         {
-            "test-settings.json",
-            "0Harmony (2.3.3).exe"
+            "test-settings.json"
         };
         foreach (ModuleFile file in Files)
         {

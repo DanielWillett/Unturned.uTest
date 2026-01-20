@@ -54,6 +54,12 @@ public interface IServersideTestPlayer : ITestPlayer
     /// </summary>
     bool IsOnline { get; }
 
+    /// <summary>
+    /// The zero-based index of this actor within the actors allocated to the current test.
+    /// </summary>
+    /// <remarks>If this dummy isn't allocated it's index will be <c>-1</c>.</remarks>
+    int Index { get; internal set; }
+
     internal UnturnedTestInstanceData? Test { get; set; }
 
     /// <summary>

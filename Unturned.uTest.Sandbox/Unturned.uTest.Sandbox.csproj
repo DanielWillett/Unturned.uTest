@@ -13,6 +13,7 @@
 		<IsUnturnedTestProject>True</IsUnturnedTestProject>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>portable</DebugType>
+    <NoWarn>MSB3277</NoWarn>
 
   </PropertyGroup>
 

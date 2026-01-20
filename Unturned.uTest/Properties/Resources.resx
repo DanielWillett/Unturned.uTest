@@ -270,6 +270,12 @@
   <data name="NotSupportedExceptionTransformResource" xml:space="preserve">
     <value>Resources do not support changing position, rotation, or scale.</value>
   </data>
+  <data name="NotSupportedException_RemoteDummiesOnly" xml:space="preserve">
+    <value>This feature can only be used with remote dummies, not simulated dummies.</value>
+  </data>
+  <data name="NotSupportedException_SimulatedDummiesOnly" xml:space="preserve">
+    <value>This feature can only be used with simulated dummies, not remote dummies.</value>
+  </data>
   <data name="PlaceablesInconsistantInstanceIDs" xml:space="preserve">
     <value>Expected placeable drop and serverside data to have the same instance ID.</value>
   </data>

@@ -1,24 +1,24 @@
 using DanielWillett.ReflectionTools;
 using Newtonsoft.Json;
 using SDG.Framework.IO;
-using SDG.Framework.Modules;
 using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using uTest.Compat;
+using uTest.Compat.Logging;
 using uTest.Discovery;
 using uTest.Dummies;
 using uTest.Patches;
 using uTest.Protocol;
-using Component = UnityEngine.Component;
 
 namespace uTest.Module;
 
 /// <summary>
 /// Main class for Unturned functionality of uTest.
 /// </summary>
-internal class MainModule : MonoBehaviour, IDisposable
+internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
 {
     private const string TestFileCommandLine = "-uTestSettings";
 
@@ -57,6 +57,7 @@ internal class MainModule : MonoBehaviour, IDisposable
     /// <summary>
     /// The exception formatter to use when printing exceptions to your IDE.
     /// </summary>
+    /// <remarks>If the <c>DanielWillett.StackCleaner</c> package is installed, this will be <see cref="StackCleanerExceptionFormatter"/> by default, otherwise it will be <see langword="null"/> which is just <see cref="Exception.ToString"/>.</remarks>
     public IExceptionFormatter? ExceptionFormatter { get; set; }
 
     /// <summary>
@@ -67,7 +68,12 @@ internal class MainModule : MonoBehaviour, IDisposable
     /// <summary>
     /// The Unturned logger.
     /// </summary>
-    public ILogger Logger => DefaultLogger.Logger;
+    public ILogger Logger { get; private set; } = DefaultLogger.Logger;
+
+    /// <summary>
+    /// The highest-priority logger integration currently being used from the available modules.
+    /// </summary>
+    public ILoggerIntegration? LoggerIntegration { get; private set; }
 
     /// <summary>
     /// The assembly that contains the running tests.
@@ -122,24 +128,35 @@ internal class MainModule : MonoBehaviour, IDisposable
     [MethodImpl(MethodImplOptions.NoInlining)]
     internal void Initialize(string homeDir, SDG.Framework.Modules.Module module)
     {
-        Accessor.Logger = DefaultLoggerReflectionTools.Logger;
         Accessor.LogDebugMessages = true;
         Accessor.LogInfoMessages = true;
         Accessor.LogWarningMessages = true;
         Accessor.LogErrorMessages = true;
 
+        LoadLoggerIntegration();
+        
+        if (LoggerIntegration != null)
+        {
+            Accessor.Logger = new ReflectionToolsLoggerWrapper(
+                LoggerIntegration.CreateNamedLogger("DanielWillett.ReflectionTools")
+            );
+        }
+        else
+        {
+            Accessor.Logger = DefaultLoggerReflectionTools.Logger;
+        }
+
         IsFaulted = false;
         HomeDirectory = homeDir;
         Instance = this;
+        UnturnedTestHost.SetRuntime(this);
         _cancellationTokenSource = new CancellationTokenSource();
         CancellationToken = _cancellationTokenSource.Token;
-
-        //Assembly.Load("ModularRPCs.Unity, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null");
 
         bool failedToParse = false;
         if (!_clTestFile.hasValue || !TryRefreshTestFile(out failedToParse))
         {
-            CommandWindow.LogError(
+            Logger.LogError(
                 !failedToParse
                     ? $"""Test file not provided or unable to be read. Unturned must be launched with command line: {TestFileCommandLine} "File\Path\To\Tests.yml"."""
                     : "Test file failed to parse valid JSON."
@@ -155,7 +172,7 @@ internal class MainModule : MonoBehaviour, IDisposable
         TestAssembly = Array.Find(module.assemblies, x => string.Equals(x.FullName, TestList.TestAssembly));
         if (TestAssembly == null)
         {
-            CommandWindow.LogError("Failed to find test assembly.");
+            Logger.LogError("Failed to find test assembly.");
             IsFaulted = true;
             return;
         }
@@ -177,9 +194,9 @@ internal class MainModule : MonoBehaviour, IDisposable
                       = View full license at https://github.com/DanielWillett/Unturned.uTest/blob/master/LICENSE.txt.
                       """;
 
-        CommandWindow.Log(log);
+        Logger.LogInformation(log);
 
-        CommandWindow.Log("If you see a dependency error below this about StackCleaner it can be ignored.");
+        Logger.LogInformation("If you see a dependency error below this about StackCleaner it can be ignored.");
         ExceptionFormatter ??= StackCleanerExceptionFormatter.GetStackCleanerFormatterIfInstalled(TestList.UseColorfulStackTrace);
 
 
@@ -279,6 +296,52 @@ internal class MainModule : MonoBehaviour, IDisposable
             });
             return true;
         });
+    }
+
+    private void LoadLoggerIntegration()
+    {
+        List<ILoggerIntegration> integrations = new List<ILoggerIntegration>(0);
+
+        if (CompatibilityInformation.IsOpenModInstalled)
+        {
+            try
+            {
+                ILoggerIntegration openMod = LoggingIntegrations.TryInstallOpenModLoggingIntegration(Logger);
+
+                integrations.Add(openMod);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to load OpenMod compatability.", ex);
+            }
+        }
+
+        if (integrations.Count <= 0)
+            return;
+
+        integrations.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+
+        ILoggerIntegration integration = integrations[0];
+        for (int i = 1; i < integrations.Count; ++i)
+        {
+            if (integrations[i] is IDisposable disp)
+                disp.Dispose();
+        }
+
+        LoggerIntegration = integration;
+        Logger = integration.CreateNamedLogger("uTest");
+    }
+
+    internal ILogger GetOrCreateLogger(string name)
+    {
+        ILoggerIntegration? integration = LoggerIntegration;
+        return integration != null ? integration.CreateNamedLogger(name) : Logger;
+    }
+
+    /// <inheritdoc />
+    public void Cancel()
+    {
+        _cancellationTokenSource?.Cancel();
     }
 
     private void HandlePlayerConnected(CSteamID steamID)
@@ -386,16 +449,150 @@ internal class MainModule : MonoBehaviour, IDisposable
 
     /// <summary>
     /// Ran one frame after level loaded event so <see cref="Level.isLoaded"/> is <see langword="true"/>.
+    /// This also gives OpenMod time to invoke it's <c>UnturnedPostLevelLoadedEvent</c> and other level events.
+    /// Additionally, rocket plugins subscribing to any of the level load events will have time to run their code as well.
     /// </summary>
     private void OnLevelLoaded()
     {
         Task.Run(async () =>
         {
+            await InvokeStartupHookTypes().ConfigureAwait(false);
+
             await Environment.SendAsync(new LevelLoadedMessage(), CancellationToken);
             await Logger.LogInformationAsync("Sent level loaded");
+            await GameThread.Switch(CancellationToken);
+            _sentLevelLoadedRealtime = Time.realtimeSinceStartup;
         }, CancellationToken);
+    }
 
-        _sentLevelLoadedRealtime = Time.realtimeSinceStartup;
+    private async Task InvokeStartupHookTypes()
+    {
+        HashSet<Type> startupHookTypes = new HashSet<Type>();
+
+        foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            IEnumerable<Attribute> startupHooks;
+            try
+            {
+                startupHooks = assembly.GetCustomAttributes(typeof(RegisterStartupHookAttribute));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning($"Failed to fetch startup hooks for assembly {assembly.FullName}.{
+                    System.Environment.NewLine}{ExceptionFormatter?.FormatException(ex) ?? ex.ToString()}."
+                );
+                continue;
+            }
+
+            foreach (RegisterStartupHookAttribute startupHook in startupHooks.Cast<RegisterStartupHookAttribute>())
+            {
+                if (startupHook.Type == null)
+                    continue;
+
+                startupHookTypes.Add(startupHook.Type);
+            }
+        }
+
+        Queue<Type> queue = new Queue<Type>(startupHookTypes);
+        Queue<IStartupHook> hookQueue = new Queue<IStartupHook>();
+        List<IStartupHook> hooks = new List<IStartupHook>(startupHookTypes.Count);
+        try
+        {
+            while (hookQueue.Count > 0 || queue.Count > 0)
+            {
+                IStartupHook? hook;
+                if (hookQueue.Count > 0)
+                {
+                    hook = hookQueue.Dequeue();
+                    hooks.Add(hook);
+                }
+                else
+                {
+                    Type type = queue.Dequeue();
+                    if (!typeof(IStartupHook).IsAssignableFrom(type))
+                    {
+                        Logger.LogError(
+                            $"Assembly {type.Assembly.GetName().FullName} defines type {type.FullName} " +
+                            $"as a startup hook but it doesn't implement IStartupHook."
+                        );
+                        continue;
+                    }
+
+                    hook = hooks.Find(x => type.IsInstanceOfType(x));
+                    if (hook == null)
+                    {
+                        ConstructorInfo? ctor = type.GetConstructor([ typeof(ILogger) ]);
+                        object[] parameters;
+                        if (ctor != null)
+                        {
+                            parameters = [ Logger ];
+                        }
+                        else
+                        {
+                            parameters = Array.Empty<object>();
+                            ctor = type.GetConstructor(Type.EmptyTypes);
+                        }
+
+                        if (ctor == null)
+                        {
+                            Logger.LogError(
+                                $"Startup hook {type.AssemblyQualifiedName} must define either a parameterless constructor " +
+                                $"or a constructor with a single {typeof(ILogger).FullName} parameter."
+                            );
+                            continue;
+                        }
+
+                        try
+                        {
+                            hook = (IStartupHook)ctor.Invoke(parameters);
+                            hooks.Add(hook);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogError($"Constructor for startup hook {type.AssemblyQualifiedName} threw an exception.", ex);
+                            continue;
+                        }
+                    }
+                }
+
+                IList<StartupHook> types;
+                try
+                {
+                    types = await hook.WaitAsync(CancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"Implementation for startup hook {hook.GetType().AssemblyQualifiedName} threw an exception.", ex);
+                    continue;
+                }
+
+                foreach (StartupHook hookInstance in types)
+                {
+                    if (hookInstance.Type != null)
+                    {
+                        queue.Enqueue(hookInstance.Type);
+                    }
+                    else if (hookInstance.Hook != null)
+                    {
+                        hookQueue.Enqueue(hookInstance.Hook);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            foreach (IDisposable hook in hooks.OfType<IDisposable>())
+            {
+                try
+                {
+                    hook.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"Startup hook {hook.GetType().AssemblyQualifiedName} threw an exception when disposing.", ex);
+                }
+            }
+        }
     }
 
     private void Update()
@@ -425,6 +622,7 @@ internal class MainModule : MonoBehaviour, IDisposable
         catch { /* ignored */ }
 
         Instance = null;
+        UnturnedTestHost.SetRuntime(null);
 
         if (_hasQuit)
             return;
@@ -441,6 +639,11 @@ internal class MainModule : MonoBehaviour, IDisposable
         IsFaulted = false;
         Environment?.Dispose();
         Environment = null!;
+
+        ILoggerIntegration? integration = LoggerIntegration;
+        LoggerIntegration = null;
+        if (integration is IDisposable disp)
+            disp.Dispose();
     }
 
     [MemberNotNullWhen(true, nameof(TestList))]
@@ -460,7 +663,7 @@ internal class MainModule : MonoBehaviour, IDisposable
 
             list.Tests ??= new List<UnturnedTestReference>(0);
 
-            CommandWindow.Log($"Test session: \"{list.SessionUid}\". {list.Tests.Count} test(s).");
+            Logger.LogInformation($"Test session: \"{list.SessionUid}\". {list.Tests.Count} test(s).");
 
             TestList = list;
         }
@@ -468,13 +671,13 @@ internal class MainModule : MonoBehaviour, IDisposable
         {
             // bad JSON
             failedToParse = true;
-            CommandWindow.LogError(ex);
+            Logger.LogError(ex);
             return false;
         }
         catch (Exception ex)
         {
             // file not found, etc
-            CommandWindow.LogError(ex);
+            Logger.LogError(ex);
             return false;
         }
 
@@ -499,105 +702,11 @@ internal class MainModule : MonoBehaviour, IDisposable
         }
         else
         {
-            CommandWindow.LogWarning("uTest failed to find field 'Provider.wasQuitGameCalled'.");
+            Logger.LogWarning("uTest failed to find field 'Provider.wasQuitGameCalled'.");
         }
 
         UnturnedLog.info($"uTest Quit game: {reason}. Exit code: {(int)exitCode} ({exitCode}).");
         Dispose();
-        Application.Quit((int)exitCode);
-        throw new QuitGameException();
-    }
-}
-
-/// <summary>
-/// The entrypoint for uTest when loaded as an Unturned module.
-/// </summary>
-internal class MainModuleLoader : IModuleNexus
-{
-    private object? _module;
-    private static readonly CommandLineFlag? IsDummyFlag = new CommandLineFlag(false, "-uTestSteamId");
-    internal static string? _homeDir;
-    internal static SDG.Framework.Modules.Module? _sdgModule;
-
-    /// <inheritdoc />
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    void IModuleNexus.initialize()
-    {
-        if (IsDummyFlag!.value)
-            return;
-        
-        GameThread.Setup();
-        _sdgModule = ModuleHook.getModuleByName("uTest");
-        if (_sdgModule?.config.DirectoryPath == null)
-        {
-            _homeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-        }
-        else
-        {
-            _homeDir = _sdgModule.config.DirectoryPath;
-        }
-
-        if (_sdgModule == null || !Directory.Exists(_homeDir))
-        {
-            ForceQuitGame("uTest initialization failed. Failed to find uTest module.", UnturnedTestExitCode.StartupFailure);
-            return;
-        }
-
-        Init();
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private void Init()
-    {
-        GameObject go = new GameObject("uTest");
-        Object.DontDestroyOnLoad(go);
-        
-        MainModule module = go.AddComponent<MainModule>();
-        _module = module;
-
-        try
-        {
-            module.Initialize(_homeDir!, _sdgModule!);
-            if (module.IsFaulted)
-            {
-                module.ForceQuitGame("uTest initialization failed. See log", UnturnedTestExitCode.StartupFailure);
-            }
-        }
-        catch (QuitGameException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            CommandWindow.LogError(ex);
-            module.ForceQuitGame("Exception thrown during uTest initialization. See log", UnturnedTestExitCode.StartupFailure);
-        }
-    }
-
-    /// <inheritdoc />
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    void IModuleNexus.shutdown()
-    {
-        if (_module is IDisposable disposable)
-            disposable.Dispose();
-
-        if (_module is Component comp)
-            Object.Destroy(comp.gameObject);
-    }
-
-    private static void ForceQuitGame(string reason, UnturnedTestExitCode exitCode)
-    {
-        FieldInfo? wasQuitGameCalled = typeof(Provider).GetField("wasQuitGameCalled", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-        if (wasQuitGameCalled != null)
-        {
-            wasQuitGameCalled.SetValue(null, true);
-        }
-        else
-        {
-            CommandWindow.LogWarning("uTest failed to find field 'Provider.wasQuitGameCalled'.");
-        }
-
-        UnturnedLog.info($"uTest Quit game: {reason}. Exit code: {(int)exitCode} ({exitCode}).");
         Application.Quit((int)exitCode);
         throw new QuitGameException();
     }

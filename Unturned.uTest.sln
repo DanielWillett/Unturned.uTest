@@ -17,6 +17,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest", "Unturned.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.Bootstrapper", "Unturned.uTest.Bootstrapper\Unturned.uTest.Bootstrapper.csproj", "{84CA667C-3D9B-47EF-8DDC-C0C7E8964AC7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.Compat", "Unturned.uTest.Compat\Unturned.uTest.Compat.csproj", "{FB3A32DC-82A4-4419-8D5F-6FDEC730FF12}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.Compat.OpenMod", "Unturned.uTest.Compat.OpenMod\Unturned.uTest.Compat.OpenMod.csproj", "{AB06CB8B-E16D-4AE5-8798-4349AEE4FE9B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -51,6 +55,14 @@ Global
 		{84CA667C-3D9B-47EF-8DDC-C0C7E8964AC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{84CA667C-3D9B-47EF-8DDC-C0C7E8964AC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{84CA667C-3D9B-47EF-8DDC-C0C7E8964AC7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB3A32DC-82A4-4419-8D5F-6FDEC730FF12}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB3A32DC-82A4-4419-8D5F-6FDEC730FF12}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB3A32DC-82A4-4419-8D5F-6FDEC730FF12}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB3A32DC-82A4-4419-8D5F-6FDEC730FF12}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AB06CB8B-E16D-4AE5-8798-4349AEE4FE9B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AB06CB8B-E16D-4AE5-8798-4349AEE4FE9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AB06CB8B-E16D-4AE5-8798-4349AEE4FE9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AB06CB8B-E16D-4AE5-8798-4349AEE4FE9B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

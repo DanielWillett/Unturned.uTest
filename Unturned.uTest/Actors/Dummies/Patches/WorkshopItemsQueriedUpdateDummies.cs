@@ -4,6 +4,8 @@ using System.Reflection;
 using uTest.Dummies;
 using uTest.Module;
 
+#pragma warning disable IDE0130
+
 namespace uTest.Patches;
 
 /// <summary>
@@ -72,7 +74,7 @@ internal static class WorkshopItemsQueriedUpdateDummies
     internal static void Prefix()
     {
         DummyManager dummyManager = MainModule.Instance.Dummies;
-        if (dummyManager.Controller is DummyPlayerLauncher launcher)
+        if (dummyManager.RemoteDummies is { } launcher)
         {
             launcher.NotifyWorkshopUpdate(DedicatedUGC.itemsToDownload.ToArray());
         }

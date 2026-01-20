@@ -6,6 +6,8 @@ using SDG.NetPak;
 using System;
 using System.Reflection;
 using System.Reflection.Emit;
+using uTest.Module;
+using uTest.Util;
 
 #pragma warning disable IDE0130
 
@@ -13,8 +15,9 @@ namespace uTest.Patches;
 
 /// <summary>
 /// Patches "SDG.Unturned.ServerMessageHandler_ReadyToConnect.ReadMessage" to remove the 'rate limiter' for IP addresses, since all join requests come from the same IP address.
+/// It also removes the group ID authentication.
 /// </summary>
-internal static class RemoveReadyToConnectRateLimiter
+internal static class RemoveReadyToConnectChecks
 {
     private const string PatchName = "ServerMessageHandler_ReadyToConnect.ReadMessage";
     private static bool _hasPatch;
@@ -119,12 +122,13 @@ internal static class RemoveReadyToConnectRateLimiter
             );
         }
 
-        bool patched = false;
+        bool patchedLimiter = false;
         while (ctx.MoveNext())
         {
-            if (ctx.Instruction.opcode != OpCodes.Ldsfld || (FieldInfo?)ctx.Instruction.operand != rateLimiterField)
+            if (patchedLimiter || ctx.Instruction.opcode != OpCodes.Ldsfld || (FieldInfo?)ctx.Instruction.operand != rateLimiterField)
                 continue;
 
+            // remove rate limiter
             int index = ctx.CaretIndex;
             while (ctx.MoveNext() && !ctx.Instruction.opcode.IsBrAny()) ;
             if (ctx.CaretIndex >= ctx.Count)
@@ -151,11 +155,10 @@ internal static class RemoveReadyToConnectRateLimiter
                 }
             });
 
-            patched = true;
-            break;
+            patchedLimiter = true;
         }
 
-        if (!patched)
+        if (!patchedLimiter)
         {
             return ctx.Fail("Unable to remove IP address rate limiter from ReadyToConnect message handler.");
         }

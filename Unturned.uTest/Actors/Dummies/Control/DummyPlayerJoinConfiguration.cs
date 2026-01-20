@@ -36,6 +36,15 @@ public class DummyPlayerJoinConfiguration
     public string PlayerName { get; }
 
     /// <summary>
+    /// Whether or not this player is a remote dummy instead of a simulated dummy.
+    /// <para>
+    /// Remote dummies are ran out-of-process from another instance of Unturned,
+    /// where simulated dummies are ran in-process but are limited in what they can do.
+    /// </para>
+    /// </summary>
+    public bool IsRemote { get; }
+
+    /// <summary>
     /// Whether or not the joining player should use the correct password.
     /// This is ignored if the server doesn't have a password.
     /// </summary>
@@ -77,6 +86,44 @@ public class DummyPlayerJoinConfiguration
     /// </summary>
     /// <remarks>Defaults to <see langword="true"/>.</remarks>
     public bool UseCorrectMapVersion { get; set; } = true;
+
+    /// <summary>
+    /// The address for the dummy to connect from. Only works with simulated clients.
+    /// </summary>
+    /// <remarks>Defaults to the IPv4 loopback address (<c>127.0.0.1</c>).</remarks>
+    /// <exception cref="NotSupportedException"/>
+    public IPv4Address ConnectionAddress
+    {
+        get;
+        set
+        {
+            if (IsRemote)
+                throw new NotSupportedException(Properties.Resources.NotSupportedException_SimulatedDummiesOnly);
+
+            field = value;
+        }
+    } = new IPv4Address((127u << 24) | 1 /* 127.0.0.1 */);
+
+    /// <summary>
+    /// The port for the dummy to connect from. Only works with simulated clients.
+    /// </summary>
+    /// <remarks>Defaults to a random unused port from the dynamic port range.</remarks>
+    /// <exception cref="NotSupportedException"/>
+    /// <exception cref="ArgumentOutOfRangeException">The given port must be non-zero.</exception>
+    public ushort? ConnectionPort
+    {
+        get;
+        set
+        {
+            if (IsRemote)
+                throw new NotSupportedException(Properties.Resources.NotSupportedException_SimulatedDummiesOnly);
+
+            if (value is 0)
+                throw new ArgumentOutOfRangeException(nameof(value));
+
+            field = value;
+        }
+    }
 
     /// <summary>
     /// The version of the game reported to the server. Takes priority over <see cref="UseCorrectGameVersion"/> if set.
@@ -330,49 +377,61 @@ public class DummyPlayerJoinConfiguration
     /// The steam inventory item equipped as a shirt for this player's character.
     /// </summary>
     /// <remarks>Defaults to <c>0</c>.</remarks>
-    public SteamItemInstanceID_t ShirtItem { get; set; }
+    public SteamItemDef_t ShirtItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as pants for this player's character.
     /// </summary>
     /// <remarks>Defaults to <c>0</c>.</remarks>
-    public SteamItemInstanceID_t PantsItem { get; set; }
+    public SteamItemDef_t PantsItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as a hat for this player's character.
     /// </summary>
     /// <remarks>Defaults to <c>0</c>.</remarks>
-    public SteamItemInstanceID_t HatItem { get; set; }
+    public SteamItemDef_t HatItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as a backpack for this player's character.
     /// </summary>
     /// <remarks>Defaults to <c>0</c>.</remarks>
-    public SteamItemInstanceID_t BackpackItem { get; set; }
+    public SteamItemDef_t BackpackItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as a vest for this player's character.
     /// </summary>
     /// <remarks>Defaults to <c>0</c>.</remarks>
-    public SteamItemInstanceID_t VestItem { get; set; }
+    public SteamItemDef_t VestItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as a mask for this player's character.
     /// </summary>
     /// <remarks>Defaults to <c>0</c>.</remarks>
-    public SteamItemInstanceID_t MaskItem { get; set; }
+    public SteamItemDef_t MaskItem { get; set; }
 
     /// <summary>
     /// The steam inventory item equipped as glasses for this player's character.
     /// </summary>
     /// <remarks>Defaults to <c>0</c>.</remarks>
-    public SteamItemInstanceID_t GlassesItem { get; set; }
+    public SteamItemDef_t GlassesItem { get; set; }
 
     /// <summary>
     /// List of equipped steam inventory items for skins and mythics.
     /// </summary>
     /// <remarks>Defaults to an empty list.</remarks>
-    public IList<SteamItemInstanceID_t> EquippedSkins { get; }
+    public IList<SteamItemDef_t> EquippedSkins { get; }
+
+    /// <summary>
+    /// Map of <see href="https://partner.steamgames.com/doc/features/inventory/itemtags">item tags</see> defined for each equipped skin.
+    /// </summary>
+    /// <remarks>Defaults to an empty dictionary.</remarks>
+    public IDictionary<SteamItemDef_t, string> SkinTags { get; }
+
+    /// <summary>
+    /// Map of <see href="https://partner.steamgames.com/doc/features/inventory/dynamicproperties">dynamic properties</see> defined for each equipped skin.
+    /// </summary>
+    /// <remarks>Defaults to an empty dictionary.</remarks>
+    public IDictionary<SteamItemDef_t, string> SkinDynamicProperties { get; }
 
     /// <summary>
     /// The skillset of the player's character.
@@ -455,7 +514,7 @@ public class DummyPlayerJoinConfiguration
 
     #endregion
 
-    public DummyPlayerJoinConfiguration(int index, CSteamID steamId, string name)
+    public DummyPlayerJoinConfiguration(int index, CSteamID steamId, string name, bool isRemote)
     {
         Random r = new Random(Index * 4129);
 
@@ -463,12 +522,15 @@ public class DummyPlayerJoinConfiguration
             ? PlayerTransform.DefaultSpawn
             : PlayerTransform.FromPlayerSpawn(LevelPlayers.spawns[r.Next(0, LevelPlayers.spawns.Count)]);
 
-        EquippedSkins = new List<SteamItemInstanceID_t>();
+        EquippedSkins = new List<SteamItemDef_t>(0);
+        SkinTags = new Dictionary<SteamItemDef_t, string>(0);
+        SkinDynamicProperties = new Dictionary<SteamItemDef_t, string>(0);
         Index = index;
         SteamId = steamId;
         _nickName = name;
         _characterName = name;
         PlayerName = name;
+        IsRemote = isRemote;
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             Platform = EClientPlatform.Windows;
@@ -515,7 +577,7 @@ public class DummyPlayerJoinConfiguration
             if (i != 0)
                 sb.Append(';');
 
-            ref DummyPlayerJoinConfiguration.RequiredModule module = ref modules[i];
+            ref RequiredModule module = ref modules[i];
             sb.Append(module.Name).Append(',').Append(module.Version);
         }
 
@@ -534,6 +596,85 @@ public class DummyPlayerJoinConfiguration
         }
 
         return outArr;
+    }
+
+    internal ulong[] GetEquippedSkinsArray(out string[] tags, out string[] dynamicProps)
+    {
+        IList<SteamItemDef_t> skins = EquippedSkins;
+        if (skins == null || skins.Count == 0)
+        {
+            tags = Array.Empty<string>();
+            dynamicProps = Array.Empty<string>();
+            return Array.Empty<ulong>();
+        }
+
+        ulong[] arr = new ulong[skins.Count];
+        int ct = 0;
+        for (int i = 0; i < arr.Length; ++i)
+        {
+            ulong id = unchecked( (ulong)skins[i].m_SteamItemDef );
+            for (int j = 0; j < ct; ++j)
+            {
+                if (arr[j] == id)
+                    goto skipDuplicate;
+            }
+            arr[ct] = id;
+            ++ct;
+            skipDuplicate:;
+        }
+
+        if (ct != arr.Length)
+            Array.Resize(ref arr, ct);
+
+        if (SkinTags.Count > 0 || SkinDynamicProperties.Count > 0)
+        {
+            string[] tagsOut = new string[ct];
+            string[] dynamicPropsOut = new string[ct];
+            for (int i = 0; i < ct; ++i)
+            {
+                tagsOut[i] = string.Empty;
+                dynamicPropsOut[i] = string.Empty;
+            }
+
+            for (int i = 0; i < ct; ++i)
+            {
+                SteamItemDef_t item = new SteamItemDef_t(unchecked( (int)arr[i] ));
+                if (SkinTags.TryGetValue(item, out string? prop))
+                {
+                    tagsOut[i] = prop ?? string.Empty;
+                }
+                if (SkinDynamicProperties.TryGetValue(item, out prop))
+                {
+                    dynamicPropsOut[i] = prop ?? string.Empty;
+                }
+            }
+
+            tags = tagsOut;
+            dynamicProps = dynamicPropsOut;
+        }
+        else
+        {
+            string[] propsArray = new string[ct];
+            for (int i = 0; i < ct; ++i)
+                propsArray[i] = string.Empty;
+
+            tags = propsArray;
+            dynamicProps = propsArray;
+        }
+
+        return arr;
+    }
+
+    internal static int[] ConvertEquippedSkinsArray(ulong[] arr)
+    {
+        if (arr == null || arr.Length == 0)
+            return Array.Empty<int>();
+
+        int[] newArr = new int[arr.Length];
+        for (int i = 0; i < newArr.Length; ++i)
+            newArr[i] = unchecked ((int)arr[i] );
+
+        return newArr;
     }
 
     private void UpdateCustomizationAfterGoldUpdated()
@@ -619,6 +760,64 @@ public class DummyPlayerJoinConfiguration
     public DummyPlayerJoinConfiguration WithCharacterName(string value)
     {
         CharacterName = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the address for the dummy to connect from. Only works with simulated clients.
+    /// </summary>
+    /// <exception cref="NotSupportedException"/>
+    public DummyPlayerJoinConfiguration WithConnectionAddress(IPv4Address address)
+    {
+        ConnectionAddress = address;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the address for the dummy to connect from. Only works with simulated clients.
+    /// </summary>
+    /// <exception cref="NotSupportedException"/>
+    /// <exception cref="FormatException">Unable to parse <see cref="IPv4Address"/> value from <paramref name="address"/>.</exception>
+    public DummyPlayerJoinConfiguration WithConnectionAddress(string address)
+    {
+        if (!IPv4Address.TryParse(address, out IPv4Address addr))
+            throw new FormatException("Failed to parse IPv4Address.");
+
+        ConnectionAddress = addr;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the address for the dummy to connect from to a random IPv4 address in the public range. Only works with simulated clients.
+    /// </summary>
+    /// <exception cref="NotSupportedException"/>
+    public DummyPlayerJoinConfiguration WithRandomConnectionAddress()
+    {
+        ConnectionAddress = ReservedIPv4AddressHelper.GetRandomPublicAddress();
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the port for the dummy to connect from. Only works with simulated clients.
+    /// </summary>
+    /// <exception cref="NotSupportedException"/>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="port"/> must be non-zero.</exception>
+    public DummyPlayerJoinConfiguration WithConnectionPort(ushort port)
+    {
+        if (port == 0)
+            throw new ArgumentOutOfRangeException(nameof(port));
+
+        ConnectionPort = port;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the port for the dummy to connect from to a random unused port from the dynamic port range. Only works with simulated clients.
+    /// </summary>
+    /// <exception cref="NotSupportedException"/>
+    public DummyPlayerJoinConfiguration WithRandomConnectionPort()
+    {
+        ConnectionPort = null;
         return this;
     }
 
@@ -781,12 +980,12 @@ public class DummyPlayerJoinConfiguration
     /// <summary>
     /// Sets the steam inventory item equipped as a shirt for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithShirtItem(ulong itemInstanceId) => WithShirtItem(new SteamItemInstanceID_t(itemInstanceId));
+    public DummyPlayerJoinConfiguration WithShirtItem(int itemDefId) => WithShirtItem(new SteamItemDef_t(itemDefId));
 
     /// <summary>
     /// Sets the steam inventory item equipped as a shirt for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithShirtItem(SteamItemInstanceID_t value)
+    public DummyPlayerJoinConfiguration WithShirtItem(SteamItemDef_t value)
     {
         ShirtItem = value;
         return this;
@@ -795,12 +994,12 @@ public class DummyPlayerJoinConfiguration
     /// <summary>
     /// Sets the steam inventory item equipped as pants for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithPantsItem(ulong itemInstanceId) => WithPantsItem(new SteamItemInstanceID_t(itemInstanceId));
+    public DummyPlayerJoinConfiguration WithPantsItem(int itemDefId) => WithPantsItem(new SteamItemDef_t(itemDefId));
 
     /// <summary>
     /// Sets the steam inventory item equipped as pants for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithPantsItem(SteamItemInstanceID_t value)
+    public DummyPlayerJoinConfiguration WithPantsItem(SteamItemDef_t value)
     {
         PantsItem = value;
         return this;
@@ -809,12 +1008,12 @@ public class DummyPlayerJoinConfiguration
     /// <summary>
     /// Sets the steam inventory item equipped as a hat for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithHatItem(ulong itemInstanceId) => WithHatItem(new SteamItemInstanceID_t(itemInstanceId));
+    public DummyPlayerJoinConfiguration WithHatItem(int itemDefId) => WithHatItem(new SteamItemDef_t(itemDefId));
 
     /// <summary>
     /// Sets the steam inventory item equipped as a hat for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithHatItem(SteamItemInstanceID_t value)
+    public DummyPlayerJoinConfiguration WithHatItem(SteamItemDef_t value)
     {
         HatItem = value;
         return this;
@@ -823,12 +1022,12 @@ public class DummyPlayerJoinConfiguration
     /// <summary>
     /// Sets the steam inventory item equipped as a backpack for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithBackpackItem(ulong itemInstanceId) => WithBackpackItem(new SteamItemInstanceID_t(itemInstanceId));
+    public DummyPlayerJoinConfiguration WithBackpackItem(int itemDefId) => WithBackpackItem(new SteamItemDef_t(itemDefId));
 
     /// <summary>
     /// Sets the steam inventory item equipped as a backpack for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithBackpackItem(SteamItemInstanceID_t value)
+    public DummyPlayerJoinConfiguration WithBackpackItem(SteamItemDef_t value)
     {
         BackpackItem = value;
         return this;
@@ -837,12 +1036,12 @@ public class DummyPlayerJoinConfiguration
     /// <summary>
     /// Sets the steam inventory item equipped as a vest for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithVestItem(ulong itemInstanceId) => WithVestItem(new SteamItemInstanceID_t(itemInstanceId));
+    public DummyPlayerJoinConfiguration WithVestItem(int itemDefId) => WithVestItem(new SteamItemDef_t(itemDefId));
 
     /// <summary>
     /// Sets the steam inventory item equipped as a vest for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithVestItem(SteamItemInstanceID_t value)
+    public DummyPlayerJoinConfiguration WithVestItem(SteamItemDef_t value)
     {
         VestItem = value;
         return this;
@@ -851,12 +1050,12 @@ public class DummyPlayerJoinConfiguration
     /// <summary>
     /// Sets the steam inventory item equipped as a mask for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithMaskItem(ulong itemInstanceId) => WithMaskItem(new SteamItemInstanceID_t(itemInstanceId));
+    public DummyPlayerJoinConfiguration WithMaskItem(int itemDefId) => WithMaskItem(new SteamItemDef_t(itemDefId));
 
     /// <summary>
     /// Sets the steam inventory item equipped as a mask for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithMaskItem(SteamItemInstanceID_t value)
+    public DummyPlayerJoinConfiguration WithMaskItem(SteamItemDef_t value)
     {
         MaskItem = value;
         return this;
@@ -865,12 +1064,12 @@ public class DummyPlayerJoinConfiguration
     /// <summary>
     /// Sets the steam inventory item equipped as glasses for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithGlassesItem(ulong itemInstanceId) => WithGlassesItem(new SteamItemInstanceID_t(itemInstanceId));
+    public DummyPlayerJoinConfiguration WithGlassesItem(int itemDefId) => WithGlassesItem(new SteamItemDef_t(itemDefId));
 
     /// <summary>
     /// Sets the steam inventory item equipped as glasses for this player's character.
     /// </summary>
-    public DummyPlayerJoinConfiguration WithGlassesItem(SteamItemInstanceID_t value)
+    public DummyPlayerJoinConfiguration WithGlassesItem(SteamItemDef_t value)
     {
         GlassesItem = value;
         return this;
@@ -880,13 +1079,13 @@ public class DummyPlayerJoinConfiguration
     /// Adds an equipped steam inventory item for skins or mythics.
     /// </summary>
     /// <exception cref="ArgumentException">Duplicate item.</exception>
-    public DummyPlayerJoinConfiguration WithEquippedSkin(ulong itemInstanceId) => WithEquippedSkin(new SteamItemInstanceID_t(itemInstanceId));
+    public DummyPlayerJoinConfiguration WithEquippedSkin(int itemDefId) => WithEquippedSkin(new SteamItemDef_t(itemDefId));
 
     /// <summary>
     /// Adds an equipped steam inventory item for skins or mythics.
     /// </summary>
     /// <exception cref="ArgumentException">Duplicate item.</exception>
-    public DummyPlayerJoinConfiguration WithEquippedSkin(SteamItemInstanceID_t item)
+    public DummyPlayerJoinConfiguration WithEquippedSkin(SteamItemDef_t item)
     {
         if (EquippedSkins.Contains(item))
         {

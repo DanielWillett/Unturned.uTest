@@ -349,6 +349,15 @@ internal sealed class ReadyToConnectInfo
     public byte[]? ResourceHash;
     public byte[]? EconHash;
 
+    public ulong Shirt;
+    public ulong Pants;
+    public ulong Hat;
+    public ulong Backpack;
+    public ulong Vest;
+    public ulong Mask;
+    public ulong Glasses;
+    public ulong[]? Skins;
+
     internal static string GetRequiredModules(string original, ReadyToConnectInfo info)
     {
         return info.Modules ?? original;
@@ -379,6 +388,18 @@ internal sealed class ReadyToConnectInfo
             LevelVersion = OverrideLevelVersion.Value;
         else if (MixupLevelVersion)
             --LevelVersion;
+
+        Characters.active.packageShirt = Shirt;
+        Characters.active.packagePants = Pants;
+        Characters.active.packageHat = Hat;
+        Characters.active.packageBackpack = Backpack;
+        Characters.active.packageVest = Vest;
+        Characters.active.packageMask = Mask;
+        Characters.active.packageGlasses = Glasses;
+
+        Characters.packageSkins.Clear();
+        if (Skins is { Length: > 0 })
+            Characters.packageSkins.AddRange(Skins);
     }
 
     private static void BreakHash(ref byte[] input)

@@ -27,22 +27,17 @@ namespace uTest.Dummies;
 /// Handles launching fully simulated dummy clients.
 /// </summary>
 [GenerateRpcSource]
-internal partial class DummyPlayerLauncher : IDummyPlayerController
+internal partial class RemoteDummyManager : IDummyPlayerController
 {
     private readonly MainModule _module;
     private readonly ILogger _logger;
     private NamedPipeEndpoint? _rpcServer;
 
-    private bool _hasServerDetails;
-    private ulong _svrDetailsCode;
-    private ushort _svrDetailsPort;
-    private IPv4Address _svrDetailsAddress;
-
-    internal readonly ConcurrentDictionary<ulong, RemoteDummyPlayerActor> RemoteDummies = new ConcurrentDictionary<ulong, RemoteDummyPlayerActor>();
+    internal readonly ConcurrentDictionary<ulong, RemoteDummyPlayerActor> Dummies = new ConcurrentDictionary<ulong, RemoteDummyPlayerActor>();
 
     internal IServiceProvider ModularRpcsServices { get; private set; }
 
-    public DummyPlayerLauncher(MainModule module, ILogger logger, IServiceProvider serviceProvider)
+    public RemoteDummyManager(MainModule module, ILogger logger, IServiceProvider serviceProvider)
     {
         _module = module;
         _logger = logger;
@@ -53,7 +48,8 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         {
             p.RegisterPatch(SkipSteamAuthenticationForDummyPlayers.TryPatch, SkipSteamAuthenticationForDummyPlayers.TryUnpatch);
             p.RegisterPatch(RemoveWorkshopRateLimiter.TryPatch, RemoveWorkshopRateLimiter.TryUnpatch, critical: true);
-            p.RegisterPatch(RemoveReadyToConnectRateLimiter.TryPatch, RemoveReadyToConnectRateLimiter.TryUnpatch, critical: true);
+            p.RegisterPatch(RemoveReadyToConnectChecks.TryPatch, RemoveReadyToConnectChecks.TryUnpatch, critical: true);
+            p.RegisterPatch(RemoveAuthenticateChecks.TryPatch, RemoveAuthenticateChecks.TryUnpatch);
             p.RegisterPatch(IgnoreSocketExceptionsOnServer.TryPatch, IgnoreSocketExceptionsOnServer.TryUnpatch);
             p.RegisterPatch(WorkshopItemsQueriedUpdateDummies.TryPatch, WorkshopItemsQueriedUpdateDummies.TryUnpatch);
         }
@@ -63,30 +59,6 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         _ = Type.GetType("uTest.Dummies.Host.DummyPlayerHost, Unturned.uTest.DummyPlayerHost");
     }
 
-    internal void ClearServerDetailsCache()
-    {
-        _hasServerDetails = false;
-    }
-
-    private void EnsureServerDetailsCached()
-    {
-        if (_hasServerDetails)
-            return;
-
-        ulong serverCode = SteamGameServer.GetSteamID().m_SteamID;
-        ushort port = Provider.GetServerConnectionPort();
-
-        if (!IPv4Address.TryParse(Provider.bindAddress, out IPv4Address address))
-        {
-            address = new IPv4Address((127u << 24) | 1 /* 127.0.0.1 */);
-        }
-
-        _svrDetailsCode = serverCode;
-        _svrDetailsPort = port;
-        _svrDetailsAddress = address;
-        _hasServerDetails = true;
-    }
-
     public bool TryGetRemoteDummy(Player player, [MaybeNullWhen(false)] out RemoteDummyPlayerActor dummy)
     {
         return TryGetRemoteDummy(player.channel.owner.playerID.steamID.m_SteamID, out dummy);
@@ -94,7 +66,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
     public bool TryGetRemoteDummy(ulong steam64, [MaybeNullWhen(false)] out RemoteDummyPlayerActor dummy)
     {
-        return RemoteDummies.TryGetValue(steam64, out dummy);
+        return Dummies.TryGetValue(steam64, out dummy);
     }
 
     private static string GetArgs(CSteamID steamId, string moduleDir, string dataDir)
@@ -122,7 +94,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         {
             try
             {
-                await SendWorkshopItemsUpdate(RemoteDummies.Values
+                await SendWorkshopItemsUpdate(Dummies.Values
                     .Select(x => x.ConnectionIntl)
                     .Where(x => x != null)!, newArr);
             }
@@ -140,7 +112,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
     private void ReceiveRejectedStatusNotification(IModularRpcRemoteConnection connection, ulong id, ESteamConnectionFailureInfo rejection, string? reason, uint duration)
     {
         CSteamID steamId = new CSteamID(id);
-        if (!RemoteDummies.TryGetValue(steamId.m_SteamID, out RemoteDummyPlayerActor actor))
+        if (!Dummies.TryGetValue(steamId.m_SteamID, out RemoteDummyPlayerActor actor))
             throw new ArgumentException($"Player {id} not found.");
 
         actor.Status = DummyReadyStatus.InMenu;
@@ -157,7 +129,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
     private async Task ReceiveStatusNotification(IModularRpcRemoteConnection connection, ulong id, DummyReadyStatus status, nint hwnd)
     {
         CSteamID steamId = new CSteamID(id);
-        if (!RemoteDummies.TryGetValue(steamId.m_SteamID, out RemoteDummyPlayerActor actor))
+        if (!Dummies.TryGetValue(steamId.m_SteamID, out RemoteDummyPlayerActor actor))
             throw new ArgumentException($"Player {id} not found.");
 
         actor.Status = status;
@@ -195,7 +167,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
     [RpcReceive]
     private async Task ReceiveInQueueBump(ulong steam64)
     {
-        if (!RemoteDummies.TryGetValue(steam64, out RemoteDummyPlayerActor? player))
+        if (!Dummies.TryGetValue(steam64, out RemoteDummyPlayerActor? player))
         {
             return;
         }
@@ -396,7 +368,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
                     this,
                     process,
                     Path.GetFullPath(configDir),
-                    i
+                    -1
                 );
 
                 actor.LogFileWriter = new StreamWriter(configDir + "/Unity.log");
@@ -421,7 +393,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
                     actors[i] = actor;
 
-                    if (!RemoteDummies.TryAdd(steamId.m_SteamID, actor))
+                    if (!Dummies.TryAdd(steamId.m_SteamID, actor))
                     {
                         throw new Exception("Duplicate steam ID, this shouldn't happen.");
                     }
@@ -473,7 +445,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
             }
             catch
             {
-                RemoteDummies.TryRemove(steamId.m_SteamID, out _);
+                Dummies.TryRemove(steamId.m_SteamID, out _);
                 process.Dispose();
                 actor?.Dispose();
                 throw;
@@ -497,7 +469,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
                 {
                     a.Process.Dispose();
                 }
-                RemoteDummies.TryRemove(a.Steam64.m_SteamID, out _);
+                Dummies.TryRemove(a.Steam64.m_SteamID, out _);
                 a.Dispose();
             }
 
@@ -512,9 +484,10 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
     {
         RemoteDummyPlayerActor actor = (RemoteDummyPlayerActor)player;
 
-        EnsureServerDetailsCached();
+        DummyManager dummyManager = _module.Dummies;
+        dummyManager.EnsureServerDetailsCached();
 
-        return ConnectDummyAsync(actor, token, _svrDetailsAddress.value, _svrDetailsPort, _svrDetailsCode, ignoreAlreadyConnected, configurePlayers);
+        return ConnectDummyAsync(actor, token, dummyManager.ServerDetailsAddress.value, dummyManager.ServerDetailsPort, dummyManager.ServerDetailsCode, ignoreAlreadyConnected, configurePlayers);
     }
 
     /// <inheritdoc />
@@ -563,6 +536,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
         actor.ConnectedCondition = connectTask;
         actor.ReadyCondition = new TaskCompletionSource<RemoteDummyPlayerActor>();
 
+        await GameThread.Switch(token);
         actor.Configure(configurePlayer);
 
         _logger.LogInformation($"[uTest] Notifying dummy {actor.Steam64.m_SteamID} to connect to server.");
@@ -578,6 +552,11 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
             else
                 password += password;
         }
+
+        ulong[] equippedSkins = actor.Configuration.GetEquippedSkinsArray(out string[] skinTags, out string[] skinDynamicProps);
+
+        actor.SkinTags = skinTags;
+        actor.SkinDynamicProps = skinDynamicProps;
 
         await actor.Connect(ipv4, port, password, serverCode,
             Provider.map,
@@ -608,13 +587,13 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
             actor.Configuration.CharacterName,
             actor.Configuration.NickName,
             actor.Configuration.CharacterIndex,
-            actor.Configuration.ShirtItem.m_SteamItemInstanceID,
-            actor.Configuration.PantsItem.m_SteamItemInstanceID,
-            actor.Configuration.HatItem.m_SteamItemInstanceID,
-            actor.Configuration.BackpackItem.m_SteamItemInstanceID,
-            actor.Configuration.VestItem.m_SteamItemInstanceID,
-            actor.Configuration.MaskItem.m_SteamItemInstanceID,
-            actor.Configuration.GlassesItem.m_SteamItemInstanceID,
+            unchecked ( (ulong)actor.Configuration.ShirtItem.m_SteamItemDef ),
+            unchecked ( (ulong)actor.Configuration.PantsItem.m_SteamItemDef ),
+            unchecked ( (ulong)actor.Configuration.HatItem.m_SteamItemDef ),
+            unchecked ( (ulong)actor.Configuration.BackpackItem.m_SteamItemDef ),
+            unchecked ( (ulong)actor.Configuration.VestItem.m_SteamItemDef ),
+            unchecked ( (ulong)actor.Configuration.MaskItem.m_SteamItemDef ),
+            unchecked ( (ulong)actor.Configuration.GlassesItem.m_SteamItemDef ),
             actor.Configuration.SteamGroupId.m_SteamID,
             actor.Configuration.SteamLobbyId.m_SteamID,
             actor.Configuration.FaceIndex,
@@ -627,7 +606,7 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
             actor.Configuration.Platform,
             actor.Configuration.ReportedPing,
             actor.Configuration.IsLeftHanded,
-            actor.Configuration.EquippedSkins.Select(x => x.m_SteamItemInstanceID).ToArray(),
+            equippedSkins,
             actor.Configuration.Skillset,
             actor.Configuration.GetRequiredModulesString(),
             actor.Configuration.Language,
@@ -689,8 +668,8 @@ internal partial class DummyPlayerLauncher : IDummyPlayerController
 
     internal void CloseAllDummies()
     {
-        RemoteDummyPlayerActor[] actors = RemoteDummies.Values.ToArray();
-        RemoteDummies.Clear();
+        RemoteDummyPlayerActor[] actors = Dummies.Values.ToArray();
+        Dummies.Clear();
         Task[] tasks = new Task[actors.Length];
         for (int i = 0; i < actors.Length; i++)
         {

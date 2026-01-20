@@ -403,6 +403,24 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to This feature can only be used with remote dummies, not simulated dummies..
+        /// </summary>
+        internal static string NotSupportedException_RemoteDummiesOnly {
+            get {
+                return ResourceManager.GetString("NotSupportedException_RemoteDummiesOnly", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to This feature can only be used with simulated dummies, not remote dummies..
+        /// </summary>
+        internal static string NotSupportedException_SimulatedDummiesOnly {
+            get {
+                return ResourceManager.GetString("NotSupportedException_SimulatedDummiesOnly", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Operations are not supported on the NullActor..
         /// </summary>
         internal static string NotSupportedExceptionNullActor {

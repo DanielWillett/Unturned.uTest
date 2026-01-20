@@ -77,7 +77,7 @@ internal static class SkipSteamAuthenticationForDummyPlayers
             return true;
         }
 
-        MainModule.Instance.Logger.LogInformation($"Skipping steam authentication for dummy {steamID}.");
+        MainModule.Instance.Logger.LogTrace($"Skipping steam authentication for dummy {steamID}.");
 
         ulong s64 = steamID.m_SteamID;
         SteamPending pending = Provider.pending.Find(x => x.playerID.steamID.m_SteamID == s64);

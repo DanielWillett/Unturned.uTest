@@ -7,7 +7,7 @@ namespace uTest.Sandbox;
 [Test]
 public class Tests2 : ITestClass, ITestClassSetup
 {
-    private const int Players = 15;
+    private const int Players = 3;
 
     [PlayerSimulationMode(PlayerSimulationMode.Full)]
     [PlayerCount(Players)]

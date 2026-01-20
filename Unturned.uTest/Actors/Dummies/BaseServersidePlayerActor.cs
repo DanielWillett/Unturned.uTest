@@ -3,11 +3,16 @@ using uTest.Module;
 
 namespace uTest.Dummies;
 
+/// <summary>
+/// Base class for remote and simulated dummies (<see cref="IServersideTestPlayer"/>).
+/// </summary>
 public abstract class BaseServersidePlayerActor : PlayerActor, IServersideTestPlayer, IDisposable
 {
     internal ESteamConnectionFailureInfo? RejectReason;
     internal string? RejectReasonString;
     internal TimeSpan? RejectDuration;
+    internal byte[]? HWIDs;
+    internal DummyPlayerJoinConfiguration? Configuration;
 
     private protected IDummyPlayerController PlayerController { get; }
 
@@ -22,12 +27,33 @@ public abstract class BaseServersidePlayerActor : PlayerActor, IServersideTestPl
     /// </summary>
     internal UnturnedTestInstanceData? Test { get; set; }
 
+    /// <inheritdoc cref="IServersideTestPlayer.Index"/>
+    public int Index { get; internal set; }
+
     /// <inheritdoc />
-    private protected BaseServersidePlayerActor(CSteamID steam64, string displayName, IDummyPlayerController playerController)
+    private protected BaseServersidePlayerActor(int index, CSteamID steam64, string displayName, IDummyPlayerController playerController)
         : base(null, steam64, displayName)
     {
+        Index = index;
         PlayerController = playerController;
     }
+
+    [MemberNotNull(nameof(Configuration))]
+    internal void Configure(Action<DummyPlayerJoinConfiguration>? configurer)
+    {
+        GameThread.Assert();
+        DummyPlayerJoinConfiguration c = new DummyPlayerJoinConfiguration(Index, Steam64, DisplayName, this is RemoteDummyPlayerActor);
+        if (configurer != null)
+        {
+            configurer(c);
+        }
+
+        HWIDs = c.GetHwidPacked();
+        Configuration = c;
+        Configure(c);
+    }
+
+    protected virtual void Configure(DummyPlayerJoinConfiguration c) { }
 
     /// <inheritdoc />
     public bool TryGetRejectionInfo(out ESteamConnectionFailureInfo info, out string? reason, out TimeSpan? duration)
@@ -78,5 +104,6 @@ public abstract class BaseServersidePlayerActor : PlayerActor, IServersideTestPl
         Dispose(true);
     }
 
+    int IServersideTestPlayer.Index { get => Index; set => Index = value; }
     UnturnedTestInstanceData? IServersideTestPlayer.Test { get => Test; set => Test = value; }
 }

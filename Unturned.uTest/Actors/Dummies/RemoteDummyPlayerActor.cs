@@ -21,8 +21,8 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
     internal IModularRpcRemoteConnection? ConnectionIntl;
     internal StreamWriter? LogFileWriter;
     internal int QueueBumpVersion;
-    internal byte[]? HWIDs;
-    internal DummyPlayerJoinConfiguration Configuration;
+    internal string[]? SkinTags;
+    internal string[]? SkinDynamicProps;
 
     /// <summary>
     /// The 'home' directory for this client, storing startup config, cloud files, etc.
@@ -45,11 +45,6 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
     public nint WindowHandle { get; internal set; }
 
     /// <summary>
-    /// The zero-based index of this remote player.
-    /// </summary>
-    public int Index { get; }
-
-    /// <summary>
     /// The ModularRPCs connection used to communicate with the client.
     /// </summary>
     public IModularRpcRemoteConnection Connection => ConnectionIntl ?? throw new InvalidOperationException("Not yet connected.");
@@ -62,25 +57,11 @@ public sealed partial class RemoteDummyPlayerActor : BaseServersidePlayerActor, 
     public override bool IsRemotePlayer => true;
 
     /// <inheritdoc />
-    internal RemoteDummyPlayerActor(CSteamID steam64, string displayName, DummyPlayerLauncher dummyLauncher, Process process, string homeDirectory, int index)
-        : base(steam64, displayName, dummyLauncher)
+    internal RemoteDummyPlayerActor(CSteamID steam64, string displayName, RemoteDummyManager dummyLauncher, Process process, string homeDirectory, int index)
+        : base(index, steam64, displayName, dummyLauncher)
     {
         Process = process;
         HomeDirectory = homeDirectory;
-        Index = index;
-    }
-
-    [MemberNotNull(nameof(Configuration))]
-    internal void Configure(Action<DummyPlayerJoinConfiguration>? configurer)
-    {
-        DummyPlayerJoinConfiguration c = new DummyPlayerJoinConfiguration(Index, Steam64, DisplayName);
-        if (configurer != null)
-        {
-            configurer(c);
-        }
-
-        HWIDs = c.GetHwidPacked();
-        Configuration = c;
     }
 
     internal void HandleOutputDataReceived(object sender, DataReceivedEventArgs e)
