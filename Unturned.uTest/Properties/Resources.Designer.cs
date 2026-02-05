@@ -61,11 +61,11 @@ namespace uTest.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Actor {0} wasn&apos;t able to successfully connect. Reason: {1}..
+        ///   Looks up a localized string similar to Connecting actor &quot;{0}&quot; was cancelled by the game. Reason: {1}..
         /// </summary>
-        internal static string ActorDestroyedDisconnectedWhileConnecting {
+        internal static string ActorDestroyed_FailedToConnect {
             get {
-                return ResourceManager.GetString("ActorDestroyedDisconnectedWhileConnecting", resourceCulture);
+                return ResourceManager.GetString("ActorDestroyed_FailedToConnect", resourceCulture);
             }
         }
         
@@ -129,6 +129,15 @@ namespace uTest.Properties {
         internal static string ArgumentExceptionDuplicateItem {
             get {
                 return ResourceManager.GetString("ArgumentExceptionDuplicateItem", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Test runner was null, likely because the active ITestRunnerActivator implementation returned null, which is supplied by a framework compatibility module (such as OpenMod). This is a bug and should be reported..
+        /// </summary>
+        internal static string ArgumentNullException_RunnerFactoryReturnedNull {
+            get {
+                return ResourceManager.GetString("ArgumentNullException_RunnerFactoryReturnedNull", resourceCulture);
             }
         }
         
@@ -651,6 +660,15 @@ namespace uTest.Properties {
         internal static string TestResultTimeout {
             get {
                 return ResourceManager.GetString("TestResultTimeout", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to An error was encountered setting up the test. Error code {0}..
+        /// </summary>
+        internal static string TestRunnerError {
+            get {
+                return ResourceManager.GetString("TestRunnerError", resourceCulture);
             }
         }
         

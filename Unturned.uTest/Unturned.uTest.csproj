@@ -1,5 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="../Version.props"/>
+
   <PropertyGroup>
 
     <TargetFrameworks>netstandard2.1;net471</TargetFrameworks>
@@ -8,26 +10,13 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <Version>0.0.1</Version>
-    <PackageVersion>$(Version)</PackageVersion>
-
-    <FileVersion>$(Version).0</FileVersion>
-    <AssemblyVersion>$(Version).0</AssemblyVersion>
-
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <NeutralLanguage>en-US</NeutralLanguage>
 
     <NoWarn>CS1591;CS1573</NoWarn>
 
     <DefineConstants>$(DefineConstants);JETBRAINS_ANNOTATIONS</DefineConstants>
     <DefineConstants>$(DefineConstants);REFLECTION_TOOLS_ENABLE_HARMONY_LOG</DefineConstants>
 	  <PublicizerClearCacheOnClean>true</PublicizerClearCacheOnClean>
-    <DebugType>portable</DebugType>
 
   </PropertyGroup>
 
@@ -101,13 +90,15 @@
 		<Publicize Include="Assembly-CSharp:SDG.Unturned.ClientInvocationContext..ctor" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.buffer" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.IsBattlEyeActiveOnCurrentServer" />
-		<Publicize Include="Assembly-CSharp:SDG.Unturned.DedicatedUGC.itemsToDownload" />
-		<Publicize Include="Assembly-CSharp:SDG.Unturned.CommandWindow.onInputCommitted" />
-		<Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPluginAdvertising" />
-		<Publicize Include="Assembly-CSharp:SDG.Framework.Modules.ModuleHook.discoveredNameToPath" />
-		<Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer" />
-		<Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.internalBuffer" />
-		<Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.pendingMessage" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider.broadcastRejectingPlayer" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.Provider._transportConnectionToPendingPlayerMap" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.DedicatedUGC.itemsToDownload" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.CommandWindow.onInputCommitted" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamPluginAdvertising" />
+    <Publicize Include="Assembly-CSharp:SDG.Framework.Modules.ModuleHook.discoveredNameToPath" />
+    <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer" />
+    <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.internalBuffer" />
+    <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.pendingMessage" />
     <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.pendingMessageOffset" />
     <Publicize Include="Assembly-CSharp:SDG.NetTransport.SystemSockets.SocketMessageLayer.messageQueue" />
     <Publicize Include="Assembly-CSharp:SDG.NetTransport.SteamNetworkingSockets.ServerTransport_SteamNetworkingSockets.clUseIpSocket" />

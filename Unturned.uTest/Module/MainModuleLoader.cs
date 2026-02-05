@@ -45,7 +45,7 @@ internal class MainModuleLoader : IModuleNexus
         // initialize CompatibilityInformation class
         foreach ((string modName, Action<bool> callback) in CompatibilityInformation.CompatibleModules)
         {
-            callback(ModuleHook.getModuleByName(modName) != null);
+            callback(ModuleHook.getModuleByName(modName) is { config.IsEnabled: true });
         }
         CompatibilityInformation.IsUnturnedTestInstalled = true;
 

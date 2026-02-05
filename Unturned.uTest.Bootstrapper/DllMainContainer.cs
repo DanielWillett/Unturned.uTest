@@ -35,7 +35,7 @@ internal static class DllMainContainer
     }
 }
 
-public class NullModule : IModuleNexus
+internal class NullModule : IModuleNexus
 {
     public void initialize() { }
     public void shutdown() { }

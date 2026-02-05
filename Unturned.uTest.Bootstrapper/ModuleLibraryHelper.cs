@@ -3,6 +3,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using uTest.Compat.Utility;
 
 namespace uTest.Bootstrapper;
 
@@ -18,6 +19,8 @@ internal class ModuleLibraryHelper(string moduleHomePath)
 
         Version _3100 = new Version(3, 1, 0, 0);
         Version _4000 = new Version(4, 0, 0, 0);
+
+        Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
 
         Log("=== BOOTSTRAPPING uTEST ===");
         Log("Adding fallback libraries for uTest.");
@@ -64,7 +67,39 @@ internal class ModuleLibraryHelper(string moduleHomePath)
         TryAddFallback(_4000, "System.Threading.Tasks.exe", out _);
         TryAddFallback(new Version(4, 2, 0, 1), "System.Threading.Tasks.Extensions.exe", out _);
         TryAddFallback(new Version(4, 0, 5, 0), "System.Buffers.exe", out _);
+        TryAddFallback(new Version(2, 9, 3, 0), "xunit.assert.dll", out _);
+
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            // attempt to load OpenMod compatibility assembly
+            string openModCompat = Path.GetFullPath(
+                Path.Combine(_moduleHomePath, "..", "..", "Servers", Provider.serverID, "OpenMod", "plugins", "uTest.Compat.OpenMod.dll")
+            );
+
+            if (File.Exists(openModCompat))
+            {
+                TryAddFallback(currentVersion, openModCompat, out _, load: true);
+            }
+            else
+            {
+                Log("OpenMod not detected.");
+            }
+        }
+
         Log("=== BOOTSTRAPPING uTEST ===");
+    }
+
+    private string Rel(string path)
+    {
+        if (!Path.IsPathRooted(path)
+            || !path.StartsWith(_moduleHomePath)
+            || path.Length <= _moduleHomePath.Length + 1
+            || path[_moduleHomePath.Length] != Path.DirectorySeparatorChar)
+        {
+            return path;
+        }
+
+        return "Modules" + path.Substring(_moduleHomePath.Length);
     }
 
     internal bool TryAddFallback(Version referencedVersion, string fileName, out AssemblyName an, bool load = false)
@@ -80,12 +115,12 @@ internal class ModuleLibraryHelper(string moduleHomePath)
 
             if (x.Key.Version != null && x.Key.Version >= referencedVersion)
             {
-                Log($"Skipped loading fallback version of {includedAssembly.Name}, already registered as {x.Key} at \"{x.Value}\". Minimum needed is {referencedVersion}.");
+                Log($"Skipped loading fallback version of {includedAssembly.Name}, already registered as {x.Key} at \"{Rel(x.Value)}\". Minimum needed is {referencedVersion}.");
                 an = x.Key;
                 return false;
             }
 
-            Log($"Loading fallback version for {includedAssembly.Name}. Registered version is too old, minimum needed is {referencedVersion}. Consider upgrading the version in your module's Library folder (at \"{x.Value}\").");
+            Log($"Loading fallback version for {includedAssembly.Name}. Registered version is too old ({x.Key.Version}), minimum needed is {referencedVersion}. Consider upgrading the version in your module's Library folder (at \"{Rel(x.Value)}\").");
             ModuleHook.discoveredNameToPath.Remove(x.Key);
             ModuleHook.discoveredNameToPath[includedAssembly] = fullPath;
             if (load)
@@ -96,7 +131,25 @@ internal class ModuleLibraryHelper(string moduleHomePath)
             return true;
         }
 
-        Log($"Loading fallback version for {includedAssembly.Name}. There is no registered version, minimum needed is {referencedVersion}.");
+        if (HotloaderAssemblyHelper.TryGetAssemblyFromHotloader(includedAssembly, out Assembly hotLoadedAssembly))
+        {
+            AssemblyName hotLoadedAssemblyName = hotLoadedAssembly.GetName();
+            Version hotLoadedVersion = hotLoadedAssemblyName.Version;
+
+            if (hotLoadedVersion != null && hotLoadedVersion >= referencedVersion)
+            {
+                Log($"Skipped loading fallback version of {includedAssembly.Name}, already registered as {hotLoadedAssemblyName} (HotLoaded by OpenMod). Minimum needed is {referencedVersion}.");
+                an = hotLoadedAssemblyName;
+                return false;
+            }
+
+            Log($"Loading fallback version for {includedAssembly.Name}. Registered version (HotLoaded by OpenMod) is too old ({hotLoadedVersion}), minimum needed is {referencedVersion}. Consider upgrading the version referenced by your plugin.");
+        }
+        else
+        {
+            Log($"Loading fallback version for {includedAssembly.Name}. There is no registered version, minimum needed is {referencedVersion}.");
+        }
+
         ModuleHook.discoveredNameToPath.Add(includedAssembly, fullPath);
         if (load)
         {

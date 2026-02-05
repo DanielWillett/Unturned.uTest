@@ -437,7 +437,9 @@ file static class PredefinedMessages
         () => new RefreshTestsMessage(),
         () => new RunTestsMessage(),
         () => new ReportTestResultMessage(),
-        () => new GracefulShutdownMessage(),
-        () => new AllInstancesStartedMessage()
+        () => new GracefulShutdownMessage(),    // 5
+        () => new AllInstancesStartedMessage(),
+        () => new ReadyToRevertModuleChanges(),
+        () => new ServerModuleChangesReverted()
     ];
 }

@@ -28,17 +28,17 @@ public static class CompatibilityInformation
     /// Whether or not the <see href="https://github.com/SmartlyDressedGames/Legally-Distinct-Missile">Legally Distinct Missile</see> (RocketMod) plugin framework is installed.
     /// </summary>
     /// <remarks>Only initialized if <see cref="IsUnturnedTestInstalled"/> is <see langword="true"/>.</remarks>
-    public static bool IsRocketInstalled { get; private set; }
+    public static bool IsRocketInstalled { get; internal set; }
 
     /// <summary>
     /// Whether or not the <see href="https://openmod.github.io/openmod-docs">OpenMod</see> plugin framework is installed.
     /// </summary>
     /// <remarks>Only initialized if <see cref="IsUnturnedTestInstalled"/> is <see langword="true"/>.</remarks>
-    public static bool IsOpenModInstalled { get; private set; }
+    public static bool IsOpenModInstalled { get; internal set; }
 
     /// <summary>
     /// Whether or not the <see href="https://github.com/UncreatedStaff/UncreatedWarfare">Uncreated</see> total conversion framework is installed.
     /// </summary>
     /// <remarks>Only initialized if <see cref="IsUnturnedTestInstalled"/> is <see langword="true"/>.</remarks>
-    public static bool IsUncreatedInstalled { get; private set; }
+    public static bool IsUncreatedInstalled { get; internal set; }
 }

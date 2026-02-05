@@ -27,6 +27,18 @@ public sealed class TestExecutionSummary
     public DateTimeOffset StartTime { get; set; }
     public DateTimeOffset EndTime { get; set; }
     public TimeSpan Duration { get; set; }
+
+    internal void IncludeException(UnturnedTestList testList, IExceptionFormatter exceptionFormatter, Exception testException)
+    {
+        if (testList.CollectTrxProperties)
+        {
+            StackTrace = testException.StackTrace;
+            ExceptionMessage = testException.Message;
+            ExceptionType = testException.GetType().FullName;
+        }
+
+        ExceptionFullString = exceptionFormatter.FormatException(testException);
+    }
 }
 
 public sealed class TestTimingStep

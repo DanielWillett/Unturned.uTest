@@ -1,5 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="../Version.props"/>
+
   <PropertyGroup>
     <TargetFrameworks>netstandard2.1;net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -8,40 +10,17 @@
     <RootNamespace>uTest.Runner</RootNamespace>
     <LangVersion>13.0</LangVersion>
 
-
     <!-- Update build file as well -->
     <MTPVersion>2.0.1</MTPVersion>
-
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 
     <PackageId>Unturned.uTest.Runner</PackageId>
     <Title>uTest MTP Runner</Title>
 
-    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/DanielWillett/uTest</PackageProjectUrl>
-    <RepositoryUrl>$(PackageProjectUrl).git</RepositoryUrl>
-
-    <Authors>Daniel Willett</Authors>
-    <Company>$(Authors)</Company>
-
-    <Version>0.0.1</Version>
-    <PackageVersion>$(Version)</PackageVersion>
-
-    <FileVersion>$(Version).0</FileVersion>
-    <AssemblyVersion>$(Version).0</AssemblyVersion>
-
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <NeutralLanguage>en-US</NeutralLanguage>
 
     <NoWarn>CS1591;CS1573</NoWarn>
 
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <DebugType>portable</DebugType>
 
   </PropertyGroup>
 
@@ -52,7 +31,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
-    <ProjectReference Include="../Unturned.uTest.Bootstrapper/Unturned.uTest.Bootstrapper.csproj" NoWarn="NU1702" ReferenceOutputAssembly="false"/>
+    <ProjectReference Include="../Unturned.uTest.Bootstrapper/Unturned.uTest.Bootstrapper.csproj" NoWarn="NU1702" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../Unturned.uTest.DummyPlayerHost/Unturned.uTest.DummyPlayerHost.csproj" NoWarn="NU1702" Condition="'$(TargetFramework)' != 'net471'">
       <ReferenceOutputAssembly>False</ReferenceOutputAssembly>
@@ -77,21 +56,7 @@
 
 	<!-- Copy uTest dependencies to Modules folder -->
 	<Target BeforeTargets="BeforeBuild" Name="CopyDepedenciesToModule" Condition="'$(TargetFrameworks)' == '' OR $(TargetFrameworks.EndsWith($(TargetFramework)))">
-		<Copy SourceFiles="
-$(Pkgxunit_assert)\lib\netstandard1.1\xunit.assert.dll
-;$(PkgDanielWillett_ModularRpcs_NamedPipes)\lib\netstandard2.1\ModularRpcs.NamedPipes.dll
-;$(PkgDanielWillett_ModularRpcs_Unity)\lib\netstandard2.1\ModularRpcs.Unity.dll
-;$(PkgDanielWillett_ModularRpcs)\lib\netstandard2.1\ModularRpcs.dll
-;$(PkgDanielWillett_SpeedBytes)\lib\netstandard2.1\DanielWillett.SpeedBytes.dll
-;$(PkgMicrosoft_Testing_Extensions_TrxReport_Abstractions)\lib\netstandard2.0\Microsoft.Testing.Extensions.TrxReport.Abstractions.dll
-;$(PkgLib_Harmony)\lib\net48\0Harmony.dll
-;$(PkgMicrosoft_Extensions_FileSystemGlobbing)\lib\netstandard2.0\Microsoft.Extensions.FileSystemGlobbing.dll
-;$(PkgDanielWillett_ReflectionTools)\lib\netstandard2.1\ReflectionTools.dll
-;$(PkgDanielWillett_ReflectionTools_Harmony)\lib\netstandard2.1\ReflectionTools.Harmony.dll
-;$(PkgMicrosoft_Extensions_DependencyInjection_Abstractions)\lib\netstandard2.0\Microsoft.Extensions.DependencyInjection.Abstractions.dll
-;$(PkgMicrosoft_Extensions_Logging_Abstractions)\lib\netstandard2.0\Microsoft.Extensions.Logging.Abstractions.dll
-;$(PkgSystem_Diagnostics_DiagnosticSource)\lib\netstandard2.0\System.Diagnostics.DiagnosticSource.dll
-;$(PkgMicrosoft_Bcl_AsyncInterfaces)\lib\netstandard2.1\Microsoft.Bcl.AsyncInterfaces.dll" SkipUnchangedFiles="true" DestinationFolder="./Module" />
+		<Copy SourceFiles="&#xD;&#xA;$(Pkgxunit_assert)\lib\netstandard1.1\xunit.assert.dll&#xD;&#xA;;$(PkgDanielWillett_ModularRpcs_NamedPipes)\lib\netstandard2.1\ModularRpcs.NamedPipes.dll&#xD;&#xA;;$(PkgDanielWillett_ModularRpcs_Unity)\lib\netstandard2.1\ModularRpcs.Unity.dll&#xD;&#xA;;$(PkgDanielWillett_ModularRpcs)\lib\netstandard2.1\ModularRpcs.dll&#xD;&#xA;;$(PkgDanielWillett_SpeedBytes)\lib\netstandard2.1\DanielWillett.SpeedBytes.dll&#xD;&#xA;;$(PkgMicrosoft_Testing_Extensions_TrxReport_Abstractions)\lib\netstandard2.0\Microsoft.Testing.Extensions.TrxReport.Abstractions.dll&#xD;&#xA;;$(PkgLib_Harmony)\lib\net48\0Harmony.dll&#xD;&#xA;;$(PkgMicrosoft_Extensions_FileSystemGlobbing)\lib\netstandard2.0\Microsoft.Extensions.FileSystemGlobbing.dll&#xD;&#xA;;$(PkgDanielWillett_ReflectionTools)\lib\netstandard2.1\ReflectionTools.dll&#xD;&#xA;;$(PkgDanielWillett_ReflectionTools_Harmony)\lib\netstandard2.1\ReflectionTools.Harmony.dll&#xD;&#xA;;$(PkgMicrosoft_Extensions_DependencyInjection_Abstractions)\lib\netstandard2.0\Microsoft.Extensions.DependencyInjection.Abstractions.dll&#xD;&#xA;;$(PkgMicrosoft_Extensions_Logging_Abstractions)\lib\netstandard2.0\Microsoft.Extensions.Logging.Abstractions.dll&#xD;&#xA;;$(PkgSystem_Diagnostics_DiagnosticSource)\lib\netstandard2.0\System.Diagnostics.DiagnosticSource.dll&#xD;&#xA;;$(PkgMicrosoft_Bcl_AsyncInterfaces)\lib\netstandard2.1\Microsoft.Bcl.AsyncInterfaces.dll" SkipUnchangedFiles="true" DestinationFolder="./Module" />
 		<Copy SourceFiles="$(PkgDanielWillett_ReflectionTools_Harmony)\lib\netstandard2.1\ReflectionTools.Harmony.dll" SkipUnchangedFiles="true" DestinationFolder="./Module" />
 	</Target>
 

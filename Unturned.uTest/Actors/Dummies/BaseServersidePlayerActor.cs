@@ -93,6 +93,12 @@ public abstract class BaseServersidePlayerActor : PlayerActor, IServersideTestPl
         NotifyConnectedIntl(connectedPlayer);
     }
 
+    internal void NotifyDisconnected()
+    {
+        IsOnline = false;
+        NotifyDisconnectedIntl();
+    }
+
     protected virtual void Dispose(bool disposing)
     {
 

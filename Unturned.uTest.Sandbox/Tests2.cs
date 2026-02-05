@@ -9,7 +9,7 @@ public class Tests2 : ITestClass, ITestClassSetup
 {
     private const int Players = 3;
 
-    [PlayerSimulationMode(PlayerSimulationMode.Full)]
+    [PlayerSimulationMode(PlayerSimulationMode.Remote)]
     [PlayerCount(Players)]
     [Test]
     public async Task Test1()

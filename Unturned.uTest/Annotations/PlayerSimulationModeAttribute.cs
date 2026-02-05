@@ -17,12 +17,12 @@ public sealed class PlayerSimulationModeAttribute(PlayerSimulationMode mode) : A
 public enum PlayerSimulationMode
 {
     /// <summary>
-    /// Partially simulates a new player by creating a dummy managed by the server. May not be sufficient in some cases.
+    /// Partially simulates a new player by creating a dummy managed by the server. May not perfectly mimic normal players in some cases, but is much less resource-intensive.
     /// </summary>
-    Dummy,
+    Simulated,
 
     /// <summary>
     /// Fully simulates a new player by starting up an instance of the Unturned client and connecting it to the server for each player.
     /// </summary>
-    Full
+    Remote
 }

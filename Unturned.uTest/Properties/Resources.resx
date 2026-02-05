@@ -117,11 +117,11 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="ActorDestroyedDisconnectedWhileConnecting" xml:space="preserve">
-    <value>Actor {0} wasn't able to successfully connect. Reason: {1}.</value>
-  </data>
   <data name="ActorDestroyedExceptionDefaultMessage" xml:space="preserve">
     <value>Unable to modify "{0}", this actor has been destroyed.</value>
+  </data>
+  <data name="ActorDestroyed_FailedToConnect" xml:space="preserve">
+    <value>Connecting actor "{0}" was cancelled by the game. Reason: {1}.</value>
   </data>
   <data name="ActorMissingAuthorityExceptionDefaultMessage" xml:space="preserve">
     <value>Unable to modify "{0}", the current client does not have authority over it. This is usually because this library is running on a client playing on a server.</value>
@@ -140,6 +140,9 @@
   </data>
   <data name="ArgumentExceptionDuplicateItem" xml:space="preserve">
     <value>Duplicate value.</value>
+  </data>
+  <data name="ArgumentNullException_RunnerFactoryReturnedNull" xml:space="preserve">
+    <value>Test runner was null, likely because the active ITestRunnerActivator implementation returned null, which is supplied by a framework compatibility module (such as OpenMod). This is a bug and should be reported.</value>
   </data>
   <data name="ArgumentOutOfRangeExceptionEmpty" xml:space="preserve">
     <value>Empty value.</value>
@@ -314,6 +317,9 @@
   </data>
   <data name="TestResultTimeout" xml:space="preserve">
     <value>Timed Out</value>
+  </data>
+  <data name="TestRunnerError" xml:space="preserve">
+    <value>An error was encountered setting up the test. Error code {0}.</value>
   </data>
   <data name="UnturnedStartExceptionDefaultMessage" xml:space="preserve">
     <value>The Unturned instance failed to start with uTest.</value>

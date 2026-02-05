@@ -249,6 +249,12 @@ public class DummyPlayerJoinConfiguration
     }
 
     /// <summary>
+    /// Whether or not the player is a blue-hammer admin.
+    /// </summary>
+    /// <remarks>Defaults to <see langword="false"/>.</remarks>
+    public bool HasAdmin { get; set; }
+
+    /// <summary>
     /// The Steam ID of the player's group.
     /// </summary>
     /// <remarks>Defaults to <see cref="CSteamID.Nil"/>.</remarks>
@@ -837,6 +843,15 @@ public class DummyPlayerJoinConfiguration
     public DummyPlayerJoinConfiguration WithUnturnedGold(bool hasGold = true)
     {
         HasGold = hasGold;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets whether or not the player is a blue-hammer admin.
+    /// </summary>
+    public DummyPlayerJoinConfiguration WithAdmin(bool hasAdmin = true)
+    {
+        HasAdmin = hasAdmin;
         return this;
     }
 

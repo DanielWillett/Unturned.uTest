@@ -41,45 +41,65 @@ internal class TestExecutionPipeline : IExceptionFormatter
         if (CurrentTest == null)
             throw new InvalidOperationException("Test not loaded.");
 
+        TestExecutionSummary summary;
         try
         {
             RuntimeHelpers.RunClassConstructor(CurrentTest.Instance.Type.TypeHandle);
         }
         catch (Exception ex)
         {
-            return HandleTestError("Type Initializer", ex);
+            _logger.LogError($"Test \"{CurrentTest!.Instance.Uid}\" failed with exception when invoking the type initializer for the declaring type.", ex);
+
+            summary = new TestExecutionSummary
+            {
+                SessionUid = _testList.SessionUid,
+                Uid = CurrentTest.Uid
+            };
+
+            summary.IncludeException(_testList, ExceptionFormatter, ex);
+
+            return new TestExecutionResult(TestResult.Fail, summary);
         }
 
         Exception? testException;
-        TestExecutionSummary summary;
-        TestContext context;
+        TestContext? context;
 
         if (CurrentTest.Dummies > 0)
         {
-            await _module.Dummies.InitializeDummiesForTestAsync(CurrentTest);
+            await _module.Dummies.InitializeDummiesForTestAsync(CurrentTest, _module.CancellationToken);
         }
 
-        Task? task = TestAsyncStateMachine.TryRunTestAsync(CurrentTest, _token, _logger, _stopwatch, _testList, _module, out TestAsyncStateMachine machine);
+        _logger.LogInformation("Running test...");
+        Task<TestInitErrorCode> task = TestAsyncStateMachine.TryRunTestAsync(CurrentTest, _token, _logger, _stopwatch, _testList, _module, out TestAsyncStateMachine machine);
         try
         {
-
-            if (task == null)
+            if (task is { IsCompleted: true, IsFaulted: false, Result: not TestInitErrorCode.Success })
             {
-                return new TestExecutionResult(TestResult.Skipped, null);
+                return ReportTestInitError(task.Result);
             }
 
             testException = null;
 
+            TestInitErrorCode errCode;
             try
             {
-                await task.ConfigureAwait(false);
+                errCode = await task.ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 testException = ex;
+
+                // if the test throws an exception its still initialized successfully
+                errCode = TestInitErrorCode.Success;
             }
 
-            context = (TestContext)machine.Context;
+            if (errCode != TestInitErrorCode.Success)
+            {
+                return ReportTestInitError(errCode);
+            }
+
+            // Context can be null if the ITestRunnerActivator failed or some exception was thrown
+            context = (TestContext?)machine.Context;
 
             TestTimingStep? invokeTimingStep = machine.TimingSteps.Find(x => x.Stage == TestRunStopwatchStage.Execute);
 
@@ -87,9 +107,9 @@ internal class TestExecutionPipeline : IExceptionFormatter
             {
                 SessionUid = _testList.SessionUid,
                 Uid = CurrentTest.Instance.Uid,
-                Artifacts = context.Artifacts,
+                Artifacts = context?.Artifacts,
                 TimingSteps = machine.TimingSteps,
-                OutputMessages = context.Messages
+                OutputMessages = context?.Messages
             };
 
             if (invokeTimingStep != null)
@@ -101,54 +121,42 @@ internal class TestExecutionPipeline : IExceptionFormatter
         }
         finally
         {
+            await machine.CleanupTestAsync();
+
             await GameThread.Switch();
-            if (machine.Context is IDisposable disposable)
+            if (machine is { Context: IDisposable disposable })
                 disposable.Dispose();
         }
 
         if (testException != null)
         {
-            if (context.Configuration.CollectTrxProperties)
-            {
-                summary.StackTrace = testException.StackTrace;
-                summary.ExceptionMessage = testException.Message;
-                summary.ExceptionType = testException.GetType().FullName;
-            }
-            summary.ExceptionFullString = ExceptionFormatter.FormatException(testException);
+            summary.IncludeException(_testList, ExceptionFormatter, testException);
         }
 
-        summary.StandardOutput = context.StandardOutput?.ToString();
+        summary.StandardOutput = context?.StandardOutput?.ToString();
         if (string.IsNullOrEmpty(summary.StandardOutput)) summary.StandardOutput = null;
 
-        summary.StandardError = context.StandardError?.ToString();
+        summary.StandardError = context?.StandardError?.ToString();
         if (string.IsNullOrEmpty(summary.StandardError)) summary.StandardError = null;
 
-        if (testException == null)
-            return new TestExecutionResult(TestResult.Pass, summary);
+        if (testException != null)
+            _logger.LogError($"Test \"{CurrentTest!.Instance.Uid}\" failed with exception.", testException);
 
-        return ReportTestException(testException, summary);
-
+        return new TestExecutionResult(machine.Result ?? TestResult.Fail, summary);
     }
 
-    private TestExecutionResult ReportTestException(Exception ex, TestExecutionSummary summary)
+    private TestExecutionResult ReportTestInitError(TestInitErrorCode errCode)
     {
-        _logger.LogError($"Test \"{CurrentTest!.Instance.Uid}\" failed with exception.", ex);
-
-        if (ex is ITestResultException testResultException)
+        string err = string.Format(Properties.Resources.TestRunnerError, errCode.ToString());
+        return new TestExecutionResult(TestResult.Skipped, new TestExecutionSummary
         {
-            return new TestExecutionResult(testResultException.Result, summary);
-        }
-        else
-        {
-            return new TestExecutionResult(TestResult.Fail, summary);
-        }
-    }
-
-    private TestExecutionResult HandleTestError(string context, Exception ex)
-    {
-        _logger.LogError($"Error running test \"{CurrentTest!.Instance.Uid}\" ({context}).", ex);
-        // todo
-        return new TestExecutionResult(TestResult.Fail, null);
+            SessionUid = _testList.SessionUid,
+            Uid = CurrentTest!.Instance.Uid,
+            OutputMessages = [ new TestOutputMessage((int)LogSeverity.Critical, err) ],
+            ExceptionMessage = err,
+            ExceptionFullString = err,
+            ExceptionType = nameof(TestInitErrorCode)
+        });
     }
 
     string IExceptionFormatter.FormatException(Exception ex) => ex.ToString();

@@ -4,14 +4,15 @@ using DanielWillett.ModularRpcs.DependencyInjection;
 using DanielWillett.ModularRpcs.Reflection;
 using DanielWillett.ModularRpcs.Routing;
 using DanielWillett.ModularRpcs.Serialization;
+using DanielWillett.ReflectionTools;
+using SDG.NetTransport.SteamNetworkingSockets;
 using System;
 using System.ComponentModel.Design;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using DanielWillett.ReflectionTools;
-using SDG.NetTransport.SteamNetworkingSockets;
 using Unturned.SystemEx;
+using uTest.Compat.Utility;
 using uTest.Module;
 
 namespace uTest.Dummies;
@@ -42,6 +43,21 @@ internal class DummyManager : IDisposable
     {
         SteamIdPool = new SteamIdPool(module.TestList?.SteamIdGenerationStyle ?? SteamIdGenerationStyle.Random);
         _module = module;
+
+        Provider.onServerDisconnected += OnServerDisconnected;
+    }
+
+    internal string GetSteamName(CSteamID steamId)
+    {
+        return $"Dummy ({(steamId.GetAccountID().m_AccountID / SteamIdPool.FinalDigitsFactor).ToString("X8", CultureInfo.InvariantCulture)})";
+    }
+
+    private void OnServerDisconnected(CSteamID steamID)
+    {
+        if (!TryGetDummy(steamID.m_SteamID, out BaseServersidePlayerActor? dummy))
+            return;
+
+        dummy.NotifyDisconnected();
     }
 
 
@@ -57,19 +73,19 @@ internal class DummyManager : IDisposable
         {
             UnturnedTestInstanceData test = tests[i];
 
-            PlayerSimulationMode mode = PlayerSimulationMode.Dummy;
+            PlayerSimulationMode mode = PlayerSimulationMode.Simulated;
             TestAttributeHelper<PlayerSimulationModeAttribute>.GetAttributes(test.Instance.Method, playerModeListTemp);
             if (playerModeListTemp.Count > 0)
             {
-                if (playerModeListTemp.Exists(x => x.Mode == PlayerSimulationMode.Full))
-                    mode = PlayerSimulationMode.Full;
+                if (playerModeListTemp.Exists(x => x.Mode == PlayerSimulationMode.Remote))
+                    mode = PlayerSimulationMode.Remote;
 
                 playerModeListTemp.Clear();
             }
 
             test.SimulationMode = mode;
 
-            if (mode == PlayerSimulationMode.Full)
+            if (mode == PlayerSimulationMode.Remote)
                 needsFullPlayers = true;
             else
                 needsSimulatedPlayers = true;
@@ -80,7 +96,7 @@ internal class DummyManager : IDisposable
 
             PlayerCountAttribute max = playerCountListTemp.Aggregate((a, max) => a.PlayerCount > max.PlayerCount ? a : max);
             maxDummyCount = Math.Max(max.PlayerCount, maxDummyCount);
-            if (mode == PlayerSimulationMode.Full)
+            if (mode == PlayerSimulationMode.Remote)
             {
                 minFullDummies = Math.Max(max.PlayerCount, minFullDummies);
             }
@@ -165,7 +181,7 @@ internal class DummyManager : IDisposable
 
         IServersideTestPlayer[] players = new IServersideTestPlayer[test.Dummies];
         int ct = 0;
-        if (test.SimulationMode == PlayerSimulationMode.Full)
+        if (test.SimulationMode == PlayerSimulationMode.Remote)
         {
             if (RemoteDummies == null)
             {
@@ -210,6 +226,17 @@ internal class DummyManager : IDisposable
                 ++ct;
                 if (ct >= test.Dummies)
                     break;
+            }
+
+            while (ct < test.Dummies)
+            {
+                CSteamID steam64 = _module.Dummies.SteamIdPool.GetUniqueCSteamID();
+
+                SimulatedDummyPlayerActor actor = new SimulatedDummyPlayerActor(steam64, GetSteamName(steam64), SimulatedDummies, ct);
+                SimulatedDummies.Dummies[steam64.m_SteamID] = actor;
+                players[ct] = actor;
+                actor.Test = test;
+                ++ct;
             }
         }
 
@@ -377,7 +404,8 @@ internal class DummyManager : IDisposable
 
     public void Dispose()
     {
-        RemoteDummies?.CloseAllDummies();
+        Provider.onServerDisconnected -= OnServerDisconnected;
+        RemoteDummies?.Dispose();
     }
 }
 

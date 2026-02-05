@@ -1,12 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="../Version.props"/>
+
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>14.0</LangVersion>
 
-    <FileVersion>1.0.0.0</FileVersion>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <RootNamespace>uTest.Bootstrapper</RootNamespace>
     <DebugType>portable</DebugType>
     <NoWarn>MSB3277</NoWarn>
@@ -14,6 +14,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+
+    
+    <ProjectReference Include="../Unturned.uTest.Compat/Unturned.uTest.Compat.csproj" /> 
 
     <PackageReference Include="Unturned.MSBuild" Version="1.0.0-test6">
       <PrivateAssets>all</PrivateAssets>

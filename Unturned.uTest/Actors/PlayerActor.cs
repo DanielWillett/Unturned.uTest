@@ -40,6 +40,13 @@ public class PlayerActor : ITestPlayer
         _inventory = new PlayerActorInventory(this);
     }
 
+    private protected virtual void NotifyDisconnectedIntl()
+    {
+        _player = null;
+        _look.Deinit();
+        _inventory.Deinit();
+    }
+
     [MemberNotNull(nameof(_player))]
     private protected virtual void NotifyConnectedIntl(Player player)
     {
@@ -292,6 +299,11 @@ public class PlayerActor : ITestPlayer
             _look = player.look;
         }
 
+        internal void Deinit()
+        {
+            _look = null;
+        }
+
         public Vector3 Origin => (_look ?? throw new ActorDestroyedException(Player)).aim.position;
         public Vector3 Forward => (_look ?? throw new ActorDestroyedException(Player)).aim.forward;
         public Quaternion Rotation => (_look ?? throw new ActorDestroyedException(Player)).aim.rotation;
@@ -375,6 +387,14 @@ public class PlayerActor : ITestPlayer
             _clothing = player.clothing;
             _crafting = player.crafting;
             _equipment = player.equipment;
+        }
+
+        internal void Deinit()
+        {
+            _inventory = null;
+            _clothing = null;
+            _crafting = null;
+            _equipment = null;
         }
     }
 

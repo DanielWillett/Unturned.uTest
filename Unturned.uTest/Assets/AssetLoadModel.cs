@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using System;
 using System.IO;
 using System.Reflection;
+using uTest.Compat.Utility;
 using uTest.Module;
 
 namespace uTest;

@@ -1,4 +1,8 @@
+﻿#pragma warning disable IDE0130
+
 namespace uTest;
+
+#pragma warning restore IDE0130
 
 /// <summary>
 /// The result of a single test run.

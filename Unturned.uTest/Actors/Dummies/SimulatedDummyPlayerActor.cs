@@ -15,8 +15,8 @@ public sealed class SimulatedDummyPlayerActor : BaseServersidePlayerActor
     public override bool IsRemotePlayer => false;
 
     /// <inheritdoc />
-    internal SimulatedDummyPlayerActor(Player player, SimulatedDummyManager dummyManager, int index)
-        : base(index, player.channel.owner.playerID.steamID, player.channel.owner.playerID.playerName, dummyManager)
+    internal SimulatedDummyPlayerActor(CSteamID steam64, string displayName, SimulatedDummyManager dummyManager, int index)
+        : base(index, steam64, displayName, dummyManager)
     {
 
     }

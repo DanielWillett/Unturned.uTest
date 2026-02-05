@@ -21,6 +21,8 @@
 
 		<UnturnedReference Include="Assembly-CSharp" />
 
+    <PackageReference Include="OpenMod.API" Version="3.6.0" />
+
 		<PackageReference Include="Unturned.MSBuild" Version="1.0.0-test6">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>

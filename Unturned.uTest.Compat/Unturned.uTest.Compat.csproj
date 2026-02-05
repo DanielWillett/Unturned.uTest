@@ -1,19 +1,25 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="../Version.props" />
+
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <RootNamespace>uTest.Compat</RootNamespace>
-    <DebugType>portable</DebugType>
-
-    <Version>0.0.1</Version>
-    <PackageVersion>$(Version)</PackageVersion>
-
-    <FileVersion>$(Version).0</FileVersion>
-    <AssemblyVersion>$(Version).0</AssemblyVersion>
 
   </PropertyGroup>
 
+
+  <ItemGroup>
+
+    <PackageReference Include="Unturned.MSBuild" Version="1.0.0-test6">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+
+    <UnturnedReference Include="com.rlabrecque.steamworks.net" />
+
+  </ItemGroup>
 
 </Project>

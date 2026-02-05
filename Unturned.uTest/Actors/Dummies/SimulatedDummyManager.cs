@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Linq;
-using SDG.NetTransport.SteamNetworkingSockets;
-using UnityEngine.Assertions.Must;
 using Unturned.SystemEx;
 using uTest.Module;
 
@@ -37,12 +34,48 @@ internal class SimulatedDummyManager : IDummyPlayerController
     }
 
     /// <inheritdoc />
+    public async Task DespawnPlayerAsync(IServersideTestPlayer player, bool ignoreAlreadyDisconnected, CancellationToken token)
+    {
+        if (player is not SimulatedDummyPlayerActor actor)
+            throw new ArgumentException("Expected SimulatedDummyPlayerActor.", nameof(actor));
+
+        await GameThread.Switch(token);
+
+        if (!actor.IsOnline)
+        {
+            if (ignoreAlreadyDisconnected)
+                return;
+
+            throw new InvalidOperationException("Player already disconnected.");
+        }
+
+        Provider.dismiss(player.Steam64);
+        // actor.NotifyDisconnected called by DummyManager.onServerDisconnected
+        
+        if (player.IsOnline)
+        {
+            throw new TimeoutException("Timeout disconnecting player.");
+        }
+
+        _logger.LogTrace($"Removed simulated dummy {actor.DisplayName}.");
+    }
+
+    /// <inheritdoc />
     public async Task SpawnPlayerAsync(IServersideTestPlayer player, Action<DummyPlayerJoinConfiguration>? configurePlayers, bool ignoreAlreadyConnected, CancellationToken token)
     {
         if (player is not SimulatedDummyPlayerActor actor)
             throw new ArgumentException("Expected SimulatedDummyPlayerActor.", nameof(actor));
 
-        await GameThread.Switch();
+        await GameThread.Switch(token);
+
+        if (actor.IsOnline)
+        {
+            if (ignoreAlreadyConnected)
+                return;
+
+            throw new InvalidOperationException("Player already connected.");
+        }
+
         actor.Configure(configurePlayers);
 
         SteamPlayerID playerId = new SteamPlayerID(
@@ -95,6 +128,7 @@ internal class SimulatedDummyManager : IDummyPlayerController
             dummyManager.ServerHideClientIp
         );
 
+        ulong[] packageSkins = actor.Configuration.GetEquippedSkinsArray(out string[] skinTags, out string[] skinDynamicProps);
         SteamPending pending = new SteamPending(
             connection,
             playerId,
@@ -114,72 +148,159 @@ internal class SimulatedDummyManager : IDummyPlayerController
             unchecked ( (ulong)actor.Configuration.VestItem.m_SteamItemDef ),
             unchecked ( (ulong)actor.Configuration.MaskItem.m_SteamItemDef ),
             unchecked ( (ulong)actor.Configuration.GlassesItem.m_SteamItemDef ),
-            actor.Configuration.GetEquippedSkinsArray(out string[] skinTags, out string[] skinDynamicProps),
+            packageSkins,
             actor.Configuration.Skillset,
             actor.Configuration.Language,
             actor.Configuration.SteamLobbyId,
             actor.Configuration.Platform
-        );
-
-        pending.shirtItem    = actor.Configuration.ShirtItem.m_SteamItemDef;
-        pending.pantsItem    = actor.Configuration.PantsItem.m_SteamItemDef;
-        pending.hatItem      = actor.Configuration.HatItem.m_SteamItemDef;
-        pending.backpackItem = actor.Configuration.BackpackItem.m_SteamItemDef;
-        pending.vestItem     = actor.Configuration.VestItem.m_SteamItemDef;
-        pending.maskItem     = actor.Configuration.MaskItem.m_SteamItemDef;
-        pending.glassesItem  = actor.Configuration.GlassesItem.m_SteamItemDef;
-
-        pending.skinItems = DummyPlayerJoinConfiguration.ConvertEquippedSkinsArray(pending.packageSkins);
-        pending.skinTags  = Array.Empty<string>();
-    }
-
-    /// <inheritdoc />
-    public async Task DespawnPlayerAsync(IServersideTestPlayer player, bool ignoreAlreadyDisconnected, CancellationToken token)
-    {
-
-    }
-
-    public IAsyncResult BeginDummyConnect(DummyConnectionParameters parameters, AsyncCallback connectedCallback, object? state, CancellationToken token = default)
-    {
-        GameThread.Assert();
-
-        DummyConnectionState result = new DummyConnectionState(state);
-
-        return result;
-    }
-
-    public static void SendMessageToServer(EServerMessage index, ENetReliability reliability, NetMessages.ClientWriteHandler callback, SimulatedDummyPlayerActor actor)
-    {
-
-    }
-
-    public SimulatedDummyPlayerActor EndDummyConnect(IAsyncResult result)
-    {
-        if (result is not DummyConnectionState state)
-            throw new ArgumentException("IAsyncResult did not come from BeginDummyConnect.", nameof(result));
-
-        if (!state.IsCompleted)
+        )
         {
-            bool timedOut;
-            try
+            shirtItem = actor.Configuration.ShirtItem.m_SteamItemDef,
+            pantsItem = actor.Configuration.PantsItem.m_SteamItemDef,
+            hatItem = actor.Configuration.HatItem.m_SteamItemDef,
+            backpackItem = actor.Configuration.BackpackItem.m_SteamItemDef,
+            vestItem = actor.Configuration.VestItem.m_SteamItemDef,
+            maskItem = actor.Configuration.MaskItem.m_SteamItemDef,
+            glassesItem = actor.Configuration.GlassesItem.m_SteamItemDef,
+            skinItems = DummyPlayerJoinConfiguration.ConvertEquippedSkinsArray(packageSkins),
+            skinTags = skinTags,
+            skinDynamicProps = skinDynamicProps,
+            hasAuthentication = true,
+            hasGroup = true,
+            hasProof = true,
+            assignedPro = actor.Configuration.HasGold,
+            assignedAdmin = actor.Configuration.HasAdmin
+        };
+
+        int pendingPos = Provider.pending.Count;
+
+        Provider._transportConnectionToPendingPlayerMap[connection] = pending;
+        Provider.pending.Add(pending);
+
+        bool isRemovedFromPending = false;
+        bool couldBeAddedToClients = false;
+
+        try
+        {
+            if (CheckShouldBeBanned(actor, pending, connectionAddress))
             {
-                timedOut = !state.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(10d), true);
+                throw new ActorDestroyedException(
+                    actor,
+                    string.Format(Properties.Resources.ActorDestroyed_FailedToConnect, actor.DisplayName, nameof(ESteamConnectionFailureInfo.BANNED))
+                );
             }
-            catch (ObjectDisposedException)
+
+            if (CheckRejectedByPlugin(actor, pending))
             {
-                timedOut = false;
+                throw new ActorDestroyedException(
+                    actor,
+                    string.Format(Properties.Resources.ActorDestroyed_FailedToConnect, actor.DisplayName, nameof(ESteamConnectionFailureInfo.PLUGIN))
+                );
             }
-            if (!state.IsCompleted)
+
+            couldBeAddedToClients = true;
+            Provider.accept(pending);
+            if (Provider.clients.Count == 0 || (object)Provider.clients[^1].playerID != playerId)
             {
-                state.Dispose();
-                if (timedOut)
-                    throw new TimeoutException("Timed out connecting player.", state.Exception);
-                throw state.Exception ?? new Exception("Failed to connect player.");
+                throw new ActorDestroyedException(
+                    actor,
+                    string.Format(Properties.Resources.ActorDestroyed_FailedToConnect, actor.DisplayName, nameof(ESteamConnectionFailureInfo.NONE))
+                );
+            }
+
+            isRemovedFromPending = true;
+            _logger.LogTrace($"Added simulated dummy {actor.DisplayName}.");
+            actor.NotifyConnected(Provider.clients[^1].player);
+        }
+        catch (Exception ex)
+        {
+            int index = couldBeAddedToClients ? Provider.clients.FindLastIndex(x => (object)x.playerID == playerId) : -1;
+            if (index >= 0)
+            {
+                Provider.kick(playerId.steamID, ex.Message);
+            }
+
+            throw new ActorDestroyedException(
+                actor,
+                string.Format(Properties.Resources.ActorDestroyed_FailedToConnect, actor.DisplayName, nameof(ESteamConnectionFailureInfo.NONE)),
+                ex
+            );
+        }
+        finally
+        {
+            if (!isRemovedFromPending)
+            {
+                if (pendingPos < Provider.pending.Count && Provider.pending[pendingPos] == pending)
+                {
+                    Provider.broadcastRejectingPlayer(pending.playerID.steamID, ESteamRejection.PLUGIN, string.Empty);
+                    Provider.pending.RemoveAt(pendingPos);
+                }
+
+                Provider._transportConnectionToPendingPlayerMap.Remove(connection);
             }
         }
+    }
 
-        state.Dispose();
+    private static bool CheckShouldBeBanned(SimulatedDummyPlayerActor actor, SteamPending pending, IPv4Address connectionAddress)
+    {
+        bool isBanned = false;
+        string reason = string.Empty;
+        uint duration = 0;
+        if (SteamBlacklist.checkBanned(pending.playerID.steamID, connectionAddress.value, pending.playerID.GetHwids(), out SteamBlacklistID? blacklist))
+        {
+            isBanned = true;
+            reason = blacklist.reason;
+            duration = blacklist.getTime();
+        }
 
-        return state.Actor;
+        try
+        {
+            Provider.onCheckBanStatusWithHWID?.Invoke(pending.playerID, connectionAddress.value, ref isBanned, ref reason, ref duration);
+        }
+        catch (Exception ex)
+        {
+            // intentional non-use of ILogger to mimic vanilla
+            UnturnedLog.warn("Plugin raised an exception from onCheckBanStatus:");
+            UnturnedLog.exception(ex);
+        }
+
+        if (!isBanned)
+            return false;
+
+        actor.RejectReason = ESteamConnectionFailureInfo.BANNED;
+        actor.RejectReasonString = string.IsNullOrEmpty(reason) ? null : reason;
+        actor.RejectDuration = duration == SteamBlacklist.PERMANENT ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(duration);
+        return true;
+    }
+
+    private static bool CheckRejectedByPlugin(SimulatedDummyPlayerActor actor, SteamPending pending)
+    {
+        if (Provider.onCheckValidWithExplanation == null)
+            return false;
+
+        bool isValid = true;
+        string explanation = string.Empty;
+
+        try
+        {
+            ValidateAuthTicketResponse_t args;
+            args.m_OwnerSteamID = pending.playerID.steamID;
+            args.m_SteamID = pending.playerID.steamID;
+            args.m_eAuthSessionResponse = EAuthSessionResponse.k_EAuthSessionResponseOK;
+            Provider.onCheckValidWithExplanation.Invoke(args, ref isValid, ref explanation);
+        }
+        catch (Exception ex)
+        {
+            // intentional non-use of ILogger to mimic vanilla
+            UnturnedLog.warn("Plugin raised an exception from onCheckValidWithExplanation or onCheckValid:");
+            UnturnedLog.exception(ex);
+        }
+
+        if (isValid)
+            return false;
+
+        actor.RejectReason = ESteamConnectionFailureInfo.PLUGIN;
+        actor.RejectReasonString = explanation;
+        return true;
     }
 }

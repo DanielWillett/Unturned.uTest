@@ -15,9 +15,9 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using Unturned.SystemEx;
 using uTest.Module;
 using uTest.Patches;
+using uTest.Protocol;
 using uTest.Protocol.DummyPlayerHost;
 // ReSharper disable LocalizableElement
 
@@ -27,11 +27,14 @@ namespace uTest.Dummies;
 /// Handles launching fully simulated dummy clients.
 /// </summary>
 [GenerateRpcSource]
-internal partial class RemoteDummyManager : IDummyPlayerController
+internal partial class RemoteDummyManager : IDummyPlayerController, IDisposable
 {
     private readonly MainModule _module;
     private readonly ILogger _logger;
     private NamedPipeEndpoint? _rpcServer;
+    private TaskCompletionSource<object?>? _condServerModuleChangesReverted;
+
+    private IDisposable? _messageHandler;
 
     internal readonly ConcurrentDictionary<ulong, RemoteDummyPlayerActor> Dummies = new ConcurrentDictionary<ulong, RemoteDummyPlayerActor>();
 
@@ -50,13 +53,23 @@ internal partial class RemoteDummyManager : IDummyPlayerController
             p.RegisterPatch(RemoveWorkshopRateLimiter.TryPatch, RemoveWorkshopRateLimiter.TryUnpatch, critical: true);
             p.RegisterPatch(RemoveReadyToConnectChecks.TryPatch, RemoveReadyToConnectChecks.TryUnpatch, critical: true);
             p.RegisterPatch(RemoveAuthenticateChecks.TryPatch, RemoveAuthenticateChecks.TryUnpatch);
-            p.RegisterPatch(IgnoreSocketExceptionsOnServer.TryPatch, IgnoreSocketExceptionsOnServer.TryUnpatch);
+            //p.RegisterPatch(IgnoreSocketExceptionsOnServer.TryPatch, IgnoreSocketExceptionsOnServer.TryUnpatch);
             p.RegisterPatch(WorkshopItemsQueriedUpdateDummies.TryPatch, WorkshopItemsQueriedUpdateDummies.TryUnpatch);
         }
 
         // pre-load this assembly.
         // Unturned's assembly resolution system isn't threadsafe so it corrupts the dictionary later on when loaded by ModularRPCs
         _ = Type.GetType("uTest.Dummies.Host.DummyPlayerHost, Unturned.uTest.DummyPlayerHost");
+
+        Provider.onEnemyConnected += OnEnemyConnected;
+
+        _condServerModuleChangesReverted = new TaskCompletionSource<object?>();
+
+        _messageHandler = module.Environment.AddMessageHandler<ServerModuleChangesReverted>(_ =>
+        {
+            _condServerModuleChangesReverted?.TrySetResult(null);
+            return true;
+        });
     }
 
     public bool TryGetRemoteDummy(Player player, [MaybeNullWhen(false)] out RemoteDummyPlayerActor dummy)
@@ -67,6 +80,15 @@ internal partial class RemoteDummyManager : IDummyPlayerController
     public bool TryGetRemoteDummy(ulong steam64, [MaybeNullWhen(false)] out RemoteDummyPlayerActor dummy)
     {
         return Dummies.TryGetValue(steam64, out dummy);
+    }
+
+    private void OnEnemyConnected(SteamPlayer player)
+    {
+        // set the admin value before sending player details
+        if (!TryGetRemoteDummy(player.playerID.steamID.m_SteamID, out RemoteDummyPlayerActor? actor))
+            return;
+
+        player.isAdmin = actor.Configuration?.HasAdmin ?? false;
     }
 
     private static string GetArgs(CSteamID steamId, string moduleDir, string dataDir)
@@ -201,6 +223,27 @@ internal partial class RemoteDummyManager : IDummyPlayerController
             return true;
         }
 
+        TaskCompletionSource<object?>? tcs = _condServerModuleChangesReverted;
+
+        if (tcs != null)
+        {
+            await _module.Environment.SendAsync(new ReadyToRevertModuleChanges(), _module.CancellationToken);
+
+            await Task.WhenAny(
+                tcs.Task,
+                Task.Delay(TimeSpan.FromSeconds(5d))
+            );
+
+            if (!tcs.Task.IsCompleted)
+            {
+                _logger.LogWarning("Runner didn't respond to request to revert server-only module changes after 5 seconds.");
+            }
+            else
+            {
+                _logger.LogTrace("Runner reverted server-only module changes.");
+            }
+        }
+
         nint display = 0;
         bool didTileConsole = false;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -308,7 +351,7 @@ internal partial class RemoteDummyManager : IDummyPlayerController
         {
             CSteamID steamId =  _module.Dummies.SteamIdPool.GetUniqueCSteamID();
 
-            string steamName = $"Dummy ({(steamId.GetAccountID().m_AccountID / SteamIdPool.FinalDigitsFactor).ToString("X8", CultureInfo.InvariantCulture)})";
+            string steamName = _module.Dummies.GetSteamName(steamId);
 
             string configDir = baseDummyPath + steamId.GetAccountID().m_AccountID.ToString("X8", CultureInfo.InvariantCulture);
             Directory.CreateDirectory(configDir);
@@ -628,7 +671,10 @@ internal partial class RemoteDummyManager : IDummyPlayerController
         
         if (actor.Status == DummyReadyStatus.InMenu)
         {
-            throw new ActorDestroyedException(actor, Properties.Resources.ActorDestroyedDisconnectedWhileConnecting);
+            throw new ActorDestroyedException(
+                actor,
+                string.Format(Properties.Resources.ActorDestroyed_FailedToConnect, actor.DisplayName, actor.RejectReason ?? ESteamConnectionFailureInfo.NONE)
+            );
         }
         
         if (!connectTask.Task.IsCompleted)
@@ -705,6 +751,13 @@ internal partial class RemoteDummyManager : IDummyPlayerController
         Task.WhenAll(tasks).Wait();
 
         Interlocked.Exchange(ref _rpcServer, null)?.CloseServerAsync();
+    }
+
+    public void Dispose()
+    {
+        Provider.onEnemyConnected -= OnEnemyConnected;
+        Interlocked.Exchange(ref _messageHandler, null)?.Dispose();
+        CloseAllDummies();
     }
 }
 

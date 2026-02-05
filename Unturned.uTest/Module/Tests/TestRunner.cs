@@ -51,32 +51,48 @@ internal class TestRunner
 
         foreach (UnturnedTestInstanceData test in _module.Tests)
         {
-            int testIndex = testUids.FindIndex(x => string.Equals(x.Uid, test.Instance.Uid, StringComparison.Ordinal));
-            if (testIndex >= 0)
-                testUids.RemoveAt(testIndex);
+            try
+            {
+                int testIndex = testUids.FindIndex(x => string.Equals(x.Uid, test.Instance.Uid, StringComparison.Ordinal));
+                if (testIndex >= 0)
+                    testUids.RemoveAt(testIndex);
 
-            await ReportTestResult(testList, test.Instance.Uid, TestResult.InProgress);
+                await ReportTestResult(testList, test.Instance.Uid, TestResult.InProgress);
 
-            await GameThread.Switch(token);
+                await GameThread.Switch(token);
 
-            _logger.LogInformation("================================");
-            _logger.LogInformation($"Running test \"{test.Instance.Uid}\"...");
-            _logger.LogInformation(string.Empty);
+                _logger.LogInformation("================================");
+                _logger.LogInformation($"Running test \"{test.Instance.Uid}\"...");
+                _logger.LogInformation(string.Empty);
 
-            pipeline.InitializeCurrentTest(test);
+                pipeline.InitializeCurrentTest(test);
 
-            TestExecutionResult execution = await pipeline.ExecuteTestAsync().ConfigureAwait(false);
+                TestExecutionResult execution = await pipeline.ExecuteTestAsync().ConfigureAwait(false);
 
-            await ReportTestResult(testList, test.Instance.Uid, execution);
-            await GameThread.Switch(token);
+                await ReportTestResult(testList, test.Instance.Uid, execution);
+                await GameThread.Switch(token);
 
-            _logger.LogInformation(string.Empty);
-            _logger.LogInformation($"Test result: {execution.Result}");
-            _logger.LogInformation("================================");
-            _logger.LogInformation(string.Empty);
+                _logger.LogInformation(string.Empty);
+                _logger.LogInformation($"Test result: {execution.Result}");
+                _logger.LogInformation("================================");
+                _logger.LogInformation(string.Empty);
 
-            if (execution.Result != TestResult.Pass)
-                allPass = false;
+                if (execution.Result != TestResult.Pass)
+                    allPass = false;
+            }
+            catch (Exception ex)
+            {
+                await ReportTestResult(testList, test.Instance.Uid, new TestExecutionResult(TestResult.Skipped, new TestExecutionSummary
+                {
+                    SessionUid = testList.SessionUid,
+                    Uid = test.Instance.Uid,
+                    ExceptionType = ex.GetType().FullName,
+                    ExceptionMessage = ex.Message,
+                    StackTrace = ex.StackTrace,
+                    ExceptionFullString = pipeline.ExceptionFormatter.FormatException(ex),
+                    OutputMessages = [ new TestOutputMessage((int)LogLevel.Critical, ex.ToString()) ]
+                }));
+            }
         }
 
         if (testUids.Count > 0)

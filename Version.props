@@ -1,0 +1,30 @@
+<Project>
+
+  <PropertyGroup>
+
+    <uTestVersion>0.0.1</uTestVersion>
+
+    <Version>$(uTestVersion)</Version>
+    <PackageVersion>$(uTestVersion)</PackageVersion>
+
+    <FileVersion>$(uTestVersion).0</FileVersion>
+    <AssemblyVersion>$(uTestVersion).0</AssemblyVersion>
+
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/DanielWillett/uTest</PackageProjectUrl>
+    <RepositoryUrl>$(PackageProjectUrl).git</RepositoryUrl>
+
+    <Authors>Daniel Willett</Authors>
+    <Company>$(Authors)</Company>
+
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <DebugType>portable</DebugType>
+
+  </PropertyGroup>
+
+</Project>

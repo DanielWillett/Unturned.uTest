@@ -129,7 +129,7 @@ internal partial class DummyPlayerHost : IDisposable
                     p.RegisterPatch(SkipAddFoundAssetIfNotRequired.TryPatch, SkipAddFoundAssetIfNotRequired.TryUnpatch);
                     p.RegisterPatch(IgnoreSocketExceptionsOnClient.TryPatch, IgnoreSocketExceptionsOnClient.TryUnpatch);
                     p.RegisterPatch(DisableConvenientSavedata.TryPatch, DisableConvenientSavedata.TryUnpatch);
-                    p.RegisterPatch(uTest.Patches.SocketMessageLayerFix.TryPatchClient, uTest.Patches.SocketMessageLayerFix.TryUnpatchClient);
+                    //p.RegisterPatch(uTest.Patches.SocketMessageLayerFix.TryPatchClient, uTest.Patches.SocketMessageLayerFix.TryUnpatchClient);
                     p.RegisterPatch(ChangeHardwareIDs.TryPatch, ChangeHardwareIDs.TryUnpatch);
                     p.RegisterPatch(ReadyToConnectOverride.TryPatch, ReadyToConnectOverride.TryUnpatch);
                 }

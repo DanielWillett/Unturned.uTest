@@ -45,9 +45,10 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     [UsedImplicitly]
     internal TestContext(TestRunParameters parameters, ITestClass runner)
     {
-        _parameters = parameters;
+        parameters.Module.Logger.LogInformation($"Running testContext ctor, parameters: {parameters == null}, runner: {runner == null};");
+        Runner = runner ?? throw new ArgumentNullException(nameof(runner), Properties.Resources.ArgumentNullException_RunnerFactoryReturnedNull);
+        _parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
         _uid = new UnturnedTestUid(parameters.Test.Instance.Uid);
-        Runner = runner;
         Players = parameters.Dummies ?? Array.Empty<IServersideTestPlayer>();
 
         MainModule module = _parameters.Module;

@@ -1,21 +1,33 @@
-﻿using DanielWillett.ReflectionTools;
-using System;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
+using System.Threading;
 
-namespace uTest;
+namespace uTest.Compat.Utility;
 
 /// <summary>
-/// Checks for attributes on members using a language hierarchical check, so including nesting parent types, inherited types, module, and assmeblies.
+/// Checks for attributes on members using a language-based hierarchical check, so including nesting parent types, inherited types, modules, and assmeblies.
+/// <para>
+/// Order of relevance: Parameter -&gt; Member -&gt; [ Overridden Members -&gt; ] Declaring Type -&gt; [ Overridden Types -&gt; ] Nesting Types (in to out) -&gt; Module -&gt; Assembly.
+/// </para>
 /// </summary>
 /// <typeparam name="TAttribute">The <see cref="Attribute"/> type or an interface.</typeparam>
-internal static class TestAttributeHelper<TAttribute> where TAttribute : class
+public static class TestAttributeHelper<TAttribute> where TAttribute : class
 {
+    /// <summary>
+    /// Invoked by <see cref="TestAttributeHelper{TAttribute}"/> for each attribute on a member.
+    /// </summary>
     public delegate void ForEachAttributeCallback<TState>(ref TState state, TAttribute attribute, ICustomAttributeProvider member);
 
+    /// <summary>
+    /// Invoked by <see cref="TestAttributeHelper{TAttribute}"/> for each attribute on a member until <see langword="false"/> is returned.
+    /// </summary>
+    /// <returns><see langword="true"/> to continue to the next attribute, <see langword="false"/> to break the loop.</returns>
     public delegate bool ForEachAttributeWhileCallback<TState>(ref TState state, TAttribute attribute, ICustomAttributeProvider member);
 
     private static readonly Dictionary<Assembly, object[]> AssemblyCache = new Dictionary<Assembly, object[]>();
-    private static readonly Dictionary<System.Reflection.Module, object[]> ModuleCache = new Dictionary<System.Reflection.Module, object[]>();
+    private static readonly Dictionary<Module, object[]> ModuleCache = new Dictionary<Module, object[]>();
     private static readonly Dictionary<Type, object[]> TypeCache = new Dictionary<Type, object[]>();
 
     private static Dictionary<Type, bool>? _inheritanceCache;
@@ -44,7 +56,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
             return;
         }
 
-        AttributeUsageAttribute? usage = attributeType.GetAttributeSafe<AttributeUsageAttribute>();
+        AttributeUsageAttribute? usage = TestAttributeHelper.GetAttributeSafe<AttributeUsageAttribute>(attributeType);
         IsMaybeInherited = usage?.Inherited ?? true;
     }
 
@@ -78,19 +90,24 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
 
         static bool IsInheritedCore(Type attributeType)
         {
-            AttributeUsageAttribute? usage = attributeType.GetAttributeSafe<AttributeUsageAttribute>();
+            AttributeUsageAttribute? usage = TestAttributeHelper.GetAttributeSafe<AttributeUsageAttribute>(attributeType);
             return usage?.Inherited ?? true;
         }
     }
 
-    public static bool IsDefined(ICustomAttributeProvider member, bool inherit = false)
+    /// <summary>
+    /// Check whether or not the attribute type is present on a member or any of it's syntaxical parents.
+    /// </summary>
+    /// <param name="member">The member to check.</param>
+    /// <param name="inherit">Whether or not parnet types and overridden members should be checked.</param>
+    public static bool IsDefined(ICustomAttributeProvider member, bool inherit = true)
     {
         switch (member)
         {
             case Assembly asm:
                 return IsDefinedIntl(asm);
 
-            case System.Reflection.Module mod:
+            case Module mod:
                 if (IsDefinedIntl(mod))
                     return true;
                 
@@ -126,9 +143,12 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
 
         for (Type? t = (m as MemberInfo)?.DeclaringType; t != null; t = t.DeclaringType)
         {
-            IsDefinedIntl(t, inherit);
+            if (IsDefinedIntl(t, inherit))
+                return true;
+            
             if (t.IsNested)
                 continue;
+
             if (t.Module.IsDefined(typeof(TAttribute)) || t.Assembly.IsDefined(typeof(TAttribute)))
                 return true;
         }
@@ -136,7 +156,16 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         return false;
     }
 
-    public static TAttribute? GetAttribute(ICustomAttributeProvider member, bool inherit = false)
+    /// <summary>
+    /// Gets the most relevant instance of the attribute type on a member or any of it's syntaxical parents.
+    /// </summary>
+    /// <remarks>
+    /// The 'most relevant' attribute is the one on the least significant member.
+    /// For example, if an attribute is on both a method and it's containing class, the one on the method will be returned.
+    /// </remarks>
+    /// <param name="member">The member to check.</param>
+    /// <param name="inherit">Whether or not parnet types and overridden members should be checked.</param>
+    public static TAttribute? GetAttribute(ICustomAttributeProvider member, bool inherit = true)
     {
         TAttribute? tempAttr;
         switch (member)
@@ -144,7 +173,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
             case Assembly asm:
                 return GetAttributeIntl(asm);
 
-            case System.Reflection.Module mod:
+            case Module mod:
                 tempAttr = GetAttributeIntl(mod);
                 if (tempAttr != null)
                     return tempAttr;
@@ -211,6 +240,17 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         return null;
     }
 
+    /// <summary>
+    /// Invokes a callback on all instances of the attribute type on a member or any of it's syntaxical parents, in order of relevance.
+    /// </summary>
+    /// <remarks>
+    /// The 'most relevant' attribute is the one on the least significant member.
+    /// For example, if an attribute is on both a method and it's containing class, the one on the method will be returned.
+    /// </remarks>
+    /// <param name="state">Arbitrary value to pass to the callback.</param>
+    /// <param name="member">The member to check.</param>
+    /// <param name="callback">Function to invoke for each available attribute.</param>
+    /// <param name="inherit">Whether or not parnet types and overridden members should be checked.</param>
     public static void ForEachAttribute<TState>(ref TState state, ICustomAttributeProvider member, ForEachAttributeCallback<TState> callback, bool inherit = true)
     {
         switch (member)
@@ -219,7 +259,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
                 ForEachAttributeIn(asm, callback, ref state);
                 return;
 
-            case System.Reflection.Module mod:
+            case Module mod:
                 ForEachAttributeIn(mod, callback, ref state);
                 ForEachAttributeIn(mod.Assembly, callback, ref state);
                 return;
@@ -265,6 +305,20 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         }
     }
 
+    /// <summary>
+    /// Invokes a callback on all instances of the attribute type on a member or any of it's syntaxical parents, in order of relevance.
+    /// <para>
+    /// The loop will continue while the callback returns <see langword="true"/>.
+    /// </para>
+    /// </summary>
+    /// <remarks>
+    /// The 'most relevant' attribute is the one on the least significant member.
+    /// For example, if an attribute is on both a method and it's containing class, the one on the method will be returned.
+    /// </remarks>
+    /// <param name="state">Arbitrary value to pass to the callback.</param>
+    /// <param name="member">The member to check.</param>
+    /// <param name="callback">Function to invoke for each available attribute.</param>
+    /// <param name="inherit">Whether or not parnet types and overridden members should be checked.</param>
     public static bool ForEachAttributeWhile<TState>(ref TState state, ICustomAttributeProvider member, ForEachAttributeWhileCallback<TState> callback, bool inherit = true)
     {
         switch (member)
@@ -272,7 +326,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
             case Assembly asm:
                 return !ForEachAttributeIn(asm, callback, ref state);
 
-            case System.Reflection.Module mod:
+            case Module mod:
                 if (!ForEachAttributeIn(mod, callback, ref state))
                     return true;
                 return !ForEachAttributeIn(mod.Assembly, callback, ref state);
@@ -325,7 +379,17 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         return false;
     }
 
-    public static void GetAttributes(ICustomAttributeProvider member, List<TAttribute> output, bool inherit = true)
+    /// <summary>
+    /// Adds all instances of the attribute type on a member or any of it's syntaxical parents to an <see cref="IList{T}"/>, in order of relevance.
+    /// </summary>
+    /// <remarks>
+    /// The 'most relevant' attribute is the one on the least significant member.
+    /// For example, if an attribute is on both a method and it's containing class, the one on the method will be returned.
+    /// </remarks>
+    /// <param name="member">The member to check.</param>
+    /// <param name="output">List to add attribute instances to.</param>
+    /// <param name="inherit">Whether or not parnet types and overridden members should be checked.</param>
+    public static void GetAttributes(ICustomAttributeProvider member, IList<TAttribute> output, bool inherit = true)
     {
         switch (member)
         {
@@ -333,7 +397,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
                 GetAssemblyAttributes(asm, output);
                 return;
 
-            case System.Reflection.Module mod:
+            case Module mod:
                 GetModuleAttributes(mod, output);
                 GetAssemblyAttributes(mod.Assembly, output);
                 return;
@@ -379,7 +443,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         }
     }
 
-    private static void GetAssemblyAttributes(Assembly asm, List<TAttribute> output)
+    private static void GetAssemblyAttributes(Assembly asm, IList<TAttribute> output)
     {
         object[] attributes;
         lock (Sync)
@@ -531,7 +595,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         return null;
     }
 
-    private static void GetModuleAttributes(System.Reflection.Module module, List<TAttribute> output)
+    private static void GetModuleAttributes(Module module, IList<TAttribute> output)
     {
         object[] attributes;
         lock (Sync)
@@ -557,7 +621,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         }
     }
 
-    private static void ForEachAttributeIn<TState>(System.Reflection.Module module, ForEachAttributeCallback<TState> callback, ref TState state)
+    private static void ForEachAttributeIn<TState>(Module module, ForEachAttributeCallback<TState> callback, ref TState state)
     {
         object[] attributes;
         lock (Sync)
@@ -583,7 +647,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         }
     }
 
-    private static bool ForEachAttributeIn<TState>(System.Reflection.Module module, ForEachAttributeWhileCallback<TState> callback, ref TState state)
+    private static bool ForEachAttributeIn<TState>(Module module, ForEachAttributeWhileCallback<TState> callback, ref TState state)
     {
         object[] attributes;
         lock (Sync)
@@ -612,7 +676,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         return true;
     }
 
-    private static bool IsDefinedIntl(System.Reflection.Module module)
+    private static bool IsDefinedIntl(Module module)
     {
         bool def;
         object[]? attributes;
@@ -644,7 +708,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         return attributes!.Length > 0;
     }
 
-    private static TAttribute? GetAttributeIntl(System.Reflection.Module module)
+    private static TAttribute? GetAttributeIntl(Module module)
     {
         bool def;
         object[]? attributes;
@@ -683,7 +747,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
         return null;
     }
 
-    private static void GetTypeAttributes(Type type, List<TAttribute> output, bool inherit)
+    private static void GetTypeAttributes(Type type, IList<TAttribute> output, bool inherit)
     {
         GetTypeAttributesState state;
         state.List = output;
@@ -695,7 +759,7 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
 
     private struct GetTypeAttributesState
     {
-        public List<TAttribute> List;
+        public IList<TAttribute> List;
     }
 
     private static void ForEachAttributeIn<TState>(Type type, ForEachAttributeCallback<TState> callback, ref TState state, bool inherit)
@@ -941,6 +1005,39 @@ internal static class TestAttributeHelper<TAttribute> where TAttribute : class
                     return (TAttribute?)attributes[i];
             }
         }
+
+        return null;
+    }
+}
+
+file static class TestAttributeHelper
+{
+    internal static TAttribute? GetAttributeSafe<TAttribute>(ICustomAttributeProvider member, bool inherit = false) where TAttribute : Attribute
+    {
+        try
+        {
+            switch (member)
+            {
+                case MemberInfo memberInfo:
+                    return (TAttribute?)Attribute.GetCustomAttribute(memberInfo, typeof(TAttribute), inherit);
+                case Module module:
+                    return (TAttribute?)Attribute.GetCustomAttribute(module, typeof(TAttribute), inherit);
+                case Assembly assembly:
+                    return (TAttribute?)Attribute.GetCustomAttribute(assembly, typeof(TAttribute), inherit);
+                case ParameterInfo parameterInfo:
+                    return (TAttribute?)Attribute.GetCustomAttribute(parameterInfo, typeof(TAttribute), inherit);
+                default:
+                    object[] attributes = member.GetCustomAttributes(typeof(TAttribute), inherit);
+                    if (attributes is not { Length: > 0 })
+                        return null;
+                    if (attributes.Length > 1)
+                        throw new AmbiguousMatchException($"Multiple attributes of type {typeof(TAttribute).FullName}.");
+
+                    return (TAttribute?)attributes[0];
+            }
+        }
+        catch (TypeLoadException) { }
+        catch (FileNotFoundException) { }
 
         return null;
     }

@@ -7,6 +7,8 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using uTest.Compat;
+using uTest.Compat.DependencyInjection;
+using uTest.Compat.Lifetime;
 using uTest.Compat.Logging;
 using uTest.Discovery;
 using uTest.Dummies;
@@ -74,6 +76,16 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
     /// The highest-priority logger integration currently being used from the available modules.
     /// </summary>
     public ILoggerIntegration? LoggerIntegration { get; private set; }
+
+    /// <summary>
+    /// The highest-priority test runner activator currently being used from the available modules.
+    /// </summary>
+    public ITestRunnerActivator? TestRunnerActivator { get; private set; }
+
+    /// <summary>
+    /// Sorted list of implementations of <see cref="ITestLifetimeIntegration"/>.
+    /// </summary>
+    public ITestLifetimeIntegration[]? TestLifetimeIntegrations { get; private set; }
 
     /// <summary>
     /// The assembly that contains the running tests.
@@ -208,9 +220,9 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
                 p =>
                 {
                     p.RegisterPatch(SkipAddFoundAssetIfNotRequired.TryPatch, SkipAddFoundAssetIfNotRequired.TryUnpatch);
-                    p.RegisterPatch(SocketMessageLayerFix.TryPatchServer, SocketMessageLayerFix.TryUnpatchServer);
-                    if (!Dedicator.isStandaloneDedicatedServer)
-                        p.RegisterPatch(SocketMessageLayerFix.TryPatchClient, SocketMessageLayerFix.TryUnpatchClient);
+                    //p.RegisterPatch(SocketMessageLayerFix.TryPatchServer, SocketMessageLayerFix.TryUnpatchServer);
+                    //if (!Dedicator.isStandaloneDedicatedServer)
+                    //    p.RegisterPatch(SocketMessageLayerFix.TryPatchClient, SocketMessageLayerFix.TryUnpatchClient);
                 }
             );
         }
@@ -298,40 +310,6 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         });
     }
 
-    private void LoadLoggerIntegration()
-    {
-        List<ILoggerIntegration> integrations = new List<ILoggerIntegration>(0);
-
-        if (CompatibilityInformation.IsOpenModInstalled)
-        {
-            try
-            {
-                ILoggerIntegration openMod = LoggingIntegrations.TryInstallOpenModLoggingIntegration(Logger);
-
-                integrations.Add(openMod);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError("Failed to load OpenMod compatability.", ex);
-            }
-        }
-
-        if (integrations.Count <= 0)
-            return;
-
-        integrations.Sort((a, b) => b.Priority.CompareTo(a.Priority));
-
-        ILoggerIntegration integration = integrations[0];
-        for (int i = 1; i < integrations.Count; ++i)
-        {
-            if (integrations[i] is IDisposable disp)
-                disp.Dispose();
-        }
-
-        LoggerIntegration = integration;
-        Logger = integration.CreateNamedLogger("uTest");
-    }
-
     internal ILogger GetOrCreateLogger(string name)
     {
         ILoggerIntegration? integration = LoggerIntegration;
@@ -396,11 +374,15 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
 
         List<UnturnedTestInstance> tests = await list.GetMatchingTestsAsync(Logger, filter, CancellationToken).ConfigureAwait(false);
 
+        await GameThread.Switch();
+
         Logger.LogInformation($"Found {tests.Count} test(s).");
 
         UnturnedTestInstanceData[] testArray = new UnturnedTestInstanceData[tests.Count];
         for (int i = 0; i < testArray.Length; ++i)
-            testArray[i] = new UnturnedTestInstanceData(tests[i]);
+        {
+            testArray[i] = new UnturnedTestInstanceData(tests[i], testList.SessionUid);
+        }
 
         HashSet<ulong> workshopItems = new HashSet<ulong>();
         foreach (UnturnedTestInstanceData data in testArray)
@@ -412,11 +394,10 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         }
 
         WorkshopItems = workshopItems.ToArray();
+
+        GameThread.Assert();
         // todo: doesnt work on client and is a race condition with asset loading (see Provider.host())
-        await GameThread.RunAndWaitAsync(workshopItems, static workshopItems =>
-        {
-            WorkshopDownloadConfig.getOrLoad().File_IDs = new List<ulong>(workshopItems);
-        }, CancellationToken);
+        WorkshopDownloadConfig.getOrLoad().File_IDs = new List<ulong>(workshopItems);
 
         if (WorkshopItems.Length > 0)
         {
@@ -456,6 +437,10 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
     {
         Task.Run(async () =>
         {
+            // this needs to happen after openmod has had time to load, in case uTest loads before OpenMod
+            LoadActivatorIntegration();
+            LoadTestLifetimeIntegrations();
+
             await InvokeStartupHookTypes().ConfigureAwait(false);
 
             await Environment.SendAsync(new LevelLoadedMessage(), CancellationToken);
@@ -611,6 +596,100 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         }
     }
 
+    private void LoadLoggerIntegration()
+    {
+        List<ILoggerIntegration> integrations = new List<ILoggerIntegration>(0);
+
+        if (CompatibilityInformation.IsOpenModInstalled)
+        {
+            try
+            {
+                ILoggerIntegration openMod = LoggingIntegrations.TryInstallOpenModLoggingIntegration(Logger);
+
+                integrations.Add(openMod);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to load OpenMod logging compatibility.", ex);
+            }
+        }
+
+        if (integrations.Count <= 0)
+            return;
+
+        integrations.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+
+        ILoggerIntegration integration = integrations[0];
+        for (int i = 1; i < integrations.Count; ++i)
+        {
+            if (integrations[i] is IDisposable disp)
+                disp.Dispose();
+        }
+
+        LoggerIntegration = integration;
+        Logger = integration.CreateNamedLogger("uTest");
+    }
+
+    private void LoadActivatorIntegration()
+    {
+        List<ITestRunnerActivator> integrations = new List<ITestRunnerActivator>(0);
+
+        if (CompatibilityInformation.IsOpenModInstalled)
+        {
+            try
+            {
+                ITestRunnerActivator openMod = TestRunnerActivatorIntegrations.TryInstallOpenModTestRunnerActivator(Logger);
+
+                integrations.Add(openMod);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to load OpenMod service injection compatibility.", ex);
+            }
+        }
+
+        if (integrations.Count <= 0)
+            return;
+
+        integrations.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+
+        ITestRunnerActivator integration = integrations[0];
+        for (int i = 1; i < integrations.Count; ++i)
+        {
+            if (integrations[i] is IDisposable disp)
+                disp.Dispose();
+        }
+
+        TestRunnerActivator = integration;
+    }
+
+    private void LoadTestLifetimeIntegrations()
+    {
+        List<ITestLifetimeIntegration> integrations = new List<ITestLifetimeIntegration>(0);
+
+        if (CompatibilityInformation.IsOpenModInstalled)
+        {
+            try
+            {
+                ITestLifetimeIntegration openMod = Compat.TestLifetimeIntegrations.TryInstallOpenModTestLifetime(Logger);
+
+                integrations.Add(openMod);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Failed to load OpenMod event and player compatibility.", ex);
+            }
+        }
+
+        if (integrations.Count <= 0)
+            return;
+
+        integrations.Sort((a, b) => b.Priority.CompareTo(a.Priority));
+
+        TestLifetimeIntegrations = integrations.ToArray();
+    }
+
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -620,6 +699,11 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
             _cancellationTokenSource?.Dispose();
         }
         catch { /* ignored */ }
+
+        ITestRunnerActivator? runnerActivator = TestRunnerActivator;
+        TestRunnerActivator = null;
+        if (runnerActivator is IDisposable disp1)
+            disp1.Dispose();
 
         Instance = null;
         UnturnedTestHost.SetRuntime(null);
@@ -642,8 +726,8 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
 
         ILoggerIntegration? integration = LoggerIntegration;
         LoggerIntegration = null;
-        if (integration is IDisposable disp)
-            disp.Dispose();
+        if (integration is IDisposable disp2)
+            disp2.Dispose();
     }
 
     [MemberNotNullWhen(true, nameof(TestList))]

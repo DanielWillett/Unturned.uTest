@@ -3,7 +3,7 @@
 #pragma warning disable CS8618
 
 [Test]
-[PlayerCount(1), PlayerSimulationMode(PlayerSimulationMode.Full)]
+[PlayerCount(1), PlayerSimulationMode(PlayerSimulationMode.Remote)]
 public class ExpectedConnectionFailures : ITestClassSetup
 {
     private IServersideTestPlayer _player;

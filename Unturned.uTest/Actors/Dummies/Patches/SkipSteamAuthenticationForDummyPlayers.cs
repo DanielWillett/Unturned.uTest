@@ -86,6 +86,7 @@ internal static class SkipSteamAuthenticationForDummyPlayers
             return true;
         }
 
+        pending.assignedPro = pending.isPro;
         pending.playerID.group = CSteamID.Nil;
         pending.hasAuthentication = true;
         __result = true;

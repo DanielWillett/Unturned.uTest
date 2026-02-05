@@ -209,6 +209,10 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         try
         {
             await _logger.LogInformationAsync($"Discovering tests: {ctx.Request.Session.SessionUid.Value}.");
+
+            // todo: from runsettings
+            const string serverId = "uTest";
+
             
             //Debugger.Launch();
 
@@ -342,7 +346,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                     });
                 }
 
-                Process process = await _launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssembly, token);
+                Process process = await _launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssembly, serverId, token);
 
                 _logger.LogInformation("Launched.");
 

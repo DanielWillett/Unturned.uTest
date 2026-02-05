@@ -3,6 +3,8 @@ using Newtonsoft.Json;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
+using Newtonsoft.Json.Linq;
+using uTest.Compat;
 using uTest.Logging;
 
 // ReSharper disable InconsistentNaming
@@ -11,6 +13,9 @@ namespace uTest.Runner.Unturned;
 
 internal static class ModuleFiles
 {
+    internal const string ModuleId = "uTest";
+    internal const string BootstrapperModuleId = "uTest.Bootstrapper";
+
     internal static Assembly uTestAssembly { get; } = typeof(ITestContext).Assembly;
 
     internal static Assembly uTestRunnerAssembly { get; } = typeof(ModuleFiles).Assembly;
@@ -20,6 +25,8 @@ internal static class ModuleFiles
     internal static SupportedTargetFramework CurrentTargetFramework { get; } = IsNetStandard(uTestAssembly) || IsNetStandard(uTestRunnerAssembly)
         ? SupportedTargetFramework.NetStandard
         : SupportedTargetFramework.NetFramework;
+
+    internal static DateTime uTestRunnerAssemblyCreationDate { get; }
 
     internal static ModuleFile[] Files { get; } =
     [
@@ -74,7 +81,7 @@ internal static class ModuleFiles
         new LoadedAssemblyModuleFile(SupportedTargetFramework.Both, uTestRunnerAssembly,                                                        "uTest.Runner.dll"),
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.DummyPlayerHost.dll",                         "uTest.DummyPlayerHost.dll", hasSymbols: true) { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.Compat.dll",                                  "uTest.Compat.dll", hasSymbols: true) { ModuleReferenceMode = ModuleFileReferenceMode.Both },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.Compat.OpenMod.dll",                          "uTest.Compat.OpenMod.dll", hasSymbols: true) { ModuleReferenceMode = ModuleFileReferenceMode.None },
+     // new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Unturned.uTest.Compat.OpenMod.dll",                          "uTest.Compat.OpenMod.dll", hasSymbols: true) { ModuleReferenceMode = ModuleFileReferenceMode.None },
         
         new ModuleConfigFile()
     ];
@@ -103,6 +110,8 @@ internal static class ModuleFiles
             foreach (string s in file.OtherFileName)
                 ExpectedFiles.Add(s);
         }
+
+        uTestRunnerAssemblyCreationDate = FileHelper.GetLastWriteTimeUTCSafe(uTestRunnerAssembly, DateTime.MaxValue);
     }
 
     /// <summary>
@@ -233,6 +242,142 @@ internal static class ModuleFiles
         }
 
         return !anyFailed;
+    }
+
+    /// <summary>
+    /// Adds <c>Unturned.uTest.Compat.OpenMod</c> to the OpenMod plugins directory.
+    /// </summary>
+    /// <remarks>Also sets <see cref="CompatibilityInformation.IsOpenModInstalled"/>.</remarks>
+    internal static void UpdateOpenModDependency(string moduleFolder, ILogger logger, bool remove, string serverId)
+    {
+        string modulesFolder = Path.GetFullPath(Path.Combine(moduleFolder, ".."));
+
+        if (!remove)
+        {
+            string[] openModModuleFiles = Directory.GetFiles(modulesFolder, "OpenMod.Unturned.module", SearchOption.AllDirectories);
+
+            CompatibilityInformation.IsOpenModInstalled = openModModuleFiles.Length != 0;
+            if (!CompatibilityInformation.IsOpenModInstalled)
+                return;
+        }
+        else
+        {
+            CompatibilityInformation.IsOpenModInstalled = false;
+        }
+
+        string dirName = Path.GetFullPath(Path.Combine(modulesFolder, "..", "Servers", serverId, "OpenMod", "plugins"));
+        string fileName = Path.Combine(dirName, "uTest.Compat.OpenMod.dll");
+        
+        string disabledFileName = fileName + ".disabled";
+
+        if (remove)
+        {
+            try
+            {
+                File.Move(fileName, disabledFileName);
+            }
+            catch (DirectoryNotFoundException) { }
+            catch (FileNotFoundException) { }
+            catch (IOException ex) when (ex.HResult == /* file already exists */ -2147024713 || File.Exists(disabledFileName))
+            {
+                try
+                {
+                    AssemblyName existingAsmName = AssemblyName.GetAssemblyName(disabledFileName);
+                    AssemblyName oldAsmName = AssemblyName.GetAssemblyName(fileName);
+                    if (existingAsmName.Version == null || existingAsmName.Version <= oldAsmName.Version)
+                    {
+                        // disabled file is older than normal file
+                        File.Delete(disabledFileName);
+                        File.Move(fileName, disabledFileName);
+                    }
+                    else
+                    {
+                        File.Delete(fileName);
+                    }
+                }
+                catch
+                {
+                    try
+                    {
+                        File.Delete(disabledFileName);
+                        File.Move(fileName, disabledFileName);
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            File.Delete(fileName);
+                        }
+                        catch (DirectoryNotFoundException) { }
+                        catch (FileNotFoundException) { }
+                        catch (Exception ex2)
+                        {
+                            logger.LogError("Error removing OpenMod plugin, unable to delete plugin assembly.", ex2);
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            EmbeddedModuleFile moduleFile = new EmbeddedModuleFile(
+                SupportedTargetFramework.Both,
+                "uTest.Runner.Module.Unturned.uTest.Compat.OpenMod.dll",
+                fileName
+            );
+
+            logger.LogWarning($"Copying Unturned.uTest.Compat.OpenMod.dll to {fileName}...");
+            Exception? moveEx = null;
+            try
+            {
+                File.Move(disabledFileName, fileName);
+                logger.LogWarning($"Enabled existing file {disabledFileName} -> {fileName}.");
+            }
+            catch (FileNotFoundException)
+            {
+                Directory.CreateDirectory(dirName);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                Directory.CreateDirectory(dirName);
+            }
+            catch (IOException ex) when (ex.HResult == /* file already exists */ -2147024713 || File.Exists(fileName))
+            {
+                try
+                {
+                    AssemblyName oldAsmName = AssemblyName.GetAssemblyName(disabledFileName);
+                    AssemblyName existingAsmName = AssemblyName.GetAssemblyName(fileName);
+                    if (oldAsmName.Version == null || oldAsmName.Version <= existingAsmName.Version)
+                    {
+                        // disabled file is older than normal file
+                        File.Delete(disabledFileName);
+                        logger.LogWarning("Disabled file was older than or the same version as the existing file.");
+                    }
+                    else
+                    {
+                        File.Delete(fileName);
+                        File.Move(disabledFileName, fileName);
+                        logger.LogWarning("Disabled file was newer than existing file.");
+                    }
+                }
+                catch (Exception ex2)
+                {
+                    moveEx = ex2;
+                }
+            }
+
+            if (moduleFile.TryWrite(moduleFolder, logger, out _, null))
+            {
+                logger.LogWarning($"Successfully copied Unturned.uTest.Compat.OpenMod.dll to {fileName}.");
+                return;
+            }
+
+            const string msg = "Error adding OpenMod plugin, unable to insert plugin assembly.";
+            if (moveEx != null)
+                logger.LogError(msg, moveEx);
+            else
+                logger.LogError(msg);
+        }
     }
 }
 
@@ -435,7 +580,9 @@ internal sealed class EmbeddedModuleFile : ModuleFile
                 ? DateTime.MinValue
                 : FileHelper.GetLastWriteTimeUTCSafe(symbolPath!, DateTime.MinValue);
 #endif
-            DateTime assemblyCreateDate = FileHelper.GetLastWriteTimeUTCSafe(Assembly, DateTime.MaxValue);
+            DateTime assemblyCreateDate = Assembly == ModuleFiles.uTestRunnerAssembly
+                ? ModuleFiles.uTestRunnerAssemblyCreationDate
+                : FileHelper.GetLastWriteTimeUTCSafe(Assembly, DateTime.MaxValue);
 
             if (assemblyCreateDate <= fileCreateDate)
             {
@@ -519,16 +666,18 @@ internal sealed class ModuleConfigFile : ModuleFile
             writer.Indentation = 4;
 #endif
 
+            string version = ModuleFiles.uTestAssembly.GetName().Version.ToString();
+
             writer.WriteStartObject();
             
             writer.WritePropertyName("IsEnabled");
             writer.WriteValue(IsEnabled);
 
             writer.WritePropertyName("Name");
-            writer.WriteValue("uTest");
+            writer.WriteValue(ModuleFiles.ModuleId);
 
             writer.WritePropertyName("Version");
-            writer.WriteValue(ModuleFiles.uTestAssembly.GetName().Version.ToString());
+            writer.WriteValue(version);
 
             writer.WritePropertyName("Dependencies");
             writer.WriteStartArray();
@@ -536,10 +685,10 @@ internal sealed class ModuleConfigFile : ModuleFile
             writer.WriteStartObject();
 
             writer.WritePropertyName("Name");
-            writer.WriteValue("uTest.Bootstrapper");
+            writer.WriteValue(ModuleFiles.BootstrapperModuleId);
 
             writer.WritePropertyName("Version");
-            writer.WriteValue(ModuleFiles.uTestAssembly.GetName().Version.ToString());
+            writer.WriteValue(version);
 
             writer.WriteEndObject();
 
@@ -670,6 +819,24 @@ internal sealed class BootstrapperModuleConfigFile : ModuleFile
 
             writer.WriteEndArray();
 
+            writer.WritePropertyName("Dependencies");
+            writer.WriteStartArray();
+
+            if (CompatibilityInformation.IsOpenModInstalled)
+            {
+                // OpenMod needs to load first so the bootstrapper can reference hotloaded assemblies
+                writer.WriteStartObject();
+
+                writer.WritePropertyName("Name");
+                writer.WriteValue("OpenMod.Unturned");
+
+                writer.WritePropertyName("Version");
+                writer.WriteValue("0.0.0.0");
+
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
 
             writer.WriteEndObject();
 

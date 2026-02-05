@@ -3,6 +3,7 @@ using System;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
+using uTest.Compat.DependencyInjection;
 using uTest.Discovery;
 #if REFLECTION_TOOLS_DEBUG
 using DanielWillett.ReflectionTools;
@@ -51,16 +52,6 @@ internal static class TestCompiler
         ILGenerator il = dynMethod.GetILGenerator(2048);
 #endif
         Type runnerType = test.Type;
-        ConstructorInfo? constructor = runnerType.GetConstructor(Type.EmptyTypes);
-        if (constructor == null)
-        {
-            logger.LogError(string.Format(
-                Properties.Resources.LogErrorMissingConstructor,
-                test.DisplayName,
-                test.Test.ManagedType)
-            );
-            return null;
-        }
 
         LocalBuilder lclRunner = il.DeclareLocal(runnerType);
         LocalBuilder lclContext = il.DeclareLocal(typeof(ITestContext));
@@ -90,7 +81,29 @@ internal static class TestCompiler
         // runner = new TRunner();
         il.Emit(OpCodes.Ldarg_0);
         il.Emit(OpCodes.Dup); // for stfld
-        il.Emit(OpCodes.Newobj, constructor);
+        if (parameters.Module.TestRunnerActivator != null)
+        {
+            il.Emit(OpCodes.Dup);
+            il.Emit(OpCodes.Ldfld, TestRunParameters_Module);
+            il.Emit(OpCodes.Callvirt, MainModule_TestRunnerActivator);
+            il.Emit(OpCodes.Callvirt, ITestRunnerActivator_CreateTestInstance.MakeGenericMethod(runnerType));
+        }
+        else
+        {
+            ConstructorInfo? constructor = runnerType.GetConstructor(Type.EmptyTypes);
+            if (constructor == null)
+            {
+                logger.LogError(string.Format(
+                    Properties.Resources.LogErrorMissingConstructor,
+                    test.DisplayName,
+                    test.Test.ManagedType)
+                );
+                return null;
+            }
+
+            il.Emit(OpCodes.Newobj, constructor);
+        }
+
         il.Emit(OpCodes.Dup); // for newobj
         il.Emit(OpCodes.Stloc, lclRunner);
 
@@ -152,12 +165,14 @@ internal static class TestCompiler
             if (TryLoadParameter(in test, il, i, parameter))
                 continue;
 
-            logger.LogError(string.Format(
+            logger.LogError(
+                string.Format(
                     Properties.Resources.LogErrorMismatchedParameterType,
                     test.Arguments[i]?.ToString() ?? "null",
                     ManagedIdentifier.GetManagedType(parameter.ParameterType),
                     parameter.Name,
-                    test.DisplayName)
+                    test.DisplayName
+                )
             );
 
             return null;
@@ -521,6 +536,7 @@ internal static class TestCompiler
     private static readonly FieldInfo TestRunParameters_Test;
     private static readonly FieldInfo TestRunParameters_SignalStart;
     private static readonly FieldInfo TestRunParameters_SignalEnd;
+    private static readonly FieldInfo TestRunParameters_Module;
     private static readonly FieldInfo TestContext_HasStarted;
 
     private static readonly MethodInfo INotifyCompletion_OnCompleted;
@@ -531,6 +547,10 @@ internal static class TestCompiler
 
     private static readonly MethodInfo UnturnedTestInstance_Arguments_Get;
     private static readonly MethodInfo TestContext_Runner_Get;
+
+    private static readonly MethodInfo MainModule_TestRunnerActivator;
+
+    private static readonly MethodInfo ITestRunnerActivator_CreateTestInstance;
 
     // ReSharper restore InconsistentNaming
 
@@ -576,6 +596,10 @@ internal static class TestCompiler
             .GetField(nameof(TestRunParameters.SignalEnd), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(nameof(TestRunParameters), nameof(TestRunParameters.SignalEnd));
 
+        TestRunParameters_Module = typeof(TestRunParameters)
+            .GetField(nameof(TestRunParameters.Module), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new MissingFieldException(nameof(TestRunParameters), nameof(TestRunParameters.Module));
+
         TestContext_HasStarted = typeof(TestContext)
             .GetField(nameof(TestContext.HasStarted), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(nameof(TestContext), nameof(TestContext.HasStarted));
@@ -599,6 +623,14 @@ internal static class TestCompiler
         TestContext_Runner_Get = typeof(TestContext)
             .GetProperty(nameof(TestContext.Runner), BindingFlags.Public | BindingFlags.Instance)?.GetMethod
             ?? throw new MissingMethodException(nameof(TestContext), "get_" + nameof(TestContext.Runner));
+
+        MainModule_TestRunnerActivator = typeof(MainModule)
+            .GetProperty(nameof(MainModule.TestRunnerActivator), BindingFlags.Public | BindingFlags.Instance)?.GetMethod
+            ?? throw new MissingMethodException(nameof(MainModule), "get_" + nameof(MainModule.TestRunnerActivator));
+
+        ITestRunnerActivator_CreateTestInstance = typeof(ITestRunnerActivator)
+            .GetMethod(nameof(ITestRunnerActivator.CreateTestInstance), BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new MissingMethodException(nameof(ITestRunnerActivator), nameof(ITestRunnerActivator.CreateTestInstance));
     }
 }
 
