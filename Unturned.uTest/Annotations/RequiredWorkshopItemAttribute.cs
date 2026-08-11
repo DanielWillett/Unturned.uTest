@@ -9,8 +9,13 @@ namespace uTest;
 /// <para>
 /// By default the tester will run the test on any map, usually PEI.
 /// </para>
+/// <para>
+/// When used with <see cref="PlayerSimulationMode.Singleplayer"/>, this will subscribe the current steam account to the workshop item.
+/// </para>
 /// </summary>
-/// <remarks>Maps also need to be specified using the <see cref="RequiredMapAttribute"/>.</remarks>
+/// <remarks>
+/// Maps also need to be specified using the <see cref="RequiredMapAttribute"/>.
+/// </remarks>
 /// <param name="workshopItemId">
 /// The Steam Workshop ID of a mod that's required for all tests within the annotated member.
 /// The Workshop ID can be found within the URL of the mod on the Steam Workshop page.

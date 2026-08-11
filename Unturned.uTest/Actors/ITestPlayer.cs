@@ -37,6 +37,13 @@ public interface ITestPlayer : ITestActor
     /// </summary>
     /// <exception cref="ActorDestroyedException"/>
     ITestPlayerInventory Inventory { get; }
+
+    /// <summary>
+    /// Gets the underlying <see cref="SDG.Unturned.Player"/> object this actor represents.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Player has not yet connected. This can happen with dummy players.</exception>
+    /// <exception cref="ActorDestroyedException"/>
+    Player Player { get; }
 }
 
 /// <summary>

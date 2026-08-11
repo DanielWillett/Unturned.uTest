@@ -321,23 +321,24 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
 
     protected virtual void Dispose(bool isDisposing)
     {
-        Semaphore.Wait();
+        if (!TokenSource.IsCancellationRequested)
+        {
+            try
+            {
+                TokenSource.Cancel();
+            }
+            catch { /* ignored */ }
+        }
+
+        bool rel = Semaphore.Wait(5000);
         try
         {
-            if (!TokenSource.IsCancellationRequested)
-            {
-                try
-                {
-                    TokenSource.Cancel();
-                }
-                catch { /* ignored */ }
-            }
-
             ClosePipeStream();
         }
         finally
         {
-            Semaphore.Release();
+            if (rel)
+                Semaphore.Release();
             Semaphore.Dispose();
         }
     }

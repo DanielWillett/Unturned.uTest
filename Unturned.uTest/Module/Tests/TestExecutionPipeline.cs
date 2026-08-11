@@ -64,11 +64,6 @@ internal class TestExecutionPipeline : IExceptionFormatter
         Exception? testException;
         TestContext? context;
 
-        if (CurrentTest.Dummies > 0)
-        {
-            await _module.Dummies.InitializeDummiesForTestAsync(CurrentTest, _module.CancellationToken);
-        }
-
         _logger.LogInformation("Running test...");
         Task<TestInitErrorCode> task = TestAsyncStateMachine.TryRunTestAsync(CurrentTest, _token, _logger, _stopwatch, _testList, _module, out TestAsyncStateMachine machine);
         try

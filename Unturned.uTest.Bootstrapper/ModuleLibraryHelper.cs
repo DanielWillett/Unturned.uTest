@@ -28,14 +28,15 @@ internal class ModuleLibraryHelper(string moduleHomePath)
         TryAddFallback(_3100, "Microsoft.Extensions.FileSystemGlobbing.exe", out _);
 
         TryAddFallback(_3100, "Microsoft.Extensions.Logging.Abstractions.exe", out AssemblyName msExtLoggerAbs);
-        AssemblyName msExtDepInjAbs;
+        AssemblyName? msExtDepInjAbs;
         if (VersionCompare(msExtLoggerAbs.Version, new Version(8, 0, 0, 0)) >= 0)
         {
-            TryAddFallback(msExtLoggerAbs.Version, "Microsoft.Extensions.DependencyInjection.Abstractions.exe", out msExtDepInjAbs);
-
-            if (VersionCompare(msExtLoggerAbs.Version, new Version(9, 0, 0, 0)) >= 0)
+            if (TryAddFallback(msExtLoggerAbs.Version, "Microsoft.Extensions.DependencyInjection.Abstractions.exe", out msExtDepInjAbs))
             {
-                TryAddFallback(msExtLoggerAbs.Version, "System.Diagnostics.DiagnosticSource.exe", out _);
+                if (VersionCompare(msExtLoggerAbs.Version, new Version(9, 0, 0, 0)) >= 0)
+                {
+                    TryAddFallback(msExtLoggerAbs.Version, "System.Diagnostics.DiagnosticSource.exe", out _);
+                }
             }
         }
         else
@@ -43,7 +44,7 @@ internal class ModuleLibraryHelper(string moduleHomePath)
             TryAddFallback(_3100, "Microsoft.Extensions.DependencyInjection.Abstractions.exe", out msExtDepInjAbs);
         }
 
-        if (VersionCompare(msExtDepInjAbs.Version, new Version(6, 0, 0, 0)) >= 0)
+        if (msExtDepInjAbs != null && VersionCompare(msExtDepInjAbs.Version, new Version(6, 0, 0, 0)) >= 0)
         {
             TryAddFallback(msExtDepInjAbs.Version, "Microsoft.Bcl.AsyncInterfaces.exe", out msExtDepInjAbs);
         }
@@ -51,9 +52,11 @@ internal class ModuleLibraryHelper(string moduleHomePath)
         TryAddFallback(new Version(1, 1, 2, 0), "DanielWillett.SpeedBytes.exe", out _);
         TryAddFallback(_4000, "ReflectionTools.exe", out _, load: true);
         TryAddFallback(new Version(4, 0, 0, 1), "ReflectionTools.Harmony.exe", out _);
-        TryAddFallback(new Version(1, 0, 0, 0), "ModularRpcs.exe", out AssemblyName modRpcs, load: true);
-        TryAddFallback(modRpcs.Version, "ModularRpcs.NamedPipes.exe", out _, load: true);
-        TryAddFallback(modRpcs.Version, "ModularRpcs.Unity.exe", out _, load: true);
+        if (TryAddFallback(new Version(1, 0, 0, 0), "ModularRpcs.exe", out AssemblyName modRpcs, load: true))
+        {
+            TryAddFallback(modRpcs.Version, "ModularRpcs.NamedPipes.exe", out _, load: true);
+            TryAddFallback(modRpcs.Version, "ModularRpcs.Unity.exe", out _, load: true);
+        }
         TryAddFallback(new Version(2, 4, 2, 0), "0Harmony.exe", out _);
         TryAddFallback(_4000, "System.Collections.Concurrent.exe", out _);
         TryAddFallback(_4000, "System.Diagnostics.Debug.exe", out _);
@@ -104,7 +107,14 @@ internal class ModuleLibraryHelper(string moduleHomePath)
 
     internal bool TryAddFallback(Version referencedVersion, string fileName, out AssemblyName an, bool load = false)
     {
-        string fullPath = Path.Combine(_moduleHomePath, fileName);
+        string fullPath = Path.GetFullPath(Path.Combine(_moduleHomePath, fileName));
+
+        if (!File.Exists(fullPath))
+        {
+            an = null!;
+            return false;
+        }
+
         AssemblyName includedAssembly = AssemblyName.GetAssemblyName(fullPath);
         an = includedAssembly;
 

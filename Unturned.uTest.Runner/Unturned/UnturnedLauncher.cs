@@ -10,6 +10,10 @@ namespace uTest.Runner.Unturned;
 
 internal class UnturnedLauncher : IDisposable
 {
+    // for use in the steam connect link (steam://launch/id/OPTION#)
+    private const string UnturnedAppId = "304930";
+    private const string UnturnedNoBattlEyeOptionIndex = "1";
+
     private readonly bool _u3ds;
     private readonly ILogger _logger;
 
@@ -25,6 +29,7 @@ internal class UnturnedLauncher : IDisposable
     // originally did a short amount of time here but OpenMod can start up pretty slowly the first time
     public TimeSpan StartupTimeout { get; set; } = TimeSpan.FromMinutes(1.5);
     public TimeSpan LoadTimeout { get; set; } = TimeSpan.FromMinutes(5);
+    public TimeSpan SteamLaunchTimeout { get; set; } = TimeSpan.FromMinutes(1);
 
     public string? UnturnedDirectoryOverride
     {
@@ -62,6 +67,17 @@ internal class UnturnedLauncher : IDisposable
         {
             throw new NotSupportedException("Unable to disable test module.");
         }
+    }
+
+    internal void ClientRemoveModule()
+    {
+        if (_u3ds)
+            return;
+
+        string moduleRoot = Path.Combine(_unturnedInstallDir.InstallDirectory, "Modules", "uTest");
+
+        ModuleFiles.IsServer = false;
+        ModuleFiles.ClientRemoveModule(moduleRoot, _logger);
     }
 
     private void TryWriteModuleDirectoryOrSetEnabled(string installDir, Assembly? testAssembly, string serverId)
@@ -158,27 +174,60 @@ internal class UnturnedLauncher : IDisposable
 
         async Task<Process> Core(InstallDirUtility installDirUtil, string serverId, CancellationToken token)
         {
+            // Debugger.Launch();
+
             string installDir = installDirUtil.InstallDirectory;
             string exe = Path.Combine(installDir, installDirUtil.GetExecutableRelativePath());
 
             string settingsFile = GetSettingsFile();
 
-            string launchArgs = $"-batchmode " +
-                                $"-nogui " +
-                                $"-uTestSettings \"{settingsFile}\" " +
-                                $"-NetTransport SystemSockets " +
-                                $"-LogAssemblyResolve " +
-                                $"-LogBadMessages " +
-                                $"+lanserver/{serverId}";
+            string launchArgs = string.Empty;
+
+            bool foundSteamExe;
+
+            if (_u3ds)
+            {
+                launchArgs = $"-batchmode " +
+                             $"-nogui " +
+                             $"-uTestSettings \"{settingsFile}\" " +
+                             $"-NetTransport SystemSockets " +
+                             $"-LogAssemblyResolve " +
+                             $"-LogBadMessages " +
+                             $"+lanserver/{serverId}";
+                foundSteamExe = true;
+            }
+            else
+            {
+                CreateUnturnedLaunchArgsForSteam(ref exe, ref launchArgs, out foundSteamExe);
+            }
 
             TaskCompletionSource<Process> startupTcs = new TaskCompletionSource<Process>();
             _task = startupTcs;
 
-            bool disabledModule = true;
+            bool disabledModule = true, movedModule = true;
 
             Process? process = null;
             try
             {
+                if (string.IsNullOrEmpty(launchArgs))
+                    _logger.LogInformation($"Starting Unturned with shell: \"{exe}\".");
+                else
+                    _logger.LogInformation($"Starting Unturned at \"{exe}\" with args \"{launchArgs}\".");
+
+                string processName = GetUnturnedClientProcessName();
+                if (!_u3ds)
+                {
+                    Process[] existingUnturnedProcesses = Process.GetProcessesByName(processName);
+                    if (existingUnturnedProcesses.Length > 0)
+                    {
+                        foreach (Process p in existingUnturnedProcesses) p.Dispose();
+                        _logger.LogError($"Unturned is already open. PID(s): {string.Join(", ", existingUnturnedProcesses.Select(x => x.Id))}");
+                        throw new InvalidOperationException("Close Unturned before attempting to run singleplayer tests.");
+                    }
+
+                    _logger.LogDebug($"Found no existing processes by the name \"{processName}\".");
+                }
+
                 ProcessStartInfo startInfo = new ProcessStartInfo(exe, launchArgs)
                 {
                     CreateNoWindow = false,
@@ -188,13 +237,14 @@ internal class UnturnedLauncher : IDisposable
 
                 try
                 {
-                    startInfo.UseShellExecute = true;
+                    startInfo.UseShellExecute = !(_u3ds || foundSteamExe);
                 }
                 catch (NotSupportedException) { }
 
                 token.ThrowIfCancellationRequested();
 
                 disabledModule = false;
+                movedModule = false;
                 TryWriteModuleDirectoryOrSetEnabled(installDir, testAssembly, serverId);
 
                 if (_task != startupTcs)
@@ -206,6 +256,60 @@ internal class UnturnedLauncher : IDisposable
                 if (process == null)
                 {
                     throw new InvalidOperationException("Failed to start Unturned.");
+                }
+
+                if (!_u3ds)
+                {
+                    DateTime start = DateTime.UtcNow;
+                    Process? newestUnturnedProcess = null;
+                    do
+                    {
+                        await Task.Delay(1000, token);
+                        Process[] unturnedProcess = Process.GetProcessesByName(processName);
+                        if (unturnedProcess.Length == 0)
+                            continue;
+
+                        newestUnturnedProcess = unturnedProcess.Aggregate((a, b) =>
+                        {
+                            DateTime atime, btime;
+                            try { atime = a.StartTime; }
+                            catch (InvalidOperationException) { atime = DateTime.MinValue; }
+
+                            try { btime = b.StartTime; }
+                            catch (InvalidOperationException) { btime = DateTime.MinValue; }
+
+                            return atime > btime ? a : b;
+                        });
+
+                        foreach (Process p in unturnedProcess.Where(x => x != newestUnturnedProcess))
+                            p.Dispose();
+
+                        break;
+
+                    } while (DateTime.UtcNow - start < SteamLaunchTimeout);
+
+                    if (newestUnturnedProcess == null)
+                    {
+                        throw new TimeoutException($"Timed out waiting on Steam to launch Unturned ({SteamLaunchTimeout}). Maybe it's downloading an update?");
+                    }
+
+                    _logger.LogInformation($"Found Unturned process launched by Steam: {newestUnturnedProcess.Id}. Steam PID: {process.Id}.");
+                    try
+                    {
+                        if (!process.HasExited)
+                            process.Kill();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning("Failed to kill Steam launcher process.");
+                        _logger.LogWarning(ex.ToString());
+                    }
+                    finally
+                    {
+                        process.Dispose();
+                    }
+
+                    process = newestUnturnedProcess;
                 }
 
                 _logger.LogInformation($"Unturned process started with PID {process.Id}.");
@@ -350,6 +454,10 @@ internal class UnturnedLauncher : IDisposable
             {
                 if (!disabledModule)
                     DisableModule(installDir, testAssembly, serverId);
+
+                if (!movedModule)
+                    ClientRemoveModule();
+
                 try
                 {
                     process?.Kill();
@@ -363,8 +471,69 @@ internal class UnturnedLauncher : IDisposable
         }
     }
 
+    private string GetUnturnedClientProcessName()
+    {
+        return "Unturned";
+#if false
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return "Unturned.exe";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return "Unturned";
+        return _u3ds ? "Unturned_Headless.x86_64" : "Unturned.x86_64";
+#endif
+    }
+
+    private void CreateUnturnedLaunchArgsForSteam(ref string exe, ref string launchArgs, out bool foundSteamExe)
+    {
+        const string protocolLink = $"steam://launch/{UnturnedAppId}/OPTION{UnturnedNoBattlEyeOptionIndex}";
+        string steamDir;
+        try
+        {
+            steamDir = _unturnedInstallDir.SteamDirectory;
+        }
+        catch (DirectoryNotFoundException ex)
+        {
+            _logger.LogDebug($"Failed to find steam executable.{System.Environment.NewLine}{ex}");
+            foundSteamExe = false;
+            return;
+        }
+
+        exe = protocolLink;
+        foundSteamExe = false;
+        if (string.IsNullOrEmpty(steamDir))
+            return;
+
+        string? fileName;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            fileName = "steam.exe";
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            fileName = "steam";
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            fileName = "steam.sh";
+        else
+            return;
+
+        string loc = Path.Combine(steamDir, fileName);
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && !File.Exists(loc))
+        {
+            loc += ".sh";
+        }
+
+        if (File.Exists(loc))
+        {
+            exe = loc;
+            launchArgs = $"-- \"{protocolLink}\"";
+            foundSteamExe = true;
+        }
+        else
+        {
+            _logger.LogDebug($"Failed to find steam executable, expected at {loc}.");
+        }
+    }
+
     public string GetSettingsFile()
     {
+        // also update client-side launch (clients can't get launch args)
         return Path.Combine(_unturnedInstallDir.InstallDirectory, "Modules", "uTest", "test-settings.json");
     }
 

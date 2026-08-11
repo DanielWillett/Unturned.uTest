@@ -412,7 +412,7 @@ internal class AssetLoadModel
 
         if (includeDefaultAssets)
         {
-            DefaultAssets.Add(guids);
+            DefaultAssets.Add(guids, ids);
         }
 
         return hasAny ? new AssetLoadModel() : new AssetLoadModel(guids, ids, patterns.ToArray());

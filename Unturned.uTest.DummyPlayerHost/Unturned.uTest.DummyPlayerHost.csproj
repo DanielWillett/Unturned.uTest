@@ -31,7 +31,7 @@
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
     <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" Aliases="JBA" />
 
-    <PackageReference Include="Unturned.MSBuild" Version="1.0.0-test6">
+    <PackageReference Include="Unturned.MSBuild" Version="1.0.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
@@ -80,7 +80,7 @@
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.anycastProxyMode" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.monetization" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.IsVACSecure" />
-    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.IsBattlEyeSecure" />
+    <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.IsThirdpartyAntiCheatEnabled" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.networkTransport" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement._maxPlayers" />
     <Publicize Include="Assembly-CSharp:SDG.Unturned.SteamServerAdvertisement.pluginFramework" />

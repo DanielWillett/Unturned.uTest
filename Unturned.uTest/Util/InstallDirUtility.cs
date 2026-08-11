@@ -61,6 +61,7 @@ public class InstallDirUtility
     private readonly Regex _libraryVcfFindPathRegex;
 
     private string? _installDirectory;
+    private string? _steamDirectory;
 
     /// <summary>
     /// Set an explicit directory to use instead of automatically finding it.
@@ -89,6 +90,26 @@ public class InstallDirUtility
             }
 
             return _installDirectory;
+        }
+    }
+
+    /// <summary>
+    /// The cached Steam client directory, only available after the first time <see cref="TryGetInstallDirectory"/> is ran.
+    /// </summary>
+    /// <remarks>This is the folder where the steam executable is, not necessarily where the user data is.</remarks>
+    /// <exception cref="DirectoryNotFoundException">Could not locate the game's installation directory.</exception>
+    public string SteamDirectory
+    {
+        get
+        {
+            if (_steamDirectory == null)
+            {
+                TryGetInstallDirectory(out _installDirectory);
+                if (_steamDirectory == null)
+                    throw new DirectoryNotFoundException("Failed to locate the Steam directory.");
+            }
+
+            return _steamDirectory;
         }
     }
 
@@ -135,7 +156,7 @@ public class InstallDirUtility
     /// </summary>
     public bool TryGetInstallDirectory(out string installDir)
     {
-        if (_installDirectory != null)
+        if (_installDirectory != null && _steamDirectory != null)
         {
             installDir = _installDirectory;
             return true;
@@ -143,7 +164,7 @@ public class InstallDirUtility
 
         if (_u3ds)
         {
-            string? dir = FindUnturnedInstallation(_logger);
+            string? dir = FindU3DSInstallation(_logger);
             if (dir != null)
             {
                 installDir = dir;
@@ -154,16 +175,16 @@ public class InstallDirUtility
         }
 
         installDir = null!;
-        string libraryFilePath;
+        string? libraryFilePath;
         bool isUnix = false;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            if (!WindowsInstallDirUtility.TryFindSteamInstallDirectory(out libraryFilePath, _logger))
+            if (!WindowsInstallDirUtility.TryFindSteamInstallDirectory(out libraryFilePath, out _steamDirectory, _logger))
             {
                 return false;
             }
         }
-        else if (!UnixInstallDirUtility.TryFindSteamInstallDirectory(out libraryFilePath, _logger))
+        else if (!UnixInstallDirUtility.TryFindSteamInstallDirectory(out libraryFilePath, out _steamDirectory, _logger))
         {
             return false;
         }
@@ -240,7 +261,7 @@ public class InstallDirUtility
         return true;
     }
 
-    internal string? FindUnturnedInstallation(ILogger logger)
+    internal string? FindU3DSInstallation(ILogger logger)
     {
         string[] pathsToSearch;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -314,11 +335,11 @@ public class InstallDirUtility
                 if (string.IsNullOrEmpty(dir))
                     continue;
 
-                StringComparison comparer = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                bool isMacOS = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+
+                StringComparison comparer = isMacOS || RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
                     ? StringComparison.OrdinalIgnoreCase
                     : StringComparison.Ordinal;
-
-                bool isMacOS = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 
                 string dataFolder = Path.GetFileName(dir);
                 if (!(string.Equals(dataFolder, "Unturned_Data", comparer)
@@ -403,9 +424,9 @@ file static class UnixInstallDirUtility
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static bool TryFindSteamInstallDirectory(out string libraryVcf, ILogger logger)
+    public static bool TryFindSteamInstallDirectory([NotNullWhen(true)] out string? libraryVcf, [NotNullWhen(true)] out string? steamDirectory, ILogger logger)
     {
-        libraryVcf = null!;
+        libraryVcf = null;
 
         // MacOS
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -417,12 +438,13 @@ file static class UnixInstallDirUtility
                 defaultLocation
             );
 
-            return CheckUnixSteamDir(steamDir, ref libraryVcf, logger, true);
+            return CheckUnixSteamDir(steamDir, ref libraryVcf, out steamDirectory, logger, true);
         }
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             logger.LogError($"Platform not supported: {RuntimeInformation.OSDescription}.");
+            steamDirectory = null;
             return false;
         }
 
@@ -434,23 +456,41 @@ file static class UnixInstallDirUtility
 
         foreach (string dir in _linuxInstallPaths!)
         {
-            if (CheckUnixSteamDir(dir, ref libraryVcf, logger, false))
+            if (CheckUnixSteamDir(dir, ref libraryVcf, out steamDirectory, logger, false))
             {
                 return true;
             }
         }
 
         logger.LogError($"Steam directory not found in any of the following paths: \"{string.Join("\", \"", _linuxInstallPaths)}\". Automatic discovery is not supported on Linux, consider manually changing the install directory.");
+        steamDirectory = null;
         return false;
     }
 
-    private static bool CheckUnixSteamDir(string steamDir, ref string libraryVcf, ILogger logger, bool logDirNotFound)
+    private static bool CheckUnixSteamDir(
+        string steamDir,
+        [NotNullWhen(true)] ref string? libraryVcf,
+        [NotNullWhen(true)] out string? steamDirectory,
+        ILogger logger,
+        bool logDirNotFound)
     {
         if (!Directory.Exists(steamDir))
         {
             if (logDirNotFound)
                 logger.LogError($"Steam directory not found in \"{steamDir}\". Automatic discovery is not supported on MacOS, consider manually changing the install directory.");
+            steamDirectory = null;
             return false;
+        }
+
+        const string macDefaultSteamExeDir = "/Applications/Steam.app/Contents/MacOS";
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            steamDirectory = File.Exists(macDefaultSteamExeDir + "/steam.sh") ? macDefaultSteamExeDir : null;
+        }
+        else
+        {
+            steamDirectory = steamDir;
         }
 
         string libraryFilePath = steamDir + "/steamapps/libraryfolders.vdf";
@@ -476,9 +516,9 @@ file static class WindowsInstallDirUtility
     static WindowsInstallDirUtility() { }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static bool TryFindSteamInstallDirectory(out string libraryVcf, ILogger logger)
+    public static bool TryFindSteamInstallDirectory([NotNullWhen(true)] out string? libraryVcf, [NotNullWhen(true)] out string? steamDirectory, ILogger logger)
     {
-        libraryVcf = null!;
+        libraryVcf = null;
 
         string? steamDir;
         try
@@ -503,8 +543,11 @@ file static class WindowsInstallDirUtility
         if (!Directory.Exists(steamDir))
         {
             logger.LogError($"Steam directory \"{steamDir}\" was removed.");
+            steamDirectory = null;
             return false;
         }
+
+        steamDirectory = steamDir;
 
         string libraryFilePath = Path.Combine(steamDir, "steamapps", "libraryfolders.vdf");
         if (!File.Exists(libraryFilePath))

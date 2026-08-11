@@ -10,8 +10,9 @@ namespace uTest.Module;
 internal class UnturnedTestInstanceData : IUnitTestExecution
 {
     public readonly UnturnedTestInstance Instance;
-    public PlayerSimulationMode SimulationMode;
-    public int Dummies;
+    internal PlayerSimulationMode SimulationMode;
+    internal int Dummies;
+    internal bool SpawnPlayersOnStartup;
     internal IServersideTestPlayer[]? AllocatedDummies;
 
     public string Uid => Instance.Uid;

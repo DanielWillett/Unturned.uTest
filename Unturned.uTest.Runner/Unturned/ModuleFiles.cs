@@ -3,7 +3,6 @@ using Newtonsoft.Json;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
-using Newtonsoft.Json.Linq;
 using uTest.Compat;
 using uTest.Logging;
 
@@ -155,8 +154,53 @@ internal static class ModuleFiles
             return true;
         }
 
-        return DisabledModule.TryWrite(moduleFolder, logger, out _, testAssemblyFile)
-               && DisabledBootstrapperModule.TryWrite(moduleFolder, logger, out _, testAssemblyFile);
+        if (!DisabledModule.TryWrite(moduleFolder, logger, out _, testAssemblyFile) || !DisabledBootstrapperModule.TryWrite(moduleFolder, logger, out _, testAssemblyFile))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Moves the module to <c>Unturned/UnloadedModules</c> so it doesn't kick players due to BattlEye issues.
+    /// </summary>
+    internal static void ClientRemoveModule(string moduleFolder, ILogger logger)
+    {
+        string moduleName = Path.GetFileName(moduleFolder); // uTest usually
+        if (!Directory.Exists(moduleName))
+            return;
+
+        string unloadedModulesFolder = Path.GetFullPath(Path.Combine(moduleFolder, "..", "..", "UnloadedModules"));
+        Directory.CreateDirectory(unloadedModulesFolder);
+
+        string fallbackModuleFolder = Path.Combine(unloadedModulesFolder, moduleName);
+        if (Directory.Exists(fallbackModuleFolder))
+        {
+            try
+            {
+                Directory.Delete(fallbackModuleFolder, true);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"Error deleting fallback module director {fallbackModuleFolder}.");
+                logger.LogError(ex.ToString());
+            }
+        }
+
+        try
+        {
+            Directory.Move(moduleFolder, fallbackModuleFolder);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            logger.LogDebug("Module folder doesn't exist in UnloadedModules.");
+        }
+        catch (IOException ex)
+        {
+            logger.LogError("Error moving module to UnloadedModules folder.");
+            logger.LogError(ex.ToString());
+        }
     }
 
     internal static bool IsServer { get; set; }
@@ -167,6 +211,25 @@ internal static class ModuleFiles
     internal static bool WriteModuleFiles(string moduleFolder, ILogger logger, Assembly? testAssembly)
     {
         moduleFolder = Path.GetFullPath(moduleFolder);
+
+        if (!IsServer && !Directory.Exists(moduleFolder))
+        {
+            string moduleName = Path.GetFileName(moduleFolder); // uTest usually
+            string unloadedModulesFolder = Path.GetFullPath(Path.Combine(moduleFolder, "..", "..", "UnloadedModules"));
+            string fallbackModuleFolder = Path.Combine(unloadedModulesFolder, moduleName);
+            if (Directory.Exists(fallbackModuleFolder))
+            {
+                try
+                {
+                    Directory.Move(fallbackModuleFolder, moduleName);
+                }
+                catch (IOException ex)
+                {
+                    logger.LogError("Error moving module from UnloadedModules folder.", ex);
+                }
+            }
+        }
+
         Directory.CreateDirectory(moduleFolder);
 
         LoadedAssemblyModuleFile? testAssemblyFile = testAssembly == null
@@ -250,6 +313,12 @@ internal static class ModuleFiles
     /// <remarks>Also sets <see cref="CompatibilityInformation.IsOpenModInstalled"/>.</remarks>
     internal static void UpdateOpenModDependency(string moduleFolder, ILogger logger, bool remove, string serverId)
     {
+        if (!IsServer)
+        {
+            CompatibilityInformation.IsOpenModInstalled = false;
+            return;
+        }
+
         string modulesFolder = Path.GetFullPath(Path.Combine(moduleFolder, ".."));
 
         if (!remove)
@@ -493,7 +562,7 @@ internal sealed class LoadedAssemblyModuleFile : ModuleFile
             }
             else
             {
-                logger.LogWarning(string.Format(Properties.Resources.LogErrorFindingAssemblyLocation, pdbSrcPath));
+                logger.LogDebug(string.Format(Properties.Resources.LogErrorFindingAssemblyLocation, pdbSrcPath));
             }
         }
 

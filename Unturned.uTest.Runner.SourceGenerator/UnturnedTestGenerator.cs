@@ -60,6 +60,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 INamedTypeSymbol? typeArgsAttribute = compilation.GetTypeByMetadataName("uTest.TypeArgsAttribute");
                 INamedTypeSymbol? workshopItemAttribute = compilation.GetTypeByMetadataName("uTest.RequiredWorkshopItemAttribute");
                 INamedTypeSymbol? mapAttribute = compilation.GetTypeByMetadataName("uTest.RequiredMapAttribute");
+                INamedTypeSymbol? playerSimModeAttribute = compilation.GetTypeByMetadataName("uTest.PlayerSimulationModeAttribute");
 
                 EquatableList<TestTypeArgsAttributeInfo>? classTypeArgs = null;
                 EquatableList<TestTypeParameterInfo>? classTypeParameters = null;
@@ -200,6 +201,29 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             attributeBuffer.Clear();
                         }
 
+                        // PlayerSimulationMode
+                        PlayerSimulationMode simMode = PlayerSimulationMode.Simulated;
+                        if (playerSimModeAttribute != null)
+                        {
+                            method.GetTestAttributes(playerSimModeAttribute, attributeBuffer);
+
+                            for (int i = attributeBuffer.Count - 1; i >= 0; --i)
+                            {
+                                AttributeData attribute = attributeBuffer[i];
+                                if (attribute.ConstructorArguments.Length <= 0
+                                    || attribute.ConstructorArguments[0] is not { Kind: TypedConstantKind.Enum } arg
+                                    || !AttributeHelper.TryReadTypedConstant(in arg, out PlayerSimulationMode mode))
+                                {
+                                    continue;
+                                }
+
+                                simMode = mode;
+                                break;
+                            }
+
+                            attributeBuffer.Clear();
+                        }
+
                         // Map name
                         if (mapAttribute != null)
                         {
@@ -249,7 +273,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 TypeParameters: methodTypeParameters,
                                 TypeArgsAttributes: methodTypeArgs,
                                 WorkshopItems: workshopItems,
-                                Map: map
+                                Map: map,
+                                SimulationMode: simMode
                             ));
                     }
 
@@ -480,7 +505,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             .Build($"Expandable = {(expandableMethod ? "true" : "false")},")
                             .Build($"DisplayName = \"{StringLiteralEscaper.Escape(method.DisplayName)}\",")
                             .Build($"Uid = \"{StringLiteralEscaper.Escape(method.Uid)}\",")
-                            .Build($"TreePath = \"{StringLiteralEscaper.Escape(method.TreeNodePath)}\",");
+                            .Build($"TreePath = \"{StringLiteralEscaper.Escape(method.TreeNodePath)}\",")
+                            .Build($"SimulationMode = global::uTest.PlayerSimulationMode.{method.SimulationMode},");
 
 
                     if (delegateType != null)

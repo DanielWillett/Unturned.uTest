@@ -94,7 +94,13 @@ internal class MainModuleLoader : IModuleNexus
             disposable.Dispose();
 
         if (_module is Component comp)
-            Object.Destroy(comp.gameObject);
+        {
+            try
+            {
+                Object.Destroy(comp.gameObject);
+            }
+            catch (NullReferenceException) { }
+        }
     }
 
     private static void ForceQuitGame(string reason, UnturnedTestExitCode exitCode)

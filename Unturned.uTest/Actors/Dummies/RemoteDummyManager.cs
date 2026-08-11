@@ -616,7 +616,7 @@ internal partial class RemoteDummyManager : IDummyPlayerController, IDisposable
             Provider.configData.Browser.Is_Using_Anycast_Proxy ? SteamServerAdvertisement.EAnycastProxyMode.TaggedByHost : SteamServerAdvertisement.EAnycastProxyMode.None,
             Provider.configData.Browser.Monetization,
             Provider.configData.Server.VAC_Secure,
-            Provider.IsBattlEyeActiveOnCurrentServer,
+            Provider.isThirdpartyAntiCheatActive,
             SteamPluginAdvertising.Get().PluginFrameworkTag switch
             {
                 null or "" => SteamServerAdvertisement.EPluginFramework.None,

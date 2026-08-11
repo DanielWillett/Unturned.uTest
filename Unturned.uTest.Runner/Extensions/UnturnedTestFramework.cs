@@ -12,6 +12,7 @@ using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
+using uTest.Compat.Utility;
 using uTest.Discovery;
 using uTest.Module;
 using uTest.Protocol;
@@ -108,7 +109,8 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
     // null UIDs are replaced with string.Empty
     private string? _currentSessionUid;
 
-    private UnturnedLauncher? _launcher;
+    private UnturnedLauncher? _serverLauncher;
+    private UnturnedLauncher? _clientLauncher;
 
     private bool _isSessionClosing;
 
@@ -222,12 +224,23 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                 return;
             }
 
-            _launcher ??= new UnturnedLauncher(true, _uTestLogger);
+            const string singleplayerMapSentinal = "__uTest_SP__";
 
-            // group tests by map
-            List<IGrouping<string?, UnturnedTestInstance>> groupings = allTests.GroupBy(x => x.Test.Map).ToList();
+            // group tests by map, separating singleplayer tests because they can switch maps without restarting
+            List<IGrouping<string?, UnturnedTestInstance>> groupings = allTests.GroupBy(x =>
+                x.Test.SimulationMode == PlayerSimulationMode.Singleplayer ? singleplayerMapSentinal : x.Test.Map
+            ).ToList();
             int nullIndex = groupings.FindIndex(x => x.Key == null);
-            int nonNullIndex = groupings.FindIndex(x => x.Key != null);
+            int nonNullIndex = groupings.FindIndex(x => x.Key != null && x.Key != singleplayerMapSentinal);
+            int singleplayerIndex = groupings.FindIndex(x => x.Key == singleplayerMapSentinal);
+            if (singleplayerIndex >= 0 && singleplayerIndex < groupings.Count - 1)
+            {
+                // move to end of list (run singleplayers last)
+                IGrouping<string?, UnturnedTestInstance> spGrouping = groupings[singleplayerIndex];
+                groupings.RemoveAt(singleplayerIndex);
+                groupings.Add(spGrouping);
+            }
+
             List<List<UnturnedTestInstance>> testGroups = new List<List<UnturnedTestInstance>>(groupings.Count);
             if (nullIndex >= 0 && nonNullIndex >= 0)
             {
@@ -250,6 +263,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
             string sessionId = r.Session.SessionUid.Value;
 
+            bool u3dsIsLaunched = false;
             foreach (List<UnturnedTestInstance> tests in testGroups)
             {
                 BitArray testReturnMask = new BitArray(tests.Count);
@@ -258,7 +272,28 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
                 JsonSerializer serializer = JsonSerializer.CreateDefault();
 
-                using IDisposable resultHandler = _launcher.Client.AddMessageHandler<ReportTestResultMessage>(result =>
+                PlayerSimulationMode simulationMode = tests[0].Test.SimulationMode;
+                
+                UnturnedLauncher launcher;
+                bool isClient = simulationMode == PlayerSimulationMode.Singleplayer;
+
+                if (isClient)
+                {
+                    _clientLauncher ??= new UnturnedLauncher(false, _uTestLogger);
+                    launcher = _clientLauncher;
+                    if (u3dsIsLaunched)
+                    {
+                        _serverLauncher!.Dispose();
+                        _serverLauncher = null;
+                    }
+                }
+                else
+                {
+                    _serverLauncher ??= new UnturnedLauncher(true, _uTestLogger);
+                    launcher = _serverLauncher;
+                }
+
+                using IDisposable resultHandler = launcher.Client.AddMessageHandler<ReportTestResultMessage>(result =>
                 {
                     if (!string.Equals(result.SessionUid, sessionId, StringComparison.Ordinal))
                         return false;
@@ -304,7 +339,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                     return true;
                 });
 
-                string settingsFile = _launcher.GetSettingsFile();
+                string settingsFile = launcher.GetSettingsFile();
                 string? dir = Path.GetDirectoryName(settingsFile);
                 if (dir != null)
                     Directory.CreateDirectory(dir);
@@ -312,6 +347,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                 Assembly? testAssembly = null;
 
                 List<UnturnedTestReference> exportedTests = new List<UnturnedTestReference>(tests.Count);
+
 
                 foreach (UnturnedTestInstance test in tests)
                 {
@@ -346,25 +382,30 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                     });
                 }
 
-                Process process = await _launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssembly, serverId, token);
+                Process process = await launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssembly, serverId, token);
+
+                if (!isClient)
+                {
+                    u3dsIsLaunched = true;
+                }
 
                 _logger.LogInformation("Launched.");
 
                 if (isAlreadyLaunched)
                 {
                     await _logger.LogInformationAsync("Unturned already launched.");
-                    await _launcher.Client.SendAsync(new RefreshTestsMessage(), token);
+                    await launcher.Client.SendAsync(new RefreshTestsMessage(), token);
                 }
 
                 _logger.LogInformation("Running tests.");
-                await _launcher.Client.SendAsync(new RunTestsMessage(), token);
+                await launcher.Client.SendAsync(new RunTestsMessage(), token);
 
                 // wait for all tests to execute
 
                 using (token.Register(() =>
                 {
                     _logger.LogInformation("Kill requested.");
-                    KillProcess(process);
+                    KillProcess(launcher, process);
                 }))
                 {
                     await Task.Factory.StartNew(() =>
@@ -396,6 +437,22 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                         await _messageBus.PublishAsync(this, new TestNodeUpdateMessage(new SessionUid(sessionId), testNode));
                     }
                 }
+
+                if (isClient)
+                {
+                    _clientLauncher!.ClientRemoveModule();
+                }
+            }
+
+            if (_serverLauncher != null)
+            {
+                _serverLauncher.Dispose();
+                _serverLauncher = null;
+            }
+            if (_clientLauncher != null)
+            {
+                _clientLauncher.Dispose();
+                _clientLauncher = null;
             }
         }
         finally
@@ -404,9 +461,9 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         }
     }
 
-    private void KillProcess(Process process)
+    private static void KillProcess(UnturnedLauncher launcher, Process process)
     {
-        _launcher!.Client.SendAsync(new GracefulShutdownMessage(), CancellationToken.None).Wait(1000);
+        launcher.Client.SendAsync(new GracefulShutdownMessage(), CancellationToken.None).Wait(1000);
         try
         {
             process.WaitForExit(1500);

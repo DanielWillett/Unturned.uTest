@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RunSettings>
+  
   <RunConfiguration>
     <TestAdaptersPaths>C:\Adapters;Adapters;%temp%\Adapters;..\Unturned.uTest.VSTestAdapter\bin\Debug\netstandard2.1</TestAdaptersPaths>
   </RunConfiguration>
+  
+  <LoggerRunSettings>
+    <Loggers>
+      <Logger friendlyName="console" enabled="True">
+        <Configuration>
+          <Verbosity>diagnostic</Verbosity>
+        </Configuration>
+      </Logger>
+    </Loggers>
+  </LoggerRunSettings>
+
 </RunSettings>

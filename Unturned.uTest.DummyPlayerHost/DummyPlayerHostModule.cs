@@ -496,9 +496,8 @@ internal partial class DummyPlayerHost : IDisposable
 
         Provider.connect(
             new ServerConnectParameters(addr, (ushort)(port - 1u), port, password ?? string.Empty),
-            new SteamServerAdvertisement("Unturned.uTest", EGameMode.NORMAL, false, false, false)
+            new SteamServerAdvertisement(new CSteamID(serverCode))
             {
-                _steamID = new CSteamID(serverCode),
                 _ip = ipv4,
                 connectionPort = port,
                 queryPort = (ushort)(port - 1),
@@ -520,7 +519,7 @@ internal partial class DummyPlayerHost : IDisposable
                 anycastProxyMode = anycastMode,
                 monetization = monetization,
                 IsVACSecure = vacSecure,
-                IsBattlEyeSecure = battleyeSecure,
+                IsThirdpartyAntiCheatEnabled = battleyeSecure,
                 networkTransport = "sys",
                 pluginFramework = pluginFramework,
                 thumbnailURL = thumbnailUrl,

@@ -327,4 +327,13 @@
   <data name="WindowTitle" xml:space="preserve">
     <value>Unturned.uTest (Runner)</value>
   </data>
+  <data name="InvalidOperationException_PlayerNotYetConnected" xml:space="preserve">
+    <value>This player has not yet connected to the server. This usually means you're attempting to access a dummy player who hasn't been spawned yet.</value>
+  </data>
+  <data name="NotSupportedException_DedicatedOnly" xml:space="preserve">
+    <value>This feature can only be used when running tests on a dedicated server, not singleplayer.</value>
+  </data>
+  <data name="NotSupportedException_SingleplayerOnly" xml:space="preserve">
+    <value>This feature can only be used when running tests on singleplayer, not a dedicated server.</value>
+  </data>
 </root>

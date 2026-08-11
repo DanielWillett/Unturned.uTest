@@ -6,6 +6,7 @@ using System.Text;
 using uTest.Compat.Logging;
 using uTest.Dummies;
 using uTest.Environment;
+using uTest.Patches;
 
 namespace uTest.Module;
 
@@ -18,6 +19,8 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     internal StringBuilder StandardOutput;
     internal StringBuilder? StandardError;
     internal List<TestOutputMessage>? Messages;
+
+    private readonly Action<string>? _onLogHandler;
 
     private bool _didHookDedicatedIO;
     private bool _didHookConsole;
@@ -58,22 +61,32 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
         CommandWindowSynchronizationHelper.FlushCommandWindow();
 
         ILoggerIntegration? loggerIntegration = module.LoggerIntegration;
-        if (loggerIntegration == null || loggerIntegration.ShouldHookDedicatedIO)
-        {
-            Dedicator.commandWindow.addIOHandler(this);
-            _didHookDedicatedIO = true;
-        }
-
         StandardOutput = new StringBuilder();
-        if (loggerIntegration == null || loggerIntegration.ShouldHookConsole)
+        if (Dedicator.isStandaloneDedicatedServer)
         {
-            TextWriter stdOut = Console.Out;
-            TextWriter stdErr = Console.Error;
-            _prevStdOut = stdOut;
-            _prevStdErr = stdErr;
-            Console.SetOut(new StringWriter(StandardOutput));
-            Console.SetError(new StringWriter(StandardError = new StringBuilder()));
-            _didHookConsole = true;
+            if (loggerIntegration == null || loggerIntegration.ShouldHookDedicatedIO)
+            {
+                Dedicator.commandWindow.addIOHandler(this);
+                _didHookDedicatedIO = true;
+            }
+
+            if (loggerIntegration == null || loggerIntegration.ShouldHookConsole)
+            {
+                TextWriter stdOut = Console.Out;
+                TextWriter stdErr = Console.Error;
+                _prevStdOut = stdOut;
+                _prevStdErr = stdErr;
+                Console.SetOut(new StringWriter(StandardOutput));
+                Console.SetError(new StringWriter(StandardError = new StringBuilder()));
+                _didHookConsole = true;
+            }
+        }
+        else if (loggerIntegration == null || loggerIntegration.ShouldHookDedicatedIO)
+        {
+            // client-side
+
+            _onLogHandler = HandleClientsideLog;
+            UnturnedLogClientHook.OnLog = _onLogHandler;
         }
 
         loggerIntegration?.BeginHook((logLvl, msg) =>
@@ -86,17 +99,65 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
         });
     }
 
-    public void outputInformation(string information)
+    [UsedImplicitly] // called by TestCompiler output
+    internal Task SetupAsync(CancellationToken token)
+    {
+        if (Runner is not ITestClassSetup setupListener)
+        {
+            return SetupDummiesAsync(token);
+        }
+
+        ValueTask vt = setupListener.SetupAsync(this, token);
+        if (vt.IsCompletedSuccessfully)
+            return SetupDummiesAsync(token);
+
+        return Core(vt, token);
+
+        async Task Core(ValueTask setupTask, CancellationToken token)
+        {
+            await setupTask;
+            await SetupDummiesAsync(token);
+        }
+    }
+
+    [UsedImplicitly] // called by TestCompiler output
+    internal Task TearDownAsync(CancellationToken token)
+    {
+        if (Runner is not ITestClassTearDown tearDownListener)
+        {
+            return Task.CompletedTask;
+        }
+
+        return tearDownListener.TearDownAsync(token).AsTask();
+    }
+
+    private Task SetupDummiesAsync(CancellationToken token)
+    {
+        UnturnedTestInstanceData currentTest = _parameters.Test;
+        if (currentTest.Dummies <= 0)
+            return Task.CompletedTask;
+
+        _parameters.Logger.LogInformation($"Initializing {currentTest.Dummies} {(currentTest.Dummies == 1 ? "dummy" : "dummies")}...");
+        return _parameters.Module.Dummies.InitializeDummiesForTestAsync(this, currentTest, token);
+    }
+
+    private void HandleClientsideLog(string message)
+    {
+        AddMessage(LogLevel.Information, message);
+        StandardOutput.AppendLine(message);
+    }
+
+    void ICommandInputOutput.outputInformation(string information)
     {
         AddMessage(LogLevel.Information, information);
     }
 
-    public void outputWarning(string warning)
+    void ICommandInputOutput.outputWarning(string warning)
     {
         AddMessage(LogLevel.Warning, warning);
     }
 
-    public void outputError(string error)
+    void ICommandInputOutput.outputError(string error)
     {
         AddMessage(LogLevel.Error, error);
     }
@@ -282,6 +343,8 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
             _prevStdErr = null;
         }
         _didHookConsole = false;
+
+        Interlocked.CompareExchange(ref UnturnedLogClientHook.OnLog, null, _onLogHandler);
     }
 
     public event CommandInputHandler? inputCommitted;

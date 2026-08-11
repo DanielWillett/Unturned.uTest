@@ -26,7 +26,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
 
     private bool _hasQuit;
 
-    private bool _nextFrameLevelIsLoaded;
+    private bool _nextFrameLevelIsLoaded, _nextFrameMenuIsLoaded;
     private bool _hasReceivedRunTests;
     private bool _hasAssetLoadModel;
     private float _sentLevelLoadedRealtime;
@@ -34,7 +34,11 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
     private CancellationTokenSource? _cancellationTokenSource;
     private TaskCompletionSource<int>? _assetLoadModelTrigger;
 
+    internal bool HasDiscoveredRequiredUgc;
+    internal bool HasTriedToLoadUgc;
+
     private readonly CommandLineString _clTestFile = new CommandLineString(TestFileCommandLine);
+    private string? _testFilePath;
 
 #nullable disable
     internal static MainModule Instance { get; private set; }
@@ -166,18 +170,37 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         CancellationToken = _cancellationTokenSource.Token;
 
         bool failedToParse = false;
-        if (!_clTestFile.hasValue || !TryRefreshTestFile(out failedToParse))
+        bool failed;
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            failed = !_clTestFile.hasValue || !TryRefreshTestFile(_clTestFile.value, out failedToParse);
+        }
+        else
+        {
+            string file = Path.Combine(UnturnedPaths.RootDirectory.FullName, "Modules", "uTest", "test-settings.json");
+            failed = !TryRefreshTestFile(file, out failedToParse);
+        }
+
+        if (failed)
         {
             Logger.LogError(
                 !failedToParse
-                    ? $"""Test file not provided or unable to be read. Unturned must be launched with command line: {TestFileCommandLine} "File\Path\To\Tests.yml"."""
+                    ? $"""Test file not provided or unable to be read. U3DS must be launched with command line: {TestFileCommandLine} "File\Path\To\Tests.yml"."""
                     : "Test file failed to parse valid JSON."
             );
             IsFaulted = true;
             return;
         }
 
-        Provider.onServerConnected += HandlePlayerConnected;
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            Provider.onServerConnected += HandlePlayerConnected;
+            Dedicator.commandWindow.title = Properties.Resources.WindowTitle;
+        }
+        else
+        {
+            LocalWorkshopSettings.instance = new SingleplayerLocalWorkshopSettings();
+        }
 
         Version version = Assembly.GetExecutingAssembly().GetName().Version;
 
@@ -189,11 +212,10 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
             return;
         }
 
-        Dedicator.commandWindow.title = Properties.Resources.WindowTitle;
-
         // todo: docs
+        string branch = Dedicator.isStandaloneDedicatedServer ? "u3ds" : "client";
         string log = $"""
-                      Launching uTest v{version} on Unturned v{Provider.APP_VERSION} by DanielWillett aka BlazingFlame (@danielwillett on Discord).
+                      Launching uTest v{version} on Unturned v{Provider.APP_VERSION} ({branch}) by DanielWillett aka BlazingFlame (@danielwillett on Discord).
                       - GitHub            : https://github.com/DanielWillett/Unturned.uTest
                       - Docs              : 
                       - Report a problem  : https://github.com/DanielWillett/Unturned.uTest/issues
@@ -223,6 +245,14 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
                     //p.RegisterPatch(SocketMessageLayerFix.TryPatchServer, SocketMessageLayerFix.TryUnpatchServer);
                     //if (!Dedicator.isStandaloneDedicatedServer)
                     //    p.RegisterPatch(SocketMessageLayerFix.TryPatchClient, SocketMessageLayerFix.TryUnpatchClient);
+                    if (Dedicator.isStandaloneDedicatedServer)
+                    {
+                        p.RegisterPatch(DelayDedicatedUgcUntilTestsLoaded.TryPatch, DelayDedicatedUgcUntilTestsLoaded.TryUnpatch);
+                    }
+                    else
+                    {
+                        p.RegisterPatch(UnturnedLogClientHook.TryPatch, UnturnedLogClientHook.TryUnpatch);
+                    }
                 }
             );
         }
@@ -243,9 +273,15 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
             t.GetAwaiter().GetResult();
         }
 
-        Provider.configData.Server.Max_Clients_With_Same_IP_Address = int.MaxValue;
-
-        Level.onPostLevelLoaded += OnPostLevelLoaded;
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            Provider.configData.Server.Max_Clients_With_Same_IP_Address = int.MaxValue;
+            Level.onPostLevelLoaded += OnPostLevelLoaded;
+        }
+        else
+        {
+            Level.onLevelLoaded += OnLevelLoaded;
+        }
 
         Environment.Disconnected += () =>
         {
@@ -261,7 +297,9 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
 
         Environment.AddMessageHandler<RefreshTestsMessage>(_ =>
         {
-            TryRefreshTestFile(out bool _);
+            if (_testFilePath != null)
+                TryRefreshTestFile(_testFilePath, out bool _);
+
             return true;
         });
 
@@ -396,13 +434,14 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         WorkshopItems = workshopItems.ToArray();
 
         GameThread.Assert();
-        // todo: doesnt work on client and is a race condition with asset loading (see Provider.host())
-        WorkshopDownloadConfig.getOrLoad().File_IDs = new List<ulong>(workshopItems);
 
         if (WorkshopItems.Length > 0)
         {
             Logger.LogInformation($"Workshop items: {string.Join(", ", WorkshopDownloadConfig.getOrLoad().File_IDs)}.");
         }
+
+        await ApplyWorkshopItemInstallation();
+        await GameThread.Switch();
 
         AssetLoadModel = AssetLoadModel.Create(this, true);
         _hasAssetLoadModel = true;
@@ -415,6 +454,13 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
                 throw new Exception("Failed to initialize dummies.");
             }
         }
+        else
+        {
+            if (!await Dummies.InitializeSingleplayerAsync(testArray))
+            {
+                throw new Exception("Failed to initialize singleplayer dummy facades.");
+            }
+        }
         
         Tests = testArray;
 
@@ -422,10 +468,132 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         _discoverTestsTask = null;
     }
 
+    private async Task ApplyWorkshopItemInstallation()
+    {
+        ulong[] workshopItems = WorkshopItems!;
+
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            // Server loads workshop later so this usually wont happen
+            WorkshopDownloadConfig.getOrLoad().File_IDs = new List<ulong>(workshopItems);
+            HasDiscoveredRequiredUgc = true;
+            if (HasTriedToLoadUgc)
+            {
+                Provider.initializeDedicatedUGC();
+                HasTriedToLoadUgc = false;
+            }
+            return;
+        }
+
+        // Client loads workshop at startup so its a bit harder to load them later
+
+        if (LocalWorkshopSettings.get() is SingleplayerLocalWorkshopSettings sp)
+        {
+            sp.WorkshopItems = workshopItems;
+        }
+
+        List<ulong> modsWaitingToDownload = new List<ulong>();
+        foreach (ulong id in workshopItems)
+        {
+            PublishedFileId_t fileId = new PublishedFileId_t(id);
+
+            EItemState stateFlags = (EItemState)SteamUGC.GetItemState(fileId);
+            const EItemState installStateMask = EItemState.k_EItemStateInstalled | EItemState.k_EItemStateDownloading | EItemState.k_EItemStateDownloadPending;
+            const EItemState installingStateMask = EItemState.k_EItemStateDownloading | EItemState.k_EItemStateDownloadPending;
+
+            if ((stateFlags & installStateMask) == EItemState.k_EItemStateInstalled)
+            {
+                Logger.LogTrace($"Mod {id}: already installed.");
+                continue;
+            }
+
+            Logger.LogTrace($"Mod {id}, not installed.");
+            if ((stateFlags & installingStateMask) == 0)
+            {
+                // should call TempSteamWorkshop.onItemInstalled when its done
+                if (!SteamUGC.DownloadItem(fileId, true))
+                {
+                    Logger.LogError($"Failed to install {id}. Shutting down.");
+                    ForceQuitGame($"Failed to install mod {id}.", UnturnedTestExitCode.StartupFailure);
+                }
+
+                Logger.LogTrace($"Waiting on mod {id} to install.");
+            }
+
+            modsWaitingToDownload.Add(id);
+        }
+
+        if (modsWaitingToDownload.Count > 0)
+            Logger.LogTrace($"Waiting for {modsWaitingToDownload.Count} mod(s) to download.");
+
+        for (int i = modsWaitingToDownload.Count - 1; i >= 0; i--)
+        {
+            ulong mod = modsWaitingToDownload[i];
+            await GameThread.Switch();
+
+            PublishedFileId_t fileId = new PublishedFileId_t(mod);
+            if (!SteamUGC.GetItemDownloadInfo(fileId, out ulong bytesDownloaded, out ulong bytesTotal))
+            {
+                EItemState stateFlags = (EItemState)SteamUGC.GetItemState(fileId);
+                if ((stateFlags & EItemState.k_EItemStateInstalled) == EItemState.k_EItemStateInstalled)
+                {
+                    Logger.LogInformation($"Finished installing {mod}.");
+                    modsWaitingToDownload.RemoveAt(i);
+                    continue;
+                }
+
+                Logger.LogTrace($"Not downloading {mod} anymore.");
+                ForceQuitGame($"Failed to install mod {mod}.", UnturnedTestExitCode.StartupFailure);
+            }
+            else
+            {
+                Logger.LogTrace($"Downloading {mod}: {(decimal)bytesDownloaded / bytesTotal * 100m:F3} %");
+            }
+
+            await Task.Delay(1000, CancellationToken);
+        }
+
+        await GameThread.Switch();
+
+        foreach (ulong mod in workshopItems)
+        {
+            if (modsWaitingToDownload.Contains(mod))
+                continue;
+
+            if (Provider.provider.workshopService.getSubscribed(mod))
+                continue;
+
+            Provider.provider.workshopService.gameSubscribed(new PublishedFileId_t(mod));
+        }
+
+        HasDiscoveredRequiredUgc = true;
+        if (HasTriedToLoadUgc)
+        {
+            HasTriedToLoadUgc = false;
+            OnLevelLoaded(true);
+        }
+    }
+
     private void OnPostLevelLoaded(int level)
     {
-        Level.onPostLevelLoaded -= OnPostLevelLoaded;
+        if (level != Level.BUILD_INDEX_GAME)
+            return;
+
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            Level.onPostLevelLoaded -= OnPostLevelLoaded;
+        }
         _nextFrameLevelIsLoaded = true;
+    }
+    
+    // client only
+    private void OnLevelLoaded(int level)
+    {
+        if (level != Level.BUILD_INDEX_MENU)
+            return;
+
+        Level.onLevelLoaded -= OnLevelLoaded;
+        _nextFrameMenuIsLoaded = true;
     }
 
     /// <summary>
@@ -433,8 +601,16 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
     /// This also gives OpenMod time to invoke it's <c>UnturnedPostLevelLoadedEvent</c> and other level events.
     /// Additionally, rocket plugins subscribing to any of the level load events will have time to run their code as well.
     /// </summary>
-    private void OnLevelLoaded()
+    private void OnLevelLoaded(bool isMenu)
     {
+        if (!HasDiscoveredRequiredUgc)
+        {
+            HasTriedToLoadUgc = true;
+            return;
+        }
+
+        Logger.LogInformation(isMenu ? "Menu loaded." : "World loaded.");
+
         Task.Run(async () =>
         {
             // this needs to happen after openmod has had time to load, in case uTest loads before OpenMod
@@ -585,7 +761,13 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         if (_nextFrameLevelIsLoaded)
         {
             _nextFrameLevelIsLoaded = false;
-            OnLevelLoaded();
+            OnLevelLoaded(isMenu: false);
+        }
+
+        if (_nextFrameMenuIsLoaded)
+        {
+            _nextFrameMenuIsLoaded = false;
+            OnLevelLoaded(isMenu: true);
         }
 
         GameThread.RunContinuations();
@@ -600,7 +782,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
     {
         List<ILoggerIntegration> integrations = new List<ILoggerIntegration>(0);
 
-        if (CompatibilityInformation.IsOpenModInstalled)
+        if (Dedicator.isStandaloneDedicatedServer && CompatibilityInformation.IsOpenModInstalled)
         {
             try
             {
@@ -634,7 +816,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
     {
         List<ITestRunnerActivator> integrations = new List<ITestRunnerActivator>(0);
 
-        if (CompatibilityInformation.IsOpenModInstalled)
+        if (Dedicator.isStandaloneDedicatedServer && CompatibilityInformation.IsOpenModInstalled)
         {
             try
             {
@@ -667,7 +849,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
     {
         List<ITestLifetimeIntegration> integrations = new List<ITestLifetimeIntegration>(0);
 
-        if (CompatibilityInformation.IsOpenModInstalled)
+        if (Dedicator.isStandaloneDedicatedServer && CompatibilityInformation.IsOpenModInstalled)
         {
             try
             {
@@ -716,7 +898,16 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
 
         Dummies?.Dispose();
 
-        Provider.onServerConnected -= HandlePlayerConnected;
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            Provider.onServerConnected -= HandlePlayerConnected;
+        }
+        else
+        {
+            Level.onLevelLoaded -= OnLevelLoaded;
+        }
+
+        Level.onPostLevelLoaded -= OnPostLevelLoaded;
         GameThread.FlushRunAndWaits();
 
         _hasQuit = true;
@@ -731,11 +922,11 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
     }
 
     [MemberNotNullWhen(true, nameof(TestList))]
-    public bool TryRefreshTestFile(out bool failedToParse)
+    public bool TryRefreshTestFile(string path, out bool failedToParse)
     {
         failedToParse = false;
 
-        string path = _clTestFile.value;
+        _testFilePath = path;
         try
         {
             UnturnedTestList? list = IOUtility.jsonDeserializer.deserialize<UnturnedTestList>(path);

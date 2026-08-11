@@ -25,6 +25,7 @@ internal sealed class OpenModCompatPlugin : OpenModUnturnedPlugin
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<OpenModCompatPlugin> _logger;
+    private OpenModTestLifetimeIntegration? _lifetimeIntegration;
 
     public OpenModCompatPlugin(IServiceProvider serviceProvider, ILogger<OpenModCompatPlugin> logger)
         : base(serviceProvider)
@@ -33,7 +34,6 @@ internal sealed class OpenModCompatPlugin : OpenModUnturnedPlugin
         _logger = logger;
     }
 
-    /// <inheritdoc />
     protected override UniTask OnLoadAsync()
     {
         try
@@ -43,10 +43,9 @@ internal sealed class OpenModCompatPlugin : OpenModUnturnedPlugin
                 disp.Dispose();
             }
 
-            OpenModTestLifetimeIntegration lifetime
-                = ActivatorUtilities.CreateInstance<OpenModTestLifetimeIntegration>(_serviceProvider, this);
+            _lifetimeIntegration = ActivatorUtilities.CreateInstance<OpenModTestLifetimeIntegration>(_serviceProvider, this);
 
-            if (OpenModTestLifetimeIntegration.Instance != lifetime)
+            if (OpenModTestLifetimeIntegration.Instance != _lifetimeIntegration)
                 _logger.LogWarning("Failed to instantiate OpenModTestLifetimeIntegration.");
             else
                 _logger.LogTrace("Created OpenModTestLifetimeIntegration.");

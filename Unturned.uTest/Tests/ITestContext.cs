@@ -112,6 +112,9 @@ public interface ITestContext : IUnconfiguredTestContext
     /// <para>
     /// To spawn individual players use <see cref="IServersideTestPlayer.SpawnAsync"/>.
     /// </para>
+    /// <para>
+    /// When used in a singleplayer test, this will start up a singleplayer world for the allocated player.
+    /// </para>
     /// </summary>
     /// <remarks>If no players are configured this method will do nothing.</remarks>
     /// <exception cref="TimeoutException">An actor did not connect in time.</exception>

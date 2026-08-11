@@ -75,7 +75,7 @@ internal static class SkipAddFoundAssetIfNotRequired
         }
     }
 
-    internal static bool Prefix(string filePath, bool checkForTranslations)
+    private static bool Prefix(string filePath, bool checkForTranslations)
     {
         if (!File.Exists(filePath))
             return false;

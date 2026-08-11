@@ -32,6 +32,7 @@ internal class DummyManager : IDisposable
 
     internal RemoteDummyManager? RemoteDummies;
     internal SimulatedDummyManager? SimulatedDummies;
+    internal SingleplayerDummyManager? SingleplayerDummies;
 
     internal bool HasServerDetails;
     internal ulong ServerDetailsCode;
@@ -44,7 +45,10 @@ internal class DummyManager : IDisposable
         SteamIdPool = new SteamIdPool(module.TestList?.SteamIdGenerationStyle ?? SteamIdGenerationStyle.Random);
         _module = module;
 
-        Provider.onServerDisconnected += OnServerDisconnected;
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            Provider.onServerDisconnected += OnServerDisconnected;
+        }
     }
 
     internal string GetSteamName(CSteamID steamId)
@@ -60,6 +64,37 @@ internal class DummyManager : IDisposable
         dummy.NotifyDisconnected();
     }
 
+    public Task<bool> InitializeSingleplayerAsync(UnturnedTestInstanceData[] tests)
+    {
+        bool anyTestsNeedPlayers = false;
+
+        List<PlayerCountAttribute> playerCountListTemp = new List<PlayerCountAttribute>();
+        foreach (UnturnedTestInstanceData test in tests)
+        {
+            TestAttributeHelper<PlayerCountAttribute>.GetAttributes(test.Instance.Method, playerCountListTemp);
+            PlayerCountAttribute? attribute = playerCountListTemp.Count == 0 ? null : playerCountListTemp[0];
+            if (attribute == null || attribute.PlayerCount > 0)
+            {
+                anyTestsNeedPlayers = true;
+                test.Dummies = 1;
+            }
+            else
+            {
+                test.Dummies = 0;
+            }
+
+            test.SpawnPlayersOnStartup = playerCountListTemp.Find(f => f.HasSpawnAllPlayers)?.SpawnAllPlayersValue ?? false;
+
+            playerCountListTemp.Clear();
+        }
+
+        if (anyTestsNeedPlayers)
+        {
+            SingleplayerDummies ??= new SingleplayerDummyManager(_module);
+        }
+
+        return Task.FromResult(true);
+    }
 
     public Task<bool> InitializeDummiesAsync(UnturnedTestInstanceData[] tests)
     {
@@ -69,10 +104,8 @@ internal class DummyManager : IDisposable
         int minFullDummies = 0;
         List<PlayerCountAttribute> playerCountListTemp = new List<PlayerCountAttribute>();
         List<PlayerSimulationModeAttribute> playerModeListTemp = new List<PlayerSimulationModeAttribute>();
-        for (int i = 0; i < tests.Length; ++i)
+        foreach (UnturnedTestInstanceData test in tests)
         {
-            UnturnedTestInstanceData test = tests[i];
-
             PlayerSimulationMode mode = PlayerSimulationMode.Simulated;
             TestAttributeHelper<PlayerSimulationModeAttribute>.GetAttributes(test.Instance.Method, playerModeListTemp);
             if (playerModeListTemp.Count > 0)
@@ -95,19 +128,23 @@ internal class DummyManager : IDisposable
                 continue;
 
             PlayerCountAttribute max = playerCountListTemp.Aggregate((a, max) => a.PlayerCount > max.PlayerCount ? a : max);
+            PlayerCountAttribute relevant = playerCountListTemp[0];
+
             maxDummyCount = Math.Max(max.PlayerCount, maxDummyCount);
             if (mode == PlayerSimulationMode.Remote)
             {
                 minFullDummies = Math.Max(max.PlayerCount, minFullDummies);
             }
 
-            test.Dummies = max.PlayerCount;
+            test.Dummies = relevant.PlayerCount;
+            test.SpawnPlayersOnStartup = playerCountListTemp.Find(f => f.HasSpawnAllPlayers)?.SpawnAllPlayersValue ?? false;
+
             playerCountListTemp.Clear();
         }
 
-        if (maxDummyCount > byte.MaxValue)
+        if (maxDummyCount >= byte.MaxValue)
         {
-            _module.Logger.LogError($"At least one test requires more dummies than players supported by Unturned: {maxDummyCount}. There should not be more than {byte.MaxValue} dummies.");
+            _module.Logger.LogError($"At least one test requires more dummies than players supported by Unturned: {maxDummyCount}. There should not be more than {byte.MaxValue - 1} dummies.");
             return Task.FromResult(false);
         }
 
@@ -161,13 +198,24 @@ internal class DummyManager : IDisposable
         return RemoteDummies.StartDummiesAsync(minFullDummies);
     }
 
-    internal Task InitializeDummiesForTestAsync(UnturnedTestInstanceData test, CancellationToken token = default)
+    internal Task InitializeDummiesForTestAsync(ITestContext testContext, UnturnedTestInstanceData test, CancellationToken token = default)
     {
-        // clear steam ID cache for ReadyToConnect message so it doesn't interfere with next test
-        ServerMessageHandler_ReadyToConnect.joinRateLimiter.steamIdRateLimitingLog.Clear();
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            // clear steam ID cache for ReadyToConnect message so it doesn't interfere with next test
+            ServerMessageHandler_ReadyToConnect.joinRateLimiter.steamIdRateLimitingLog.Clear();
 
-        ClearServerDetailsCache();
-        return Task.CompletedTask;
+            ClearServerDetailsCache();
+        }
+
+        if (!test.SpawnPlayersOnStartup)
+            return Task.CompletedTask;
+
+        ValueTask vt = testContext.SpawnAllPlayersAsync(token: token);
+        if (vt.IsCompletedSuccessfully)
+            return Task.CompletedTask;
+
+        return vt.AsTask();
     }
 
     internal IReadOnlyList<IServersideTestPlayer>? AllocateDummiesToTest(UnturnedTestInstanceData test, out bool overflow)
@@ -181,7 +229,22 @@ internal class DummyManager : IDisposable
 
         IServersideTestPlayer[] players = new IServersideTestPlayer[test.Dummies];
         int ct = 0;
-        if (test.SimulationMode == PlayerSimulationMode.Remote)
+        if (!Dedicator.isStandaloneDedicatedServer)
+        {
+            if (SingleplayerDummies == null)
+            {
+                test.AllocatedDummies = null;
+                overflow = true;
+                return null;
+            }
+
+            SingleplayerServersideTestPlayer actor = SingleplayerDummies.Player;
+            players[0] = actor;
+            actor.Test = test;
+            actor.Index = 0;
+            ct = 1;
+        }
+        else if (test.SimulationMode == PlayerSimulationMode.Remote)
         {
             if (RemoteDummies == null)
             {
@@ -312,6 +375,12 @@ internal class DummyManager : IDisposable
             return true;
         }
 
+        if (SingleplayerDummies != null && SingleplayerDummies.Player.Steam64.m_SteamID == steam64)
+        {
+            dummy = SingleplayerDummies.Player;
+            return true;
+        }
+
         dummy = null;
         return false;
     }
@@ -404,8 +473,12 @@ internal class DummyManager : IDisposable
 
     public void Dispose()
     {
-        Provider.onServerDisconnected -= OnServerDisconnected;
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            Provider.onServerDisconnected -= OnServerDisconnected;
+        }
         RemoteDummies?.Dispose();
+        SingleplayerDummies?.Dispose();
     }
 }
 

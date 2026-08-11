@@ -4,6 +4,7 @@ using OpenMod.API.Plugins;
 using System;
 using System.Reflection;
 using System.Threading;
+using JetBrains.Annotations;
 using uTest.Compat.DependencyInjection;
 using uTest.Compat.Utility;
 
@@ -14,8 +15,11 @@ internal sealed class OpenModTestRunnerActivator : ITestRunnerActivator, IDispos
     private readonly IServiceProvider _serviceProvider;
     private readonly IPluginActivator _pluginActivator;
 
+    [UsedImplicitly]
     public static ITestRunnerActivator? Instance;
-    
+
+    public int Priority => 10;
+
     public OpenModTestRunnerActivator(IServiceProvider serviceProvider, IPluginActivator pluginActivator)
     {
         _serviceProvider = serviceProvider;
@@ -23,11 +27,7 @@ internal sealed class OpenModTestRunnerActivator : ITestRunnerActivator, IDispos
         Interlocked.CompareExchange(ref Instance, this, null);
     }
 
-    /// <inheritdoc />
-    public int Priority => 10;
-
-    /// <inheritdoc />
-    public T CreateTestInstance<T>() where T : notnull
+    public TestInstance<T> CreateTestInstance<T>() where T : notnull
     {
         AssociatedPluginAttribute? attr = TestAttributeHelper<AssociatedPluginAttribute>.GetAttribute(
             typeof(T),
@@ -36,7 +36,7 @@ internal sealed class OpenModTestRunnerActivator : ITestRunnerActivator, IDispos
 
         if (attr?.PluginType == null)
         {
-            return (T)ActivatorUtilities.CreateInstance(_serviceProvider, typeof(T));
+            return CreateInstanceFromScope<T>(_serviceProvider.CreateScope());
         }
 
         Assembly assembly = attr.PluginType.Assembly;
@@ -59,13 +59,26 @@ internal sealed class OpenModTestRunnerActivator : ITestRunnerActivator, IDispos
         }
 
         IServiceProvider serviceProvider = plugin.LifetimeScope.Resolve<IServiceProvider>();
-
-        T obj = (T)ActivatorUtilities.CreateInstance(serviceProvider, typeof(T));
-
-        return obj ?? throw new InvalidOperationException($"Failed to activate test object of type {typeof(T).FullName}.");
+        return CreateInstanceFromScope<T>(serviceProvider.CreateScope());
     }
 
-    /// <inheritdoc />
+    private static TestInstance<T> CreateInstanceFromScope<T>(IServiceScope scope) where T : notnull
+    {
+        try
+        {
+            T instance = (T)ActivatorUtilities.CreateInstance(scope.ServiceProvider, typeof(T));
+
+            return instance != null
+                ? new TestInstance<T>(instance, scope)
+                : throw new InvalidOperationException($"Failed to activate test object of type {typeof(T).FullName}.");
+        }
+        catch
+        {
+            scope.Dispose();
+            throw;
+        }
+    }
+
     public void Dispose()
     {
         Interlocked.CompareExchange(ref Instance, null, this);

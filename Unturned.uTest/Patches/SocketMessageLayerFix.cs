@@ -1,4 +1,7 @@
-﻿using SDG.NetTransport.SystemSockets;
+﻿// Fixed by issue #5379
+#if false
+
+using SDG.NetTransport.SystemSockets;
 using System;
 using System.Net.Sockets;
 using System.Reflection;
@@ -315,3 +318,4 @@ internal class SocketMessageLayerFixed : SocketMessageLayer
         }
     }
 }
+#endif

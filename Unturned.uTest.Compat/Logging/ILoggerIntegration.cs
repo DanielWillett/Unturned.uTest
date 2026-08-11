@@ -25,6 +25,7 @@ public interface ILoggerIntegration
     /// <summary>
     /// Whether or not Unturned's built-in dedicated IO system should be hooked into and recorded during tests.
     /// </summary>
+    /// <remarks>When running tests on the client, this also applies to <c>UnturnedLog</c>.</remarks>
     bool ShouldHookDedicatedIO { get; }
 
     /// <summary>

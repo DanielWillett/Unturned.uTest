@@ -277,6 +277,15 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to This player has not yet connected to the server. This usually means you&apos;re attempting to access a dummy player who hasn&apos;t been spawned yet..
+        /// </summary>
+        internal static string InvalidOperationException_PlayerNotYetConnected {
+            get {
+                return ResourceManager.GetString("InvalidOperationException_PlayerNotYetConnected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Expected object and interactable rubble to belong to the same object..
         /// </summary>
         internal static string LevelObjectInconsistantRubble {
@@ -412,6 +421,15 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to This feature can only be used when running tests on a dedicated server, not singleplayer..
+        /// </summary>
+        internal static string NotSupportedException_DedicatedOnly {
+            get {
+                return ResourceManager.GetString("NotSupportedException_DedicatedOnly", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to This feature can only be used with remote dummies, not simulated dummies..
         /// </summary>
         internal static string NotSupportedException_RemoteDummiesOnly {
@@ -426,6 +444,15 @@ namespace uTest.Properties {
         internal static string NotSupportedException_SimulatedDummiesOnly {
             get {
                 return ResourceManager.GetString("NotSupportedException_SimulatedDummiesOnly", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to This feature can only be used when running tests on singleplayer, not a dedicated server..
+        /// </summary>
+        internal static string NotSupportedException_SingleplayerOnly {
+            get {
+                return ResourceManager.GetString("NotSupportedException_SingleplayerOnly", resourceCulture);
             }
         }
         

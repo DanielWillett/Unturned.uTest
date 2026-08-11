@@ -273,8 +273,18 @@ internal class SimulatedDummyManager : IDummyPlayerController
         return true;
     }
 
+    private static bool _hasSentOnCheckValidWarning;
+
     private static bool CheckRejectedByPlugin(SimulatedDummyPlayerActor actor, SteamPending pending)
     {
+#pragma warning disable CS0618
+        if (!_hasSentOnCheckValidWarning && Provider.onCheckValid != null)
+        {
+            UnturnedLog.warn("uTest does not support plugins using the obsolete 'Provider.onCheckValid' event. Things may not work as expected.");
+            _hasSentOnCheckValidWarning = true;
+        }
+#pragma warning restore CS0618
+
         if (Provider.onCheckValidWithExplanation == null)
             return false;
 

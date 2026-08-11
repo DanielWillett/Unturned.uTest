@@ -11,6 +11,7 @@ public class PlayerActor : ITestPlayer
     private static readonly Vector3 TeleportOffset = new Vector3(0f, 0.5f, 0f);
 
     private Player? _player;
+    private SteamPlayerID? _playerId;
     private CSteamID _steam64;
     private string _characterName;
     private readonly PlayerActorLook _look;
@@ -18,6 +19,16 @@ public class PlayerActor : ITestPlayer
 
     public ITestPlayerLook Look => _look;
     public ITestPlayerInventory Inventory => _inventory;
+    public Player Player
+    {
+        get
+        {
+            if (_playerId is null)
+                throw new InvalidOperationException(Properties.Resources.InvalidOperationException_PlayerNotYetConnected);
+
+            return _player ?? throw new ActorDestroyedException(this);
+        }
+    }
 
     public static PlayerActor Create(Player player)
     {
@@ -33,6 +44,7 @@ public class PlayerActor : ITestPlayer
     private protected PlayerActor(Player? player, CSteamID steam64, string characterName)
     {
         _player = player;
+        _playerId = player?.channel.owner.playerID;
         _steam64 = steam64;
         _characterName = characterName;
 
@@ -218,7 +230,7 @@ public class PlayerActor : ITestPlayer
                     CSteamID.Nil,
                     out _,
                     false,
-                    ERagdollEffect.NONE,
+                    ERagdollEffect.None,
                     bypassSafezone: true,
                     canCauseBleeding: false
                 );

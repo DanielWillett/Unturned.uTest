@@ -18,6 +18,7 @@ public class DummyPlayerJoinConfiguration
     private string _characterName;
     private string _nickName;
     private byte[][] _reportedHardwareIds;
+    private PlayerTransform? _transform;
 
     /// <summary>
     /// The zero-based index of the current dummy.
@@ -155,7 +156,25 @@ public class DummyPlayerJoinConfiguration
     /// The player's spawn location and angle.
     /// </summary>
     /// <remarks>Defaults to a random primary player spawn.</remarks>
-    public PlayerTransform Transform { get; set; }
+    public PlayerTransform Transform
+    {
+        get
+        {
+            if (_transform.HasValue)
+                return _transform.Value;
+
+            if (LevelPlayers.spawns == null)
+                return PlayerTransform.DefaultSpawn;
+
+            Random r = new Random(Index * 4129);
+            PlayerTransform transform = LevelPlayers.spawns.Count <= 0
+                ? PlayerTransform.DefaultSpawn
+                : PlayerTransform.FromPlayerSpawn(LevelPlayers.spawns[r.Next(0, LevelPlayers.spawns.Count)]);
+
+            _transform = transform;
+            return transform;
+        }
+    }
 
     #region Client -> Server @ ReadyToConnect
 
@@ -520,14 +539,8 @@ public class DummyPlayerJoinConfiguration
 
     #endregion
 
-    public DummyPlayerJoinConfiguration(int index, CSteamID steamId, string name, bool isRemote)
+    internal DummyPlayerJoinConfiguration(int index, CSteamID steamId, string name, bool isRemote)
     {
-        Random r = new Random(Index * 4129);
-
-        Transform = LevelPlayers.spawns.Count <= 0
-            ? PlayerTransform.DefaultSpawn
-            : PlayerTransform.FromPlayerSpawn(LevelPlayers.spawns[r.Next(0, LevelPlayers.spawns.Count)]);
-
         EquippedSkins = new List<SteamItemDef_t>(0);
         SkinTags = new Dictionary<SteamItemDef_t, string>(0);
         SkinDynamicProperties = new Dictionary<SteamItemDef_t, string>(0);
@@ -739,11 +752,24 @@ public class DummyPlayerJoinConfiguration
     }
 
     /// <summary>
+    /// Configure settings for the singleplayer world being created.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Not a singleplayer test.</exception>
+    public DummyPlayerJoinConfiguration ConfigureSingleplayer(Action<SingleplayerJoinConfiguration> configure)
+    {
+        if (this is not SingleplayerJoinConfiguration sp)
+            throw new NotSupportedException(Properties.Resources.NotSupportedException_SingleplayerOnly);
+
+        configure?.Invoke(sp);
+        return this;
+    }
+
+    /// <summary>
     /// Sets he player's spawn location and angle.
     /// </summary>
     public DummyPlayerJoinConfiguration WithSpawnLocation(PlayerTransform value)
     {
-        Transform = value;
+        _transform = value;
         return this;
     }
 

@@ -700,6 +700,7 @@ internal class TestExpandProcessor
                 set = Distinctify(set);
                 sets[i] = set;
                 variationCount *= (ulong)set.Length;
+                hasSetParams = true;
             }
 
             // if any type parameters dont have a set attribute it can't be expanded
@@ -838,6 +839,9 @@ internal class TestExpandProcessor
                     _testType.FullName,
                     RangeHelper.MaxTestVariations
                 )
+#if DEBUG
+                + $" (type, expandingTypeArgs: {isExpandingTypeParams}, provider: {provider}, anyArgs: {anyArgs}, hasSetParams: {hasSetParams}, expansionFactor: {expansionFactor})"
+#endif
             ).ConfigureAwait(false);
         }
     }

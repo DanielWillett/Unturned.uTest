@@ -41,16 +41,22 @@ public abstract class BaseServersidePlayerActor : PlayerActor, IServersideTestPl
     [MemberNotNull(nameof(Configuration))]
     internal void Configure(Action<DummyPlayerJoinConfiguration>? configurer)
     {
-        GameThread.Assert();
         DummyPlayerJoinConfiguration c = new DummyPlayerJoinConfiguration(Index, Steam64, DisplayName, this is RemoteDummyPlayerActor);
+        Configure(c, configurer);
+    }
+
+    [MemberNotNull(nameof(Configuration))]
+    internal void Configure(DummyPlayerJoinConfiguration configBase, Action<DummyPlayerJoinConfiguration>? configurer)
+    {
+        GameThread.Assert();
         if (configurer != null)
         {
-            configurer(c);
+            configurer(configBase);
         }
 
-        HWIDs = c.GetHwidPacked();
-        Configuration = c;
-        Configure(c);
+        HWIDs = configBase.GetHwidPacked();
+        Configuration = configBase;
+        Configure(configBase);
     }
 
     protected virtual void Configure(DummyPlayerJoinConfiguration c) { }

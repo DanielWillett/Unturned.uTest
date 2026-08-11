@@ -59,7 +59,14 @@ public readonly struct UnturnedTestUid(string uid)
     /// </summary>
     public string Uid { get; } = uid;
 
+    /// <summary>
+    /// Creates a <see cref="UnturnedTestUid"/> from a <see cref="string"/>.
+    /// </summary>
     public static implicit operator UnturnedTestUid(string str) => new UnturnedTestUid(str);
+
+    /// <summary>
+    /// Converts a <see cref="UnturnedTestUid"/> data structure to it's underlying string implicitly.
+    /// </summary>
     public static implicit operator string(UnturnedTestUid id) => id.Uid;
 
     /// <summary>

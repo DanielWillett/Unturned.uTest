@@ -19,6 +19,8 @@
 
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
+    <DefineConstants>$(DefineConstants);SOURCE_GEN</DefineConstants>
+
   </PropertyGroup>
 
   <ItemGroup>
@@ -33,6 +35,7 @@
     <Compile Include="../Unturned.uTest/Util/ElementTypeState.cs" Link="Util/ElementTypeState.cs" />
     <Compile Include="../Unturned.uTest/Tests/UnturnedTestUid.cs" Link="Tests/UnturnedTestUid.cs" />
     <Compile Include="../Unturned.uTest/Util/MathHelper.cs" Link="Util/MathHelper.cs" />
+    <Compile Include="../Unturned.uTest/Environment/PlayerSimulationMode.cs" Link="Environment/PlayerSimulationMode.cs" />
 
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0" PrivateAssets="all" />

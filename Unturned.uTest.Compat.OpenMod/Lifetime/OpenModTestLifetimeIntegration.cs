@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using JetBrains.Annotations;
 using uTest.Compat.Lifetime;
 using uTest.Compat.OpenMod.Events;
 using uTest.Compat.Tests;
@@ -23,7 +24,8 @@ internal class OpenModTestLifetimeIntegration : ITestLifetimeIntegration, IDispo
     private readonly OpenModCompatPlugin _plugin;
     private readonly ILogger<OpenModTestLifetimeIntegration> _logger;
 
-    public static ITestLifetimeIntegration? Instance;
+    [UsedImplicitly]
+    internal static ITestLifetimeIntegration? Instance;
 
     // time to wait for user data to update after writing to the file.
     private const double WaitForUpdateTimeout = 2.0;

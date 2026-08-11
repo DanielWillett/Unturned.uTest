@@ -1,4 +1,4 @@
-﻿//#define REFLECTION_TOOLS_DEBUG
+﻿#define REFLECTION_TOOLS_DEBUG
 using System;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -114,25 +114,18 @@ internal static class TestCompiler
         il.Emit(OpCodes.Stloc, lclContext);
         il.Emit(OpCodes.Stfld, TestRunParameters_Context);
 
-        if (typeof(ITestClassSetup).IsAssignableFrom(runnerType))
-        {
-            il.Emit(OpCodes.Ldloc, lclRunner);
-            il.Emit(OpCodes.Ldloc, lclContext);
-            il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Ldfld, TestRunParameters_Token);
-            il.Emit(OpCodes.Callvirt, ITestClassSetup_SetupAsync);
-            Await(il, StateSetup, stFinishSetup, ITestClassSetup_SetupAsync.ReturnType, null, out _, didAwait);
-            // state: 1
+        // await ctx.SetupAsync(parameters.Token);
+        il.Emit(OpCodes.Ldloc, lclContext);
+        il.Emit(OpCodes.Ldarg_0);
+        il.Emit(OpCodes.Ldfld, TestRunParameters_Token);
+        il.Emit(OpCodes.Callvirt, TestContext_SetupAsync);
+        Await(il, StateSetup, stFinishSetup, TestContext_SetupAsync.ReturnType, null, out _, didAwait);
+        // state: 1
 
-            il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Ldfld, TestRunParameters_Context);
-            il.Emit(OpCodes.Callvirt, TestContext_Runner_Get);
-            il.Emit(OpCodes.Stloc, lclRunner);
-        }
-        else
-        {
-            il.MarkLabel(stFinishSetup);
-        }
+        il.Emit(OpCodes.Ldarg_0);
+        il.Emit(OpCodes.Ldfld, TestRunParameters_Context);
+        il.Emit(OpCodes.Callvirt, TestContext_Runner_Get);
+        il.Emit(OpCodes.Stloc, lclRunner); // couldve awaited and lost lcl
 
         il.Emit(OpCodes.Ldarg_0);
         il.Emit(OpCodes.Ldfld, TestRunParameters_Context);
@@ -229,22 +222,14 @@ internal static class TestCompiler
         //il.Emit(OpCodes.Bne_Un, rtnTrue);
 
         il.MarkLabel(stRerunTearDown);
-        if (typeof(ITestClassTearDown).IsAssignableFrom(runnerType))
-        {
-            // runner.TearDownAsync(parameters.Token)
-            il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Ldfld, TestRunParameters_Context);
-            il.Emit(OpCodes.Callvirt, TestContext_Runner_Get);
-            il.Emit(OpCodes.Ldarg_0);
-            il.Emit(OpCodes.Ldfld, TestRunParameters_Token);
-            il.Emit(OpCodes.Callvirt, ITestClassTearDown_TearDownAsync);
-            Await(il, StateTearDown, stFinishTearDown, ITestClassTearDown_TearDownAsync.ReturnType, null, out _, didAwait);
-            // state: 3
-        }
-        else
-        {
-            il.MarkLabel(stFinishTearDown);
-        }
+
+        // await ctx.SetupAsync(parameters.Token);
+        il.Emit(OpCodes.Ldarg_0);
+        il.Emit(OpCodes.Ldfld, TestRunParameters_Context); // cant load local if awaited
+        il.Emit(OpCodes.Ldarg_0);
+        il.Emit(OpCodes.Ldfld, TestRunParameters_Token);
+        il.Emit(OpCodes.Callvirt, TestContext_TearDownAsync);
+        Await(il, StateTearDown, stFinishTearDown, TestContext_TearDownAsync.ReturnType, null, out _, didAwait);
 
         // state = 4
         il.Emit(OpCodes.Ldarg_2);
@@ -252,6 +237,10 @@ internal static class TestCompiler
         il.Emit(OpCodes.Stind_I4);
 
         // return false
+#if REFLECTION_TOOLS_DEBUG
+        il.Emit(OpCodes.Ldstr, "_ Ran to completion");
+        il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
+#endif
         il.Emit(OpCodes.Ldc_I4_0);
         il.Emit(OpCodes.Ret);
 
@@ -290,6 +279,10 @@ internal static class TestCompiler
 
             il.Emit(OpCodes.Ldc_I4_0);
             il.Emit(OpCodes.Stloc, boolDidAwait);
+#if REFLECTION_TOOLS_DEBUG
+            il.Emit(OpCodes.Ldstr, $"{finalState} not awaitable.");
+            il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
+#endif
             return;
         }
 
@@ -349,6 +342,11 @@ internal static class TestCompiler
         Label alreadyCompleted = il.DefineLabel();
 
         il.Emit(OpCodes.Brtrue, alreadyCompleted);
+
+#if REFLECTION_TOOLS_DEBUG
+        il.Emit(OpCodes.Ldstr, $"{finalState} not completed.");
+        il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
+#endif
 
         // didAwait = true
         il.Emit(OpCodes.Ldc_I4_1);
@@ -425,6 +423,10 @@ internal static class TestCompiler
 
         il.MarkLabel(jumpLabel);
 
+#if REFLECTION_TOOLS_DEBUG
+        il.Emit(OpCodes.Ldstr, $"{finalState} returning to state.");
+        il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
+#endif
         // called on continuation:
 
         // awaiter = (TAwaiter)currentTask;
@@ -447,6 +449,10 @@ internal static class TestCompiler
         il.MarkLabel(alreadyCompleted);
 
         // } else /* isCompleted */ {
+#if REFLECTION_TOOLS_DEBUG
+        il.Emit(OpCodes.Ldstr, $"{finalState} instantly completed.");
+        il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
+#endif
         il.Emit(awaiterType.IsValueType ? OpCodes.Ldloca : OpCodes.Ldloc, awaiterLcl);
 
         il.MarkLabel(skipComplete);
@@ -528,8 +534,6 @@ internal static class TestCompiler
     // ReSharper disable InconsistentNaming
 
     private static readonly ConstructorInfo TestContext_Ctor;
-    private static readonly MethodInfo ITestClassSetup_SetupAsync;
-    private static readonly MethodInfo ITestClassTearDown_TearDownAsync;
     private static readonly MethodInfo Action_TestRunParameters_TestRunStopwatchStage_Invoke;
     private static readonly FieldInfo TestRunParameters_Token;
     private static readonly FieldInfo TestRunParameters_Context;
@@ -547,6 +551,8 @@ internal static class TestCompiler
 
     private static readonly MethodInfo UnturnedTestInstance_Arguments_Get;
     private static readonly MethodInfo TestContext_Runner_Get;
+    private static readonly MethodInfo TestContext_SetupAsync;
+    private static readonly MethodInfo TestContext_TearDownAsync;
 
     private static readonly MethodInfo MainModule_TestRunnerActivator;
 
@@ -559,14 +565,6 @@ internal static class TestCompiler
         TestContext_Ctor = typeof(TestContext)
             .GetConstructor(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, CallingConventions.Any, [ typeof(TestRunParameters), typeof(ITestClass) ], null)
             ?? throw new MissingMethodException(nameof(TestContext), ".ctor");
-
-        ITestClassSetup_SetupAsync = typeof(ITestClassSetup)
-            .GetMethod(nameof(ITestClassSetup.SetupAsync), BindingFlags.Instance | BindingFlags.Public)
-            ?? throw new MissingMethodException(nameof(ITestClassSetup), nameof(ITestClassSetup.SetupAsync));
-
-        ITestClassTearDown_TearDownAsync = typeof(ITestClassTearDown)
-            .GetMethod(nameof(ITestClassTearDown.TearDownAsync), BindingFlags.Instance | BindingFlags.Public)
-            ?? throw new MissingMethodException(nameof(ITestClassTearDown), nameof(ITestClassTearDown.TearDownAsync));
 
         GC_Collect4 = typeof(GC)
             .GetMethod(nameof(GC.Collect), BindingFlags.Static | BindingFlags.Public, null, CallingConventions.Any, [ typeof(int), typeof(GCCollectionMode), typeof(bool), typeof(bool) ], null)
@@ -623,6 +621,14 @@ internal static class TestCompiler
         TestContext_Runner_Get = typeof(TestContext)
             .GetProperty(nameof(TestContext.Runner), BindingFlags.Public | BindingFlags.Instance)?.GetMethod
             ?? throw new MissingMethodException(nameof(TestContext), "get_" + nameof(TestContext.Runner));
+
+        TestContext_SetupAsync = typeof(TestContext)
+            .GetMethod(nameof(TestContext.SetupAsync), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new MissingMethodException(nameof(TestContext), nameof(TestContext.SetupAsync));
+
+        TestContext_TearDownAsync = typeof(TestContext)
+            .GetMethod(nameof(TestContext.TearDownAsync), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new MissingMethodException(nameof(TestContext), nameof(TestContext.TearDownAsync));
 
         MainModule_TestRunnerActivator = typeof(MainModule)
             .GetProperty(nameof(MainModule.TestRunnerActivator), BindingFlags.Public | BindingFlags.Instance)?.GetMethod

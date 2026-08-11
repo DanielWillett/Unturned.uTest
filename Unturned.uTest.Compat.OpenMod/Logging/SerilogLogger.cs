@@ -17,7 +17,7 @@ public class SerilogLogger : ILogger, IDisposable
     /// <summary>
     /// Creates a <see cref="ILogger"/> implementation for the default static Serilog logger.
     /// </summary>
-    /// <inheritdoc cref="SerilogLogger(Serilog.ILogger,string,bool)"/>
+    /// <inheritdoc cref="uTest.Compat.OpenMod.Logging.SerilogLogger(Serilog.ILogger,string,bool)"/>
     public SerilogLogger(string name, bool dispose = false) : this(Serilog.Log.Logger, name, dispose) { }
 
     /// <summary>

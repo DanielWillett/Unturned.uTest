@@ -40,7 +40,8 @@ internal sealed record TestMethodInfo(
     string? Map,
     string ReturnTypeFullName,
     string ReturnTypeGloballyQualifiedName,
-    DelegateType? DelegateType
+    DelegateType? DelegateType,
+    PlayerSimulationMode SimulationMode
 );
 
 internal record struct TestParameterInfo(
