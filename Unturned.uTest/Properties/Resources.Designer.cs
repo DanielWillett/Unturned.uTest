@@ -286,6 +286,15 @@ namespace uTest.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to This task does not support synchronous waiting. Do not use GetResult() directly on this task&apos;s awaiter..
+        /// </summary>
+        internal static string InvalidOperationException_TaskGetResultNotSupported {
+            get {
+                return ResourceManager.GetString("InvalidOperationException_TaskGetResultNotSupported", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Expected object and interactable rubble to belong to the same object..
         /// </summary>
         internal static string LevelObjectInconsistantRubble {
@@ -358,7 +367,7 @@ namespace uTest.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Not all parameters on test {0} in {1} have value sets or ranges. This could also be caused by a range containing too many elements, as a test can not have more than {2} variations..
+        ///   Looks up a localized string similar to Not all parameters on test {0} in {1} have value sets or ranges. This could also be caused by a range containing too many elements, as a test can not have more than {2} variations (configurable via &apos;uTest.maxTestVariations&apos;)..
         /// </summary>
         internal static string LogErrorParametersMissingValues {
             get {
@@ -619,15 +628,6 @@ namespace uTest.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Cancelled.
-        /// </summary>
-        internal static string TestResultCancelled {
-            get {
-                return ResourceManager.GetString("TestResultCancelled", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   Looks up a localized string similar to Test result: {0}..
         /// </summary>
         internal static string TestResultExceptionDefaultMessage {
@@ -696,6 +696,24 @@ namespace uTest.Properties {
         internal static string TestRunnerError {
             get {
                 return ResourceManager.GetString("TestRunnerError", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Completion source was cancelled..
+        /// </summary>
+        internal static string UnityCompletionSourceCancelled {
+            get {
+                return ResourceManager.GetString("UnityCompletionSourceCancelled", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Completion source timed out after {0}..
+        /// </summary>
+        internal static string UnityCompletionSourceTimeout {
+            get {
+                return ResourceManager.GetString("UnityCompletionSourceTimeout", resourceCulture);
             }
         }
         

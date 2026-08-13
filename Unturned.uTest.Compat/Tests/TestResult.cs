@@ -25,11 +25,6 @@ public enum TestResult : byte
     Fail,
 
     /// <summary>
-    /// The test run was cancelled.
-    /// </summary>
-    Cancelled,
-
-    /// <summary>
     /// The test hit it's timeout.
     /// </summary>
     Timeout,

@@ -661,7 +661,11 @@ internal sealed class EmbeddedModuleFile : ModuleFile
                 return true;
             }
 
-            using (FileStream fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 16384, FileOptions.SequentialScan))
+            // unity likes to lock our build files for no reason
+            // otherwise I'd use Read here
+            const FileShare fileShare = FileShare.ReadWrite | FileShare.Delete;
+            
+            using (FileStream fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, fileShare, 16384, FileOptions.SequentialScan))
             {
                 embeddedResourceStream.CopyTo(fileStream);
             }
@@ -678,7 +682,7 @@ internal sealed class EmbeddedModuleFile : ModuleFile
 #if DEBUG
             if (pdbEmbeddedResourceStream != null && assemblyCreateDate > symbolFileCreateDate)
             {
-                using (FileStream fileStream = new FileStream(symbolPath, FileMode.Create, FileAccess.Write, FileShare.Read, 16384, FileOptions.SequentialScan))
+                using (FileStream fileStream = new FileStream(symbolPath, FileMode.Create, FileAccess.Write, fileShare, 16384, FileOptions.SequentialScan))
                 {
                     embeddedResourceStream.CopyTo(fileStream);
                 }
@@ -698,8 +702,8 @@ internal sealed class EmbeddedModuleFile : ModuleFile
         }
         catch (Exception ex)
         {
-            logger.LogError(string.Format(Properties.Resources.LogErrorCopyingFile, FileName), ex);
-            logger.LogError(ex.Message);
+            logger.LogError(string.Format(Properties.Resources.LogErrorCopyingFile, FileName));
+            logger.LogError(ex.ToString());
             fileName = null;
             return false;
         }

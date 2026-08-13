@@ -31,9 +31,12 @@ internal class UnturnedTestList
     /// The map to use, or <see langword="null"/> if it doesn't matter.
     /// </summary>
     public string Map { get; set; }
+    public string ServerId { get; set; }
     public bool CollectTrxProperties { get; set; }
     public bool UseColorfulStackTrace { get; set; }
+    public ulong MaxTestVariations { get; set; }
     public SteamIdGenerationStyle SteamIdGenerationStyle { get; set; }
+    public LogLevel MinimumLogLevel { get; set; }
     public string ClientInstallDir { get; set; }
 }
 

@@ -100,6 +100,7 @@ internal class MainModuleLoader : IModuleNexus
                 Object.Destroy(comp.gameObject);
             }
             catch (NullReferenceException) { }
+            catch (MissingReferenceException) { }
         }
     }
 

@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
+using uTest.Logging;
 
 namespace uTest.Compat;
 
@@ -26,16 +24,35 @@ public interface IStartupHook
 
 #nullable disable
 
+/// <summary>
+/// Data structure returned by <see cref="IStartupHook.WaitAsync"/> that can either represent an implementation of <see cref="IStartupHook"/> or the type of one.
+/// </summary>
 public readonly struct StartupHook
 {
+    /// <summary>
+    /// An implementation of <see cref="IStartupHook"/> to invoke on startup.
+    /// </summary>
     public IStartupHook Hook { get; }
+
+    /// <summary>
+    /// The type of a <see cref="IStartupHook"/> to invoke on startup.
+    /// </summary>
     public Type Type { get; }
 
+    /// <summary>
+    /// Create a <see cref="StartupHook"/> that represents an <see cref="IStartupHook"/> implementation.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"/>
     public StartupHook(IStartupHook hook)
     {
         Hook = hook ?? throw new ArgumentNullException(nameof(hook));
     }
 
+    /// <summary>
+    /// Create a <see cref="StartupHook"/> that represents an <see cref="IStartupHook"/> type.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"/>
+    /// <exception cref="ArgumentException"><paramref name="type"/> is abstract or doesn't implement <see cref="IStartupHook"/>.</exception>
     public StartupHook(Type type)
     {
         if (type == null)

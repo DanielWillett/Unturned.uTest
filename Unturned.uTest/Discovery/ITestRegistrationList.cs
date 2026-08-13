@@ -5,11 +5,11 @@ namespace uTest.Discovery;
 
 internal interface ITestRegistrationList
 {
-    Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(ILogger logger, ITestFilter? filter, CancellationToken token = default);
+    Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(ILogger logger, ITestFilter? filter, ulong maxVariations, CancellationToken token = default);
 
     Task<List<UnturnedTest>> GetTestsAsync(ILogger logger, CancellationToken token = default);
 
-    Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, CancellationToken token = default);
+    Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, ulong maxVariations, CancellationToken token = default);
 }
 
 internal readonly struct UnturnedTestInstance

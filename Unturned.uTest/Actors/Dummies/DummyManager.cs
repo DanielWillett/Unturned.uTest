@@ -211,11 +211,8 @@ internal class DummyManager : IDisposable
         if (!test.SpawnPlayersOnStartup)
             return Task.CompletedTask;
 
-        ValueTask vt = testContext.SpawnAllPlayersAsync(token: token);
-        if (vt.IsCompletedSuccessfully)
-            return Task.CompletedTask;
-
-        return vt.AsTask();
+        _module.Logger.LogTrace("Loading startup players...");
+        return testContext.SpawnAllPlayersAsync(token: token).AsTask();
     }
 
     internal IReadOnlyList<IServersideTestPlayer>? AllocateDummiesToTest(UnturnedTestInstanceData test, out bool overflow)

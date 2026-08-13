@@ -12,21 +12,25 @@ using DanielWillett.ReflectionTools.Emit;
 
 namespace uTest.Module;
 
-internal delegate bool CompiledTest(TestRunParameters parameters, ref int state, ref object? currentTask, Action continuation);
+internal delegate void TestInvoker(TestRunParameters parameters, TestContext context, out object? awaiter, Action continuation);
+internal delegate void TestFinalizer(object awaiter);
 
 internal static class TestCompiler
 {
-    private static readonly Type[] Parameters = [ typeof(TestRunParameters), typeof(int).MakeByRefType(), typeof(object).MakeByRefType(), typeof(Action) ];
+    private static readonly Type[] InvokeMethodParameters =
+    [
+        typeof(TestRunParameters) /* parameters */,
+        typeof(TestContext) /* context */,
+        typeof(object).MakeByRefType() /* awaiter */,
+        typeof(Action) /* continuation */
+    ];
 
-    internal const int StateBegin = 0;
-    internal const int StateSetup = 1;
-    internal const int StateInvoke = 2;
-    internal const int StateTearDown = 3;
-    // used if an excpetion is thrown
-    internal const int StateRerunTearDown = 4;
-    internal const int StateFinished = 5;
+    private static readonly Type[] FinalizeMethodParameters =
+    [
+        typeof(object) /* awaiter */
+    ];
 
-    internal static CompiledTest? CompileTest(TestRunParameters parameters, ILogger logger)
+    internal static (TestInvoker?, TestFinalizer?) CompileTestMethods(TestRunParameters parameters, ILogger logger)
     {
 #if REFLECTION_TOOLS_DEBUG
         if (Accessor.Logger is not ReflectionToolsLogger)
@@ -36,119 +40,53 @@ internal static class TestCompiler
 #endif
 
         ref readonly UnturnedTestInstance test = ref parameters.Test.Instance;
+
+        TaskAwaitableHelper.AwaitableInfo awaitInfo = TaskAwaitableHelper.GetAwaitableInfo(test.Method.ReturnType);
+
+        TestInvoker? compileTestInvoker = CompileTestInvoker(in awaitInfo, in test, logger);
+
+        if (compileTestInvoker == null)
+            return (null, null);
+
+        return (
+            compileTestInvoker,
+            CompileTestFinalizer(in awaitInfo, in test)
+        );
+    }
+
+    private static TestInvoker? CompileTestInvoker(in TaskAwaitableHelper.AwaitableInfo awaitInfo, in UnturnedTestInstance test, ILogger logger)
+    {
         DynamicMethod dynMethod = new DynamicMethod(
-            test.Uid,
-            MethodAttributes.Public | MethodAttributes.Static,
-            CallingConventions.Any,
-            typeof(bool),
-            Parameters,
-            test.Type,
-            skipVisibility: true
-        ) { InitLocals = false };
+                test.Uid + "_Invoke",
+                MethodAttributes.Public | MethodAttributes.Static,
+                CallingConventions.Any,
+                typeof(void),
+                InvokeMethodParameters,
+                test.Type,
+                skipVisibility: true
+            )
+        { InitLocals = false };
 
 #if REFLECTION_TOOLS_DEBUG
         IOpCodeEmitter il = dynMethod.AsEmitter(debuggable: true);
 #else
         ILGenerator il = dynMethod.GetILGenerator(2048);
 #endif
-        Type runnerType = test.Type;
-
-        LocalBuilder lclRunner = il.DeclareLocal(runnerType);
-        LocalBuilder lclContext = il.DeclareLocal(typeof(ITestContext));
-        LocalBuilder didAwait = il.DeclareLocal(typeof(bool));
-
-        Label stBegin = il.DefineLabel(),
-              stFinishSetup = il.DefineLabel(),
-              stInvokeTest = il.DefineLabel(),
-              stFinishTearDown = il.DefineLabel(),
-              stRerunTearDown = il.DefineLabel();
-
-        il.Emit(OpCodes.Ldc_I4_0);
-        il.Emit(OpCodes.Stloc, didAwait);
-
-        // switch (state)
-        il.Emit(OpCodes.Ldarg_1);
-        il.Emit(OpCodes.Ldind_I4);
-        il.Emit(OpCodes.Switch, [ stBegin, stFinishSetup, stInvokeTest, stFinishTearDown, stRerunTearDown]);
-
-        // throw new InvalidProgramException()
-        il.Emit(OpCodes.Newobj, typeof(InvalidProgramException).GetConstructor(Type.EmptyTypes)!);
-        il.Emit(OpCodes.Throw);
-
-        il.MarkLabel(stBegin);
-
-        // state: 0
-        // runner = new TRunner();
-        il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Dup); // for stfld
-        if (parameters.Module.TestRunnerActivator != null)
-        {
-            il.Emit(OpCodes.Dup);
-            il.Emit(OpCodes.Ldfld, TestRunParameters_Module);
-            il.Emit(OpCodes.Callvirt, MainModule_TestRunnerActivator);
-            il.Emit(OpCodes.Callvirt, ITestRunnerActivator_CreateTestInstance.MakeGenericMethod(runnerType));
-        }
-        else
-        {
-            ConstructorInfo? constructor = runnerType.GetConstructor(Type.EmptyTypes);
-            if (constructor == null)
-            {
-                logger.LogError(string.Format(
-                    Properties.Resources.LogErrorMissingConstructor,
-                    test.DisplayName,
-                    test.Test.ManagedType)
-                );
-                return null;
-            }
-
-            il.Emit(OpCodes.Newobj, constructor);
-        }
-
-        il.Emit(OpCodes.Dup); // for newobj
-        il.Emit(OpCodes.Stloc, lclRunner);
-
-        // ITestContext ctx = new TestContext(parameters, runner)
-        // parameters.Context = ctx;
-        il.Emit(OpCodes.Newobj, TestContext_Ctor);
-        il.Emit(OpCodes.Dup);
-        il.Emit(OpCodes.Stloc, lclContext);
-        il.Emit(OpCodes.Stfld, TestRunParameters_Context);
-
-        // await ctx.SetupAsync(parameters.Token);
-        il.Emit(OpCodes.Ldloc, lclContext);
-        il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Ldfld, TestRunParameters_Token);
-        il.Emit(OpCodes.Callvirt, TestContext_SetupAsync);
-        Await(il, StateSetup, stFinishSetup, TestContext_SetupAsync.ReturnType, null, out _, didAwait);
-        // state: 1
-
-        il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Ldfld, TestRunParameters_Context);
-        il.Emit(OpCodes.Callvirt, TestContext_Runner_Get);
-        il.Emit(OpCodes.Stloc, lclRunner); // couldve awaited and lost lcl
-
-        il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Ldfld, TestRunParameters_Context);
-        il.Emit(OpCodes.Ldc_I4_1);
-        il.Emit(OpCodes.Stfld, TestContext_HasStarted);
-
-        // force garbage collection
-        il.Emit(OpCodes.Ldc_I4, GC.MaxGeneration);
-        il.Emit(OpCodes.Ldc_I4_S, (byte)GCCollectionMode.Optimized);
-        il.Emit(OpCodes.Ldc_I4_1);
-        il.Emit(OpCodes.Ldc_I4_1);
-        il.Emit(OpCodes.Call, GC_Collect4);
-
-        il.BeginExceptionBlock();
-        //Label endTry = il.DefineLabel();
-
+        bool callvirt = false;
         if (!test.Method.IsStatic)
         {
             // push runner
-            il.Emit(OpCodes.Ldloc, lclRunner);
+            il.Emit(OpCodes.Ldarg_1);
+            il.Emit(OpCodes.Callvirt, TestContext_Runner_Get);
+            if (test.Type.IsValueType)
+            {
+                il.Emit(OpCodes.Unbox, test.Type);
+            }
+            else
+            {
+                callvirt = true;
+            }
         }
-
-        Label rtnTrue = il.DefineLabel();
 
         ParameterInfo[] methodParameters = test.Method.GetParameters();
         for (int i = 0; i < test.Arguments.Length; ++i)
@@ -173,6 +111,7 @@ internal static class TestCompiler
 
         Label noSignalStartMtd = il.DefineLabel();
         Label hasSignalStartMtd = il.DefineLabel();
+
         // parameters.SignalStart?.Invoke(parameters)
         il.Emit(OpCodes.Ldarg_0);
         il.Emit(OpCodes.Ldfld, TestRunParameters_SignalStart);
@@ -186,290 +125,214 @@ internal static class TestCompiler
         il.Emit(OpCodes.Pop);
         il.MarkLabel(hasSignalStartMtd);
 
-        il.Emit(test.Method.IsStatic ? OpCodes.Call : OpCodes.Callvirt, test.Method);
-        Await(il, StateInvoke, stInvokeTest, test.Method.ReturnType, rtnTrue, out _, didAwait);
-        // state: 2
+        il.Emit(callvirt ? OpCodes.Callvirt : OpCodes.Call, test.Method);
 
-        il.BeginFinallyBlock();
+        Type awaitedType = test.Method.ReturnType;
 
-        Label noSignalEndMtd = il.DefineLabel();
-        Label hasSignalEndMtd = il.DefineLabel();
-        // if (!(parameters.SignalEnd == null || didAwait))
-        //     parameters.SignalEnd.Invoke(parameters)
-        il.Emit(OpCodes.Ldloc, didAwait);
-        il.Emit(OpCodes.Brtrue, hasSignalEndMtd);
-
-        il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Ldfld, TestRunParameters_SignalEnd);
-        il.Emit(OpCodes.Dup);
-        il.Emit(OpCodes.Brfalse, noSignalEndMtd);
-        il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Ldc_I4_S, (int)TestRunStopwatchStage.Execute);
-        il.Emit(OpCodes.Callvirt, Action_TestRunParameters_TestRunStopwatchStage_Invoke);
-        il.Emit(OpCodes.Br, hasSignalEndMtd);
-        il.MarkLabel(noSignalEndMtd);
-        il.Emit(OpCodes.Pop);
-        il.MarkLabel(hasSignalEndMtd);
-
-        il.EndExceptionBlock();
-
-        //il.MarkLabel(endTry);
-
-        // if (state != 2) { return true; }
-        //il.Emit(OpCodes.Ldc_I4_S, (byte)StateInvoke);
-        //il.Emit(OpCodes.Ldarg_1);
-        //il.Emit(OpCodes.Ldind_I4);
-        //il.Emit(OpCodes.Bne_Un, rtnTrue);
-
-        il.MarkLabel(stRerunTearDown);
-
-        // await ctx.SetupAsync(parameters.Token);
-        il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Ldfld, TestRunParameters_Context); // cant load local if awaited
-        il.Emit(OpCodes.Ldarg_0);
-        il.Emit(OpCodes.Ldfld, TestRunParameters_Token);
-        il.Emit(OpCodes.Callvirt, TestContext_TearDownAsync);
-        Await(il, StateTearDown, stFinishTearDown, TestContext_TearDownAsync.ReturnType, null, out _, didAwait);
-
-        // state = 4
-        il.Emit(OpCodes.Ldarg_2);
-        il.Emit(OpCodes.Ldc_I4_S, (byte)StateFinished);
-        il.Emit(OpCodes.Stind_I4);
-
-        // return false
-#if REFLECTION_TOOLS_DEBUG
-        il.Emit(OpCodes.Ldstr, "_ Ran to completion");
-        il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
-#endif
-        il.Emit(OpCodes.Ldc_I4_0);
-        il.Emit(OpCodes.Ret);
-
-        il.MarkLabel(rtnTrue);
-
-        // return true
-        il.Emit(OpCodes.Ldc_I4_1);
-        il.Emit(OpCodes.Ret);
-
-        return (CompiledTest)dynMethod.CreateDelegate(typeof(CompiledTest));
-    }
-
-    private static void Await(
-#if REFLECTION_TOOLS_DEBUG
-        IOpCodeEmitter il,
-#else
-        ILGenerator il,
-#endif
-        int finalState, Label jumpLabel, Type awaitType, Label? tryLabel, out LocalBuilder? result, LocalBuilder boolDidAwait)
-    {
-        result = null;
-
-        TaskAwaitableHelper.AwaitableInfo info = TaskAwaitableHelper.GetAwaitableInfo(awaitType);
-        if (!info.IsValidAwaitable)
+        if (!awaitInfo.IsValidAwaitable)
         {
-            il.MarkLabel(jumpLabel);
-            il.Emit(OpCodes.Ldarg_1);
-            il.Emit(OpCodes.Ldc_I4_S, (byte)finalState);
-            il.Emit(OpCodes.Stind_I4);
-
-            if (awaitType != typeof(void))
+            if (awaitedType != typeof(void))
             {
-                result = il.DeclareLocal(awaitType);
-                il.Emit(OpCodes.Stloc, result);
+                il.Emit(OpCodes.Pop);
             }
 
-            il.Emit(OpCodes.Ldc_I4_0);
-            il.Emit(OpCodes.Stloc, boolDidAwait);
 #if REFLECTION_TOOLS_DEBUG
-            il.Emit(OpCodes.Ldstr, $"{finalState} not awaitable.");
+            il.Emit(OpCodes.Ldstr, "Test didn't return an awaitable task.");
             il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
 #endif
-            return;
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldnull);
+            il.Emit(OpCodes.Stind_Ref);
         }
-
-        LocalBuilder taskLcl = il.DeclareLocal(awaitType);
-        il.Emit(OpCodes.Stloc, taskLcl);
-        // var task = task.ConfigureAwait(false)
-        if (info.ConfigureAwaitMethod != null)
+        else
         {
-            if (awaitType.IsValueType)
+            LocalBuilder taskLcl = il.DeclareLocal(awaitedType);
+            il.Emit(OpCodes.Stloc, taskLcl);
+            // var task = task.ConfigureAwait(false)
+            if (awaitInfo.ConfigureAwaitMethod != null)
+            {
+                if (awaitedType.IsValueType)
+                {
+                    il.Emit(OpCodes.Ldloca, taskLcl);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Call, awaitInfo.ConfigureAwaitMethod);
+                }
+                else
+                {
+                    il.Emit(OpCodes.Ldloc, taskLcl);
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Callvirt, awaitInfo.ConfigureAwaitMethod);
+                }
+
+                if (awaitInfo.ConfigureAwaitMethod.ReturnType != typeof(void))
+                {
+                    taskLcl = il.DeclareLocal(awaitInfo.TaskType!);
+                    il.Emit(OpCodes.Stloc, taskLcl);
+                }
+            }
+
+            // var lclAwaiter = task.GetAwaiter()
+            if (taskLcl.LocalType!.IsValueType)
             {
                 il.Emit(OpCodes.Ldloca, taskLcl);
-                il.Emit(OpCodes.Ldc_I4_0);
-                il.Emit(OpCodes.Call, info.ConfigureAwaitMethod);
+                il.Emit(OpCodes.Call, awaitInfo.GetAwaiterMethod!);
             }
             else
             {
                 il.Emit(OpCodes.Ldloc, taskLcl);
-                il.Emit(OpCodes.Ldc_I4_0);
-                il.Emit(OpCodes.Callvirt, info.ConfigureAwaitMethod);
+                il.Emit(OpCodes.Callvirt, awaitInfo.GetAwaiterMethod!);
             }
 
-            if (info.ConfigureAwaitMethod.ReturnType != typeof(void))
+            Type awaiterType = awaitInfo.GetAwaiterMethod!.ReturnType;
+            LocalBuilder awaiterLcl = il.DeclareLocal(awaiterType);
+            il.Emit(OpCodes.Stloc, awaiterLcl);
+
+            // if (!isCompleted) {
+            if (awaiterType.IsValueType)
             {
-                taskLcl = il.DeclareLocal(info.TaskType!);
-                il.Emit(OpCodes.Stloc, taskLcl);
-            }
-        }
-
-        // var lclAwaiter = task.GetAwaiter()
-        if (taskLcl.LocalType!.IsValueType)
-        {
-            il.Emit(OpCodes.Ldloca, taskLcl);
-            il.Emit(OpCodes.Call, info.GetAwaiterMethod!);
-        }
-        else
-        {
-            il.Emit(OpCodes.Ldloc, taskLcl);
-            il.Emit(OpCodes.Callvirt, info.GetAwaiterMethod!);
-        }
-
-        Type awaiterType = info.GetAwaiterMethod!.ReturnType;
-        LocalBuilder awaiterLcl = il.DeclareLocal(awaiterType);
-        il.Emit(OpCodes.Stloc, awaiterLcl);
-
-        // if (!isCompleted) {
-        if (awaiterType.IsValueType)
-        {
-            il.Emit(OpCodes.Ldloca, awaiterLcl);
-            il.Emit(OpCodes.Call, info.IsCompletedProperty!.GetMethod!);
-        }
-        else
-        {
-            il.Emit(OpCodes.Ldloc, awaiterLcl);
-            il.Emit(OpCodes.Callvirt, info.IsCompletedProperty!.GetMethod!);
-        }
-
-        Label alreadyCompleted = il.DefineLabel();
-
-        il.Emit(OpCodes.Brtrue, alreadyCompleted);
-
-#if REFLECTION_TOOLS_DEBUG
-        il.Emit(OpCodes.Ldstr, $"{finalState} not completed.");
-        il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
-#endif
-
-        // didAwait = true
-        il.Emit(OpCodes.Ldc_I4_1);
-        il.Emit(OpCodes.Stloc, boolDidAwait);
-
-        // (ref currentTask) = awaiter
-        il.Emit(OpCodes.Ldarg_2);
-        il.Emit(OpCodes.Ldloc, awaiterLcl);
-        if (awaiterType.IsValueType)
-        {
-            il.Emit(OpCodes.Box, awaiterType);
-        }
-        il.Emit(OpCodes.Stind_Ref);
-
-        // (ref state) = state
-        il.Emit(OpCodes.Ldarg_1);
-        il.Emit(OpCodes.Ldc_I4_S, (byte)finalState);
-        il.Emit(OpCodes.Stind_I4);
-
-        // awaiter.OnCompleted(continuation)
-        if (awaiterType.IsValueType)
-        {
-            il.Emit(OpCodes.Ldarg_2);
-            il.Emit(OpCodes.Ldind_Ref);
-            il.Emit(OpCodes.Unbox, awaiterType);
-            il.Emit(OpCodes.Ldarg_3);
-            il.Emit(OpCodes.Constrained, awaiterType);
-            il.Emit(OpCodes.Callvirt, typeof(ICriticalNotifyCompletion).IsAssignableFrom(awaiterType)
-                ? ICriticalNotifyCompletion_UnsafeOnCompleted
-                : INotifyCompletion_OnCompleted
-            );
-        }
-        else
-        {
-            il.Emit(OpCodes.Ldloc, awaiterLcl);
-            if (typeof(ICriticalNotifyCompletion).IsAssignableFrom(awaiterType))
-            {
-                il.Emit(OpCodes.Ldarg_3);
-                il.Emit(OpCodes.Callvirt, ICriticalNotifyCompletion_UnsafeOnCompleted);
+                il.Emit(OpCodes.Ldloca, awaiterLcl);
+                il.Emit(OpCodes.Call, awaitInfo.IsCompletedProperty!.GetMethod!);
             }
             else
             {
-                // if (awaiter is ICriticalNotifyCompletion) {
-                il.Emit(OpCodes.Dup);
-                il.Emit(OpCodes.Isinst, typeof(ICriticalNotifyCompletion));
-                Label notCritical = il.DefineLabel(),
-                      critical = il.DefineLabel();
-                il.Emit(OpCodes.Brfalse, notCritical);
-
-                // awaiter.UnsafeOnCompleted
-                il.Emit(OpCodes.Ldarg_3);
-                il.Emit(OpCodes.Callvirt, ICriticalNotifyCompletion_UnsafeOnCompleted);
-                il.Emit(OpCodes.Br, critical);
-
-                // } else {
-                il.MarkLabel(notCritical);
-                il.Emit(OpCodes.Ldarg_3);
-                il.Emit(OpCodes.Callvirt, INotifyCompletion_OnCompleted);
-
-                il.MarkLabel(critical);
+                il.Emit(OpCodes.Ldloc, awaiterLcl);
+                il.Emit(OpCodes.Callvirt, awaitInfo.IsCompletedProperty!.GetMethod!);
             }
-        }
 
-        // return true
-        if (!tryLabel.HasValue)
-        {
-            il.Emit(OpCodes.Ldc_I4_1);
-            il.Emit(OpCodes.Ret);
-        }
-        else
-        {
-            il.Emit(OpCodes.Leave, tryLabel.Value);
-        }
+            Label alreadyCompleted = il.DefineLabel();
 
-        il.MarkLabel(jumpLabel);
+            il.Emit(OpCodes.Brtrue, alreadyCompleted);
 
 #if REFLECTION_TOOLS_DEBUG
-        il.Emit(OpCodes.Ldstr, $"{finalState} returning to state.");
-        il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
+            il.Emit(OpCodes.Ldstr, "Test didn't complete instantly, awaiting.");
+            il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
 #endif
-        // called on continuation:
 
-        // awaiter = (TAwaiter)currentTask;
-        il.Emit(OpCodes.Ldarg_2);
-        il.Emit(OpCodes.Ldind_Ref);
-        if (awaiterType.IsValueType)
+            // (ref awaiter) = lclAwaiter
+            il.Emit(OpCodes.Ldarg_2);
+            il.Emit(OpCodes.Ldloc, awaiterLcl);
+            if (awaiterType.IsValueType)
+            {
+                il.Emit(OpCodes.Box, awaiterType);
+            }
+            il.Emit(OpCodes.Stind_Ref);
+
+            // awaiter.OnCompleted(continuation)
+            if (awaiterType.IsValueType)
+            {
+                il.Emit(OpCodes.Ldarg_2);
+                il.Emit(OpCodes.Ldind_Ref);
+                il.Emit(OpCodes.Unbox, awaiterType);
+                il.Emit(OpCodes.Ldarg_3);
+                il.Emit(OpCodes.Constrained, awaiterType);
+                il.Emit(OpCodes.Callvirt, typeof(ICriticalNotifyCompletion).IsAssignableFrom(awaiterType)
+                    ? ICriticalNotifyCompletion_UnsafeOnCompleted
+                    : INotifyCompletion_OnCompleted
+                );
+            }
+            else
+            {
+                il.Emit(OpCodes.Ldloc, awaiterLcl);
+                if (typeof(ICriticalNotifyCompletion).IsAssignableFrom(awaiterType))
+                {
+                    il.Emit(OpCodes.Ldarg_3);
+                    il.Emit(OpCodes.Callvirt, ICriticalNotifyCompletion_UnsafeOnCompleted);
+                }
+                else
+                {
+                    // if (awaiter is ICriticalNotifyCompletion) {
+                    il.Emit(OpCodes.Dup);
+                    il.Emit(OpCodes.Isinst, typeof(ICriticalNotifyCompletion));
+                    Label notCritical = il.DefineLabel(),
+                          critical = il.DefineLabel();
+                    il.Emit(OpCodes.Brfalse, notCritical);
+
+                    // awaiter.UnsafeOnCompleted
+                    il.Emit(OpCodes.Ldarg_3);
+                    il.Emit(OpCodes.Callvirt, ICriticalNotifyCompletion_UnsafeOnCompleted);
+                    il.Emit(OpCodes.Br, critical);
+
+                    // } else {
+                    il.MarkLabel(notCritical);
+                    il.Emit(OpCodes.Ldarg_3);
+                    il.Emit(OpCodes.Callvirt, INotifyCompletion_OnCompleted);
+
+                    il.MarkLabel(critical);
+                }
+            }
+
+            Label lblAwaited = il.DefineLabel();
+            il.Emit(OpCodes.Br, lblAwaited);
+
+            // } else /* isCompleted */ {
+            il.MarkLabel(alreadyCompleted);
+
+#if REFLECTION_TOOLS_DEBUG
+            il.Emit(OpCodes.Ldstr, "Test task completed instantly.");
+            il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
+#endif
+            il.Emit(awaiterType.IsValueType ? OpCodes.Ldloca : OpCodes.Ldloc, awaiterLcl);
+            // var result = awaiter.GetResult();
+            il.Emit(awaiterType.IsValueType ? OpCodes.Call : OpCodes.Callvirt, awaitInfo.GetResultMethod!);
+            if (awaitInfo.GetResultMethod!.ReturnType != typeof(void))
+            {
+                il.Emit(OpCodes.Pop);
+            }
+
+            // }
+
+            il.MarkLabel(lblAwaited);
+
+            // } finally {
+        }
+
+        il.Emit(OpCodes.Ret);
+
+        return (TestInvoker)dynMethod.CreateDelegate(typeof(TestInvoker));
+    }
+
+    private static TestFinalizer? CompileTestFinalizer(in TaskAwaitableHelper.AwaitableInfo awaitInfo, in UnturnedTestInstance test)
+    {
+        if (!awaitInfo.IsValidAwaitable)
+            return null;
+
+        DynamicMethod dynMethod = new DynamicMethod(
+            test.Uid + "_Finalize",
+            MethodAttributes.Public | MethodAttributes.Static,
+            CallingConventions.Any,
+            typeof(void),
+            FinalizeMethodParameters,
+            test.Type,
+            skipVisibility: true
+        )
+        { InitLocals = false };
+
+#if REFLECTION_TOOLS_DEBUG
+        IOpCodeEmitter il = dynMethod.AsEmitter(debuggable: true);
+#else
+        ILGenerator il = dynMethod.GetILGenerator(256);
+#endif
+        il.Emit(OpCodes.Ldarg_0);
+        Type awaiterType = awaitInfo.GetAwaiterMethod!.ReturnType;
+        if (awaitInfo.TaskType!.IsValueType)
         {
             il.Emit(OpCodes.Unbox, awaiterType);
+            il.Emit(OpCodes.Call, awaitInfo.GetResultMethod!);
         }
         else
         {
             il.Emit(OpCodes.Castclass, awaiterType);
+            il.Emit(OpCodes.Callvirt, awaitInfo.GetResultMethod!);
         }
 
-        Label skipComplete = il.DefineLabel();
-        il.Emit(OpCodes.Br, skipComplete);
-
-        // end called on continuation
-
-        il.MarkLabel(alreadyCompleted);
-
-        // } else /* isCompleted */ {
-#if REFLECTION_TOOLS_DEBUG
-        il.Emit(OpCodes.Ldstr, $"{finalState} instantly completed.");
-        il.Emit(OpCodes.Call, new Action<string>(UnturnedLog.info).Method);
-#endif
-        il.Emit(awaiterType.IsValueType ? OpCodes.Ldloca : OpCodes.Ldloc, awaiterLcl);
-
-        il.MarkLabel(skipComplete);
-
-        // didAwait = false
-        il.Emit(OpCodes.Ldc_I4_0);
-        il.Emit(OpCodes.Stloc, boolDidAwait);
-
-        // var result = awaiter.GetResult();
-        il.Emit(awaiterType.IsValueType ? OpCodes.Call : OpCodes.Callvirt, info.GetResultMethod!);
-        if (info.GetResultMethod!.ReturnType != typeof(void))
+        if (awaitInfo.GetResultMethod!.ReturnType != typeof(void))
         {
-            result = il.DeclareLocal(awaitType);
-            il.Emit(OpCodes.Stloc, result);
+            il.Emit(OpCodes.Pop);
         }
 
-        // }
+        il.Emit(OpCodes.Ret);
+
+        return (TestFinalizer)dynMethod.CreateDelegate(typeof(TestFinalizer));
     }
 
     private static bool TryLoadParameter(in UnturnedTestInstance test,
@@ -531,56 +394,35 @@ internal static class TestCompiler
         return true;
     }
 
+    internal static MethodInfo CreateTestRunnerActivatorMethod(Type runnerType)
+    {
+        return ITestRunnerActivator_CreateTestInstance.MakeGenericMethod(runnerType);
+    }
+
     // ReSharper disable InconsistentNaming
 
-    private static readonly ConstructorInfo TestContext_Ctor;
     private static readonly MethodInfo Action_TestRunParameters_TestRunStopwatchStage_Invoke;
-    private static readonly FieldInfo TestRunParameters_Token;
-    private static readonly FieldInfo TestRunParameters_Context;
     private static readonly FieldInfo TestRunParameters_Test;
     private static readonly FieldInfo TestRunParameters_SignalStart;
-    private static readonly FieldInfo TestRunParameters_SignalEnd;
-    private static readonly FieldInfo TestRunParameters_Module;
-    private static readonly FieldInfo TestContext_HasStarted;
 
     private static readonly MethodInfo INotifyCompletion_OnCompleted;
     private static readonly MethodInfo ICriticalNotifyCompletion_UnsafeOnCompleted;
-    private static readonly MethodInfo GC_Collect4;
 
     private static readonly FieldInfo UnturnedTestInstanceData_Instance;
 
     private static readonly MethodInfo UnturnedTestInstance_Arguments_Get;
     private static readonly MethodInfo TestContext_Runner_Get;
-    private static readonly MethodInfo TestContext_SetupAsync;
-    private static readonly MethodInfo TestContext_TearDownAsync;
-
-    private static readonly MethodInfo MainModule_TestRunnerActivator;
 
     private static readonly MethodInfo ITestRunnerActivator_CreateTestInstance;
+
 
     // ReSharper restore InconsistentNaming
 
     static TestCompiler()
     {
-        TestContext_Ctor = typeof(TestContext)
-            .GetConstructor(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, CallingConventions.Any, [ typeof(TestRunParameters), typeof(ITestClass) ], null)
-            ?? throw new MissingMethodException(nameof(TestContext), ".ctor");
-
-        GC_Collect4 = typeof(GC)
-            .GetMethod(nameof(GC.Collect), BindingFlags.Static | BindingFlags.Public, null, CallingConventions.Any, [ typeof(int), typeof(GCCollectionMode), typeof(bool), typeof(bool) ], null)
-            ?? throw new MissingMethodException(nameof(GC), nameof(GC.Collect));
-
         Action_TestRunParameters_TestRunStopwatchStage_Invoke = typeof(Action<TestRunParameters, TestRunStopwatchStage>)
             .GetMethod("Invoke", BindingFlags.Public | BindingFlags.Instance)
             ?? throw new MissingMethodException("Action<TestRunParameters, TestRunStopwatchStage>", "Invoke");
-
-        TestRunParameters_Token = typeof(TestRunParameters)
-            .GetField(nameof(TestRunParameters.Token), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            ?? throw new MissingFieldException(nameof(TestRunParameters), nameof(TestRunParameters.Token));
-
-        TestRunParameters_Context = typeof(TestRunParameters)
-            .GetField(nameof(TestRunParameters.Context), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            ?? throw new MissingFieldException(nameof(TestRunParameters), nameof(TestRunParameters.Context));
 
         TestRunParameters_Test = typeof(TestRunParameters)
             .GetField(nameof(TestRunParameters.Test), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
@@ -589,18 +431,6 @@ internal static class TestCompiler
         TestRunParameters_SignalStart = typeof(TestRunParameters)
             .GetField(nameof(TestRunParameters.SignalStart), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
             ?? throw new MissingFieldException(nameof(TestRunParameters), nameof(TestRunParameters.SignalStart));
-
-        TestRunParameters_SignalEnd = typeof(TestRunParameters)
-            .GetField(nameof(TestRunParameters.SignalEnd), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            ?? throw new MissingFieldException(nameof(TestRunParameters), nameof(TestRunParameters.SignalEnd));
-
-        TestRunParameters_Module = typeof(TestRunParameters)
-            .GetField(nameof(TestRunParameters.Module), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            ?? throw new MissingFieldException(nameof(TestRunParameters), nameof(TestRunParameters.Module));
-
-        TestContext_HasStarted = typeof(TestContext)
-            .GetField(nameof(TestContext.HasStarted), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            ?? throw new MissingFieldException(nameof(TestContext), nameof(TestContext.HasStarted));
 
         INotifyCompletion_OnCompleted = typeof(INotifyCompletion)
             .GetMethod(nameof(INotifyCompletion.OnCompleted), BindingFlags.Public | BindingFlags.Instance)
@@ -622,20 +452,8 @@ internal static class TestCompiler
             .GetProperty(nameof(TestContext.Runner), BindingFlags.Public | BindingFlags.Instance)?.GetMethod
             ?? throw new MissingMethodException(nameof(TestContext), "get_" + nameof(TestContext.Runner));
 
-        TestContext_SetupAsync = typeof(TestContext)
-            .GetMethod(nameof(TestContext.SetupAsync), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? throw new MissingMethodException(nameof(TestContext), nameof(TestContext.SetupAsync));
-
-        TestContext_TearDownAsync = typeof(TestContext)
-            .GetMethod(nameof(TestContext.TearDownAsync), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? throw new MissingMethodException(nameof(TestContext), nameof(TestContext.TearDownAsync));
-
-        MainModule_TestRunnerActivator = typeof(MainModule)
-            .GetProperty(nameof(MainModule.TestRunnerActivator), BindingFlags.Public | BindingFlags.Instance)?.GetMethod
-            ?? throw new MissingMethodException(nameof(MainModule), "get_" + nameof(MainModule.TestRunnerActivator));
-
         ITestRunnerActivator_CreateTestInstance = typeof(ITestRunnerActivator)
-            .GetMethod(nameof(ITestRunnerActivator.CreateTestInstance), BindingFlags.Public | BindingFlags.Instance)
+            .GetMethod(nameof(ITestRunnerActivator.CreateTestInstance), BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
             ?? throw new MissingMethodException(nameof(ITestRunnerActivator), nameof(ITestRunnerActivator.CreateTestInstance));
     }
 }

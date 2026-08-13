@@ -44,11 +44,8 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
 
     public ILogger Logger { get; }
 
-    // invoked by TestCompiler's generated code before the test starts
-    [UsedImplicitly]
     internal TestContext(TestRunParameters parameters, ITestClass runner)
     {
-        parameters.Module.Logger.LogInformation($"Running testContext ctor, parameters: {parameters == null}, runner: {runner == null};");
         Runner = runner ?? throw new ArgumentNullException(nameof(runner), Properties.Resources.ArgumentNullException_RunnerFactoryReturnedNull);
         _parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
         _uid = new UnturnedTestUid(parameters.Test.Instance.Uid);
@@ -99,36 +96,24 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
         });
     }
 
-    [UsedImplicitly] // called by TestCompiler output
-    internal Task SetupAsync(CancellationToken token)
+    internal async Task SetupAsync(CancellationToken token)
     {
-        if (Runner is not ITestClassSetup setupListener)
+        await SetupDummiesAsync(token);
+        
+        if (Runner is ITestClassSetup setupListener)
         {
-            return SetupDummiesAsync(token);
-        }
-
-        ValueTask vt = setupListener.SetupAsync(this, token);
-        if (vt.IsCompletedSuccessfully)
-            return SetupDummiesAsync(token);
-
-        return Core(vt, token);
-
-        async Task Core(ValueTask setupTask, CancellationToken token)
-        {
-            await setupTask;
-            await SetupDummiesAsync(token);
+            await setupListener.SetupAsync(this, token);
         }
     }
 
-    [UsedImplicitly] // called by TestCompiler output
     internal Task TearDownAsync(CancellationToken token)
     {
-        if (Runner is not ITestClassTearDown tearDownListener)
+        if (Runner is ITestClassTearDown tearDownListener)
         {
-            return Task.CompletedTask;
+            return tearDownListener.TearDownAsync(token).AsTask();
         }
 
-        return tearDownListener.TearDownAsync(token).AsTask();
+        return Task.CompletedTask;
     }
 
     private Task SetupDummiesAsync(CancellationToken token)
@@ -245,7 +230,7 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
     [DoesNotReturn]
     public void Cancel()
     {
-        throw new TestResultException(TestResult.Cancelled);
+        throw new OperationCanceledException();
     }
 
     [DoesNotReturn]

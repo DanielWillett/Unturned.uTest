@@ -214,7 +214,7 @@
     <value>Member referred to by 'From' property ({0}) does not exist in {1}.</value>
   </data>
   <data name="LogErrorParametersMissingValues" xml:space="preserve">
-    <value>Not all parameters on test {0} in {1} have value sets or ranges. This could also be caused by a range containing too many elements, as a test can not have more than {2} variations.</value>
+    <value>Not all parameters on test {0} in {1} have value sets or ranges. This could also be caused by a range containing too many elements, as a test can not have more than {2} variations (configurable via 'uTest.maxTestVariations').</value>
   </data>
   <data name="LogErrorPatchFailed" xml:space="preserve">
     <value>Patching {0} failed: '{1}'.</value>
@@ -294,9 +294,6 @@
   <data name="RunOnMainThreadError" xml:space="preserve">
     <value>Error while running a callback on the main thread from "{0}".</value>
   </data>
-  <data name="TestResultCancelled" xml:space="preserve">
-    <value>Cancelled</value>
-  </data>
   <data name="TestResultExceptionDefaultMessage" xml:space="preserve">
     <value>Test result: {0}.</value>
   </data>
@@ -335,5 +332,14 @@
   </data>
   <data name="NotSupportedException_SingleplayerOnly" xml:space="preserve">
     <value>This feature can only be used when running tests on singleplayer, not a dedicated server.</value>
+  </data>
+  <data name="UnityCompletionSourceTimeout" xml:space="preserve">
+    <value>Completion source timed out after {0}.</value>
+  </data>
+  <data name="UnityCompletionSourceCancelled" xml:space="preserve">
+    <value>Completion source was cancelled.</value>
+  </data>
+  <data name="InvalidOperationException_TaskGetResultNotSupported" xml:space="preserve">
+    <value>This task does not support synchronous waiting. Do not use GetResult() directly on this task's awaiter.</value>
   </data>
 </root>

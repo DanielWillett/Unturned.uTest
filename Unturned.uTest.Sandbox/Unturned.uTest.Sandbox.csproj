@@ -41,6 +41,11 @@
     <Reference Include="netstandard" Private="True" />
 
   </ItemGroup>
+  <ItemGroup>
+    <None Update="Unturned.uTest.Sandbox.testconfig.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 
   <Import Project="../Unturned.uTest.Runner/buildMultiTargeting/Unturned.uTest.Runner.props" />
 

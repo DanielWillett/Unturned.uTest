@@ -11,6 +11,7 @@ namespace uTest.Compat.OpenMod.Logging;
 /// </summary>
 public class SerilogLogger : ILogger, IDisposable
 {
+    private readonly LogLevel _minLogLevel;
     private readonly Microsoft.Extensions.Logging.ILogger _logger;
     private readonly SerilogLoggerProvider _provider;
 
@@ -18,7 +19,10 @@ public class SerilogLogger : ILogger, IDisposable
     /// Creates a <see cref="ILogger"/> implementation for the default static Serilog logger.
     /// </summary>
     /// <inheritdoc cref="uTest.Compat.OpenMod.Logging.SerilogLogger(Serilog.ILogger,string,bool)"/>
-    public SerilogLogger(string name, bool dispose = false) : this(Serilog.Log.Logger, name, dispose) { }
+    public SerilogLogger(string name, LogLevel minLogLevel, bool dispose = false) : this(Serilog.Log.Logger, name, dispose)
+    {
+        _minLogLevel = minLogLevel;
+    }
 
     /// <summary>
     /// Creates a <see cref="ILogger"/> implementation for a Serilog logger.
@@ -35,6 +39,9 @@ public class SerilogLogger : ILogger, IDisposable
     /// <inheritdoc />
     public Task LogAsync<TState>(LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
+        if (logLevel < _minLogLevel)
+            return Task.CompletedTask;
+
         Log(logLevel, state, exception, formatter);
         return Task.CompletedTask;
     }
@@ -42,13 +49,16 @@ public class SerilogLogger : ILogger, IDisposable
     /// <inheritdoc />
     public void Log<TState>(LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
+        if (logLevel < _minLogLevel)
+            return;
+
         _logger.Log((Microsoft.Extensions.Logging.LogLevel)logLevel, default, state, exception, formatter);
     }
 
     /// <inheritdoc />
     public bool IsEnabled(LogLevel logLevel)
     {
-        return _logger.IsEnabled((Microsoft.Extensions.Logging.LogLevel)logLevel);
+        return logLevel >= _minLogLevel && _logger.IsEnabled((Microsoft.Extensions.Logging.LogLevel)logLevel);
     }
 
     /// <inheritdoc />

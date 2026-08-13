@@ -15,14 +15,16 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
         _assembly = assembly;
     }
 
-    public async Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(ILogger logger, ITestFilter? filter, CancellationToken token = default)
+    public async Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(ILogger logger, ITestFilter? filter, ulong maxVariations, CancellationToken token = default)
     {
         List<UnturnedTest> tests = GetPotentiallyMatchingTests(filter, token);
-        return await ExpandTestsAsync(logger, tests, filter, token);
+        return await ExpandTestsAsync(logger, tests, filter, maxVariations, token);
     }
 
     private List<UnturnedTest> GetPotentiallyMatchingTests(ITestFilter? filter, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
+
         object[] arr = _assembly.GetCustomAttributes(typeof(GeneratedTestBuilderAttribute), false);
         if (arr.Length == 0)
             return new List<UnturnedTest>(0);
@@ -32,6 +34,8 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
 
         for (int i = 0; i < arr.Length; ++i)
         {
+            token.ThrowIfCancellationRequested();
+
             if (arr[i] is not GeneratedTestBuilderAttribute attr)
                 continue;
 
@@ -99,8 +103,8 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
         return Task.FromResult(GetPotentiallyMatchingTests(null, token));
     }
 
-    public Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, CancellationToken token = default)
+    public Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, ulong maxVariations, CancellationToken token = default)
     {
-        return GeneratedTestExpansionHelper.ExpandTestsAsync(logger, originalTests, filter, token);
+        return GeneratedTestExpansionHelper.ExpandTestsAsync(logger, originalTests, filter, token, maxVariations);
     }
 }

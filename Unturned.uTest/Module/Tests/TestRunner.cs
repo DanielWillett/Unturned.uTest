@@ -1,16 +1,14 @@
 using Newtonsoft.Json;
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
-using uTest.Discovery;
 using uTest.Protocol;
 
 namespace uTest.Module;
 
-internal class TestRunner
+internal sealed class TestRunner
 {
     private readonly MainModule _module;
     private readonly ILogger _logger;
@@ -44,7 +42,7 @@ internal class TestRunner
         bool allPass = true;
 
         UnturnedTestList testList = _module.TestList!;
-        TestExecutionPipeline pipeline = new TestExecutionPipeline(this, _logger, testList, _module, _module.ExceptionFormatter, token);
+        TestExecutionPipeline pipeline = new TestExecutionPipeline(_logger, testList, _module, _module.ExceptionFormatter, token);
 
         List<UnturnedTestReference> testUids = testList.Tests.ToList();
 

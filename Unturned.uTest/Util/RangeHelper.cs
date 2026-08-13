@@ -8,16 +8,13 @@ namespace uTest;
 internal static class RangeHelper
 {
     /// <summary>
-    /// Maximum number of variations a test can have.
-    /// </summary>
-    public const int MaxTestVariations = 65535;
-
-    /// <summary>
     /// Gets all values present in a range.
     /// </summary>
-    public static Array GetRangeValues(IUnturnedTestRangeParameter parameter)
+    public static Array GetRangeValues(IUnturnedTestRangeParameter parameter, ulong maxVariations)
     {
-        RangeVisitor visitor = default;
+        RangeVisitor visitor;
+        visitor.Range = null!;
+        visitor.MaxVariations = maxVariations;
         parameter.Visit(ref visitor);
         return visitor.Range ?? throw new InvalidOperationException();
     }
@@ -47,7 +44,7 @@ internal static class RangeHelper
     /// <summary>
     /// Gets all values present in a range.
     /// </summary>
-    public static T[] GetRangeValues<T, TStep>(T from, T to, TStep step)
+    public static T[] GetRangeValues<T, TStep>(T from, T to, TStep step, ulong maxVariations)
         where T : unmanaged
         where TStep : unmanaged, IComparable<TStep>
     {
@@ -60,11 +57,13 @@ internal static class RangeHelper
         // assume: from < to
 
         ulong ct = GetRangeValueCountIntl(from, to, step);
-        switch (ct)
+
+        if (ct == 1)
+            return [ from ];
+
+        if (ct == 0 || ct > maxVariations)
         {
-            case <= 0 or > MaxTestVariations:
-                return Array.Empty<T>();
-            case 1: return [ from ];
+            return Array.Empty<T>();
         }
 
         T[] array = new T[ct];
@@ -316,13 +315,14 @@ internal static class RangeHelper
     private struct RangeVisitor : IUnturnedTestRangeParameterVisitor
     {
         public Array Range;
+        public ulong MaxVariations;
 
         /// <inheritdoc />
         public void Visit<T, TStep>(IUnturnedTestRangeParameter<T, TStep> parameter)
             where T : unmanaged, IConvertible
             where TStep : unmanaged, IComparable<TStep>, IConvertible
         {
-            Range = GetRangeValues(parameter.From, parameter.To, parameter.Step);
+            Range = GetRangeValues(parameter.From, parameter.To, parameter.Step, MaxVariations);
         }
     }
 

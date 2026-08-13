@@ -4,9 +4,8 @@ using System.Runtime.CompilerServices;
 
 namespace uTest.Module;
 
-internal class TestExecutionPipeline : IExceptionFormatter
+internal sealed class TestExecutionPipeline : IExceptionFormatter
 {
-    private readonly TestRunner _runner;
     private readonly ILogger _logger;
     private readonly UnturnedTestList _testList;
     private readonly MainModule _module;
@@ -18,9 +17,8 @@ internal class TestExecutionPipeline : IExceptionFormatter
 
     public IExceptionFormatter ExceptionFormatter { get; set; }
 
-    public TestExecutionPipeline(TestRunner runner, ILogger logger, UnturnedTestList testList, MainModule module, IExceptionFormatter? exceptionFormatter, CancellationToken token)
+    public TestExecutionPipeline(ILogger logger, UnturnedTestList testList, MainModule module, IExceptionFormatter? exceptionFormatter, CancellationToken token)
     {
-        _runner = runner;
         _logger = logger;
         _testList = testList;
         _module = module;
@@ -65,20 +63,17 @@ internal class TestExecutionPipeline : IExceptionFormatter
         TestContext? context;
 
         _logger.LogInformation("Running test...");
-        Task<TestInitErrorCode> task = TestAsyncStateMachine.TryRunTestAsync(CurrentTest, _token, _logger, _stopwatch, _testList, _module, out TestAsyncStateMachine machine);
+        TestAsyncStateMachine? machine = null;
         try
         {
-            if (task is { IsCompleted: true, IsFaulted: false, Result: not TestInitErrorCode.Success })
-            {
-                return ReportTestInitError(task.Result);
-            }
-
             testException = null;
 
             TestInitErrorCode errCode;
             try
             {
-                errCode = await task.ConfigureAwait(false);
+                errCode = await TestAsyncStateMachine
+                    .TryRunTestAsync(CurrentTest, _token, _logger, _stopwatch, _testList, _module, out machine)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -94,16 +89,16 @@ internal class TestExecutionPipeline : IExceptionFormatter
             }
 
             // Context can be null if the ITestRunnerActivator failed or some exception was thrown
-            context = (TestContext?)machine.Context;
+            context = (TestContext?)machine?.Context;
 
-            TestTimingStep? invokeTimingStep = machine.TimingSteps.Find(x => x.Stage == TestRunStopwatchStage.Execute);
+            TestTimingStep? invokeTimingStep = machine?.TimingSteps.Find(x => x.Stage == TestRunStopwatchStage.Execute);
 
             summary = new TestExecutionSummary
             {
                 SessionUid = _testList.SessionUid,
                 Uid = CurrentTest.Instance.Uid,
                 Artifacts = context?.Artifacts,
-                TimingSteps = machine.TimingSteps,
+                TimingSteps = machine?.TimingSteps,
                 OutputMessages = context?.Messages
             };
 
@@ -116,11 +111,13 @@ internal class TestExecutionPipeline : IExceptionFormatter
         }
         finally
         {
-            await machine.CleanupTestAsync();
+            if (machine != null)
+            {
+                await machine.CleanupTestAsync();
 
-            await GameThread.Switch();
-            if (machine is { Context: IDisposable disposable })
-                disposable.Dispose();
+                await GameThread.Switch();
+                machine.Dispose();
+            }
         }
 
         if (testException != null)
@@ -137,7 +134,7 @@ internal class TestExecutionPipeline : IExceptionFormatter
         if (testException != null)
             _logger.LogError($"Test \"{CurrentTest!.Instance.Uid}\" failed with exception.", testException);
 
-        return new TestExecutionResult(machine.Result ?? TestResult.Fail, summary);
+        return new TestExecutionResult(machine?.Result ?? TestResult.Fail, summary);
     }
 
     private TestExecutionResult ReportTestInitError(TestInitErrorCode errCode)

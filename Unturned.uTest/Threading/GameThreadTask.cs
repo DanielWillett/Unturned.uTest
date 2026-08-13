@@ -30,8 +30,10 @@ public class GameThreadTaskAwaiter : ICriticalNotifyCompletion
     internal ExceptionDispatchInfo? Exception;
     private bool _disposed;
     
+#pragma warning disable IDE0044
     // do not make readonly, NS2.1 has the struct as readonly but NF doesnt
     private CancellationTokenRegistration _tokenCancel;
+#pragma warning restore IDE0044
 
     public bool IsCompleted { get; private set; }
 
@@ -66,7 +68,7 @@ public class GameThreadTaskAwaiter : ICriticalNotifyCompletion
             throw new OperationCanceledException(tkn);
 
         if (!GameThread.IsCurrent)
-            throw new InvalidOperationException("Do not use GetResult directly on this task.");
+            throw new InvalidOperationException(Properties.Resources.InvalidOperationException_TaskGetResultNotSupported);
     }
 
     /// <inheritdoc />
@@ -83,10 +85,9 @@ public class GameThreadTaskAwaiter : ICriticalNotifyCompletion
 
     internal virtual void OnCompletedIntl(Action continuation, bool flowExecutionContext)
     {
-        _continuation = continuation;
-
         if (!_isSkip && GameThread.IsCurrent)
         {
+            _continuation = continuation;
             Complete();
             return;
         }
@@ -94,7 +95,12 @@ public class GameThreadTaskAwaiter : ICriticalNotifyCompletion
         if (flowExecutionContext)
             _executionContext = ExecutionContext.Capture();
 
-        GameThread.QueueTask(this);
+        _continuation = continuation;
+
+        if (_isSkip)
+            GameThread.QueueSkippedTask(this);
+        else
+            GameThread.QueueTask(this);
     }
 
     internal void Complete()

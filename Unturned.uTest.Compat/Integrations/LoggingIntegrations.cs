@@ -10,7 +10,7 @@ namespace uTest.Compat;
 internal static class LoggingIntegrations
 {
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static ILoggerIntegration TryInstallOpenModLoggingIntegration(ILogger logger)
+    public static ILoggerIntegration TryInstallOpenModLoggingIntegration(ILogger logger, LogLevel minimumLogLevel)
     {
         Assembly asm = HotloaderAssemblyHelper.LoadAssemblyMaybeFromHotloader(
             new AssemblyName(
@@ -20,6 +20,6 @@ internal static class LoggingIntegrations
 
         Type integrationType = asm.GetType("uTest.Compat.OpenMod.Logging.OpenModLoggerIntegration", throwOnError: true);
 
-        return (ILoggerIntegration)Activator.CreateInstance(integrationType);
+        return (ILoggerIntegration)Activator.CreateInstance(integrationType, minimumLogLevel);
     }
 }

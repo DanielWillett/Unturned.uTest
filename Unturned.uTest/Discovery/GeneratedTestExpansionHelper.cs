@@ -18,11 +18,12 @@ internal static class GeneratedTestExpansionHelper
         public List<string>? UidsToFind;
         public List<UnturnedTestInstance> Instances;
         public TestExpandProcessor Processor;
+        public CancellationToken Token;
     }
 
-    public static async Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, CancellationToken token)
+    public static async Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, CancellationToken token, ulong maxVariations)
     {
-        TestExpandProcessor processor = new TestExpandProcessor(logger, originalTests, token);
+        TestExpandProcessor processor = new TestExpandProcessor(logger, originalTests, token, maxVariations);
 
         List<string>? uidsToFind = null;
         List<UnturnedTestInstance>? instances = null;
@@ -35,8 +36,11 @@ internal static class GeneratedTestExpansionHelper
             state.Instances = instances;
             state.UidsToFind = null;
             state.Processor = processor;
+            state.Token = token;
             await filter.ForEachUid(ref state, static (ref state, id) =>
             {
+                state.Token.ThrowIfCancellationRequested();
+
                 ValueTask<UnturnedTestInstance?> task = state.Processor.GetTestFromUid(id);
                 if (!task.IsCompleted)
                 {
@@ -107,7 +111,7 @@ internal static class GeneratedTestExpansionHelper
                 filter.UidCount - instances.Count, filter.UidCount)).ConfigureAwait(false);
         }
 
-        return instances!;
+        return instances;
     }
 
     internal enum FromMemberType { Field, Property, Method, MethodWithCancellationToken }
@@ -176,6 +180,8 @@ internal class TestExpandProcessor
     private readonly Dictionary<Type, object?> _runners;
     private readonly CancellationToken _token;
 
+    private readonly ulong _maxVariations;
+
     private readonly List<UnturnedTestInstance> _instances;
 
     private bool _treeFilterNeedsPropertyBag;
@@ -204,7 +210,7 @@ internal class TestExpandProcessor
     private string _managedMethod;
 
 #nullable restore
-    public TestExpandProcessor(ILogger logger, List<UnturnedTest> originalTests, CancellationToken token)
+    public TestExpandProcessor(ILogger logger, List<UnturnedTest> originalTests, CancellationToken token, ulong maxVariations)
     {
         token.ThrowIfCancellationRequested();
 
@@ -214,6 +220,7 @@ internal class TestExpandProcessor
 
         _runners = new Dictionary<Type, object?>();
         _instances = new List<UnturnedTestInstance>();
+        _maxVariations = maxVariations;
     }
     
     private MethodInfo? _expandedTestMethod;
@@ -223,6 +230,8 @@ internal class TestExpandProcessor
     /// </summary>
     internal ValueTask<UnturnedTestInstance?> GetTestFromUid(UnturnedTestUid uid)
     {
+        _token.ThrowIfCancellationRequested();
+
         if (!UnturnedTestUid.TryParse(
                 uid.Uid,
                 out ReadOnlyMemory<char> managedType,
@@ -274,6 +283,8 @@ internal class TestExpandProcessor
 
         foreach (UnturnedTest test in _originalTests)
         {
+            _token.ThrowIfCancellationRequested();
+
             if (test.Owner == null)
                 continue;
 
@@ -528,6 +539,7 @@ internal class TestExpandProcessor
         Stopwatch sw = Stopwatch.StartNew();
         foreach (UnturnedTest test in _originalTests)
         {
+            _token.ThrowIfCancellationRequested();
             await ExpandTestAsync(test).ConfigureAwait(false);
         }
         sw.Stop();
@@ -691,6 +703,8 @@ internal class TestExpandProcessor
             ulong variationCount = 1;
             for (int i = 0; i < typeParams.Length; ++i)
             {
+                _token.ThrowIfCancellationRequested();
+
                 if (typeParams[i] is not UnturnedTestSetParameter { Values: Type[] set })
                 {
                     variationCount = 0;
@@ -704,7 +718,8 @@ internal class TestExpandProcessor
             }
 
             // if any type parameters dont have a set attribute it can't be expanded
-            if (variationCount * expansionFactor is > 0 and <= RangeHelper.MaxTestVariations)
+            ulong newVariations = variationCount * expansionFactor;
+            if (newVariations > 0 && newVariations <= _maxVariations)
             {
                 expansionFactor *= variationCount;
 
@@ -760,6 +775,8 @@ internal class TestExpandProcessor
         {
             for (int ti = 0; ti < typeArgs.Length; ti++)
             {
+                _token.ThrowIfCancellationRequested();
+
                 UnturnedTestArgs args = typeArgs[ti];
                 args.IsValid = true;
                 if (args.Values is not Type[] types)
@@ -837,7 +854,7 @@ internal class TestExpandProcessor
                     Properties.Resources.LogErrorParametersMissingValues,
                     _test.DisplayName,
                     _testType.FullName,
-                    RangeHelper.MaxTestVariations
+                    _maxVariations
                 )
 #if DEBUG
                 + $" (type, expandingTypeArgs: {isExpandingTypeParams}, provider: {provider}, anyArgs: {anyArgs}, hasSetParams: {hasSetParams}, expansionFactor: {expansionFactor})"
@@ -980,6 +997,8 @@ internal class TestExpandProcessor
         bool hasAnySetsOrRanges = false;
         for (int i = 0; i < _test.Parameters.Length; ++i)
         {
+            _token.ThrowIfCancellationRequested();
+
             ParameterValuesInfo info = default;
             UnturnedTestParameter p = _test.Parameters[i];
 
@@ -988,7 +1007,7 @@ internal class TestExpandProcessor
             if (p is IUnturnedTestRangeParameter rangeParam)
             {
                 hasAnySetsOrRanges = true;
-                info.Values = RangeHelper.GetRangeValues(rangeParam);
+                info.Values = RangeHelper.GetRangeValues(rangeParam, _maxVariations);
                 UnturnedTestSetParameterInfo set = rangeParam.SetParameterInfo;
                 if (set.Values != null)
                 {
@@ -1071,7 +1090,8 @@ internal class TestExpandProcessor
             variationCount *= infos[i].UniqueCount;
         }
 
-        if (variationCount * expansionFactor is > 0 and <= RangeHelper.MaxTestVariations)
+        ulong newVariations = variationCount * expansionFactor;
+        if (newVariations > 0 && newVariations <= _maxVariations)
         {
             int variationCountFixed = checked( (int)variationCount );
 
@@ -1118,7 +1138,7 @@ internal class TestExpandProcessor
                     Properties.Resources.LogErrorParametersMissingValues,
                     _test.DisplayName,
                     _testTypeInstance.FullName,
-                    RangeHelper.MaxTestVariations
+                    _maxVariations
                 )
             ).ConfigureAwait(false);
         }

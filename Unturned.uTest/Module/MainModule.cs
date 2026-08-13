@@ -149,19 +149,6 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         Accessor.LogWarningMessages = true;
         Accessor.LogErrorMessages = true;
 
-        LoadLoggerIntegration();
-        
-        if (LoggerIntegration != null)
-        {
-            Accessor.Logger = new ReflectionToolsLoggerWrapper(
-                LoggerIntegration.CreateNamedLogger("DanielWillett.ReflectionTools")
-            );
-        }
-        else
-        {
-            Accessor.Logger = DefaultLoggerReflectionTools.Logger;
-        }
-
         IsFaulted = false;
         HomeDirectory = homeDir;
         Instance = this;
@@ -185,11 +172,43 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         {
             Logger.LogError(
                 !failedToParse
-                    ? $"""Test file not provided or unable to be read. U3DS must be launched with command line: {TestFileCommandLine} "File\Path\To\Tests.yml"."""
+                    ? $"""Test file not provided or unable to be read. U3DS must be launched with command line: {TestFileCommandLine} "File\Path\To\test-settings.json"."""
                     : "Test file failed to parse valid JSON."
             );
             IsFaulted = true;
             return;
+        }
+
+        LogLevel minLogLevel = TestList!.MinimumLogLevel;
+        if (minLogLevel > LogLevel.Debug)
+            Accessor.LogDebugMessages = false;
+        if (minLogLevel > LogLevel.Information)
+            Accessor.LogInfoMessages = false;
+        if (minLogLevel > LogLevel.Warning)
+            Accessor.LogWarningMessages = false;
+        if (minLogLevel > LogLevel.Error)
+            Accessor.LogErrorMessages = false;
+
+        LoadLoggerIntegration();
+
+        if (LoggerIntegration != null)
+        {
+            Accessor.Logger = new ReflectionToolsLoggerWrapper(
+                LoggerIntegration.CreateNamedLogger("DanielWillett.ReflectionTools")
+            );
+        }
+        else
+        {
+            Accessor.Logger = DefaultLoggerReflectionTools.Logger;
+        }
+
+        if (Dedicator.isStandaloneDedicatedServer)
+        {
+            CommandWindowLogger.Instance.MinimumLogLevel = minLogLevel;
+        }
+        else
+        {
+            UnturnedLogLogger.Instance.MinimumLogLevel = minLogLevel;
         }
 
         if (Dedicator.isStandaloneDedicatedServer)
@@ -204,7 +223,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
 
         Version version = Assembly.GetExecutingAssembly().GetName().Version;
 
-        TestAssembly = Array.Find(module.assemblies, x => string.Equals(x.FullName, TestList.TestAssembly));
+        TestAssembly = Array.Find(module.assemblies, x => string.Equals(x.FullName, TestList!.TestAssembly));
         if (TestAssembly == null)
         {
             Logger.LogError("Failed to find test assembly.");
@@ -231,7 +250,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         Logger.LogInformation(log);
 
         Logger.LogInformation("If you see a dependency error below this about StackCleaner it can be ignored.");
-        ExceptionFormatter ??= StackCleanerExceptionFormatter.GetStackCleanerFormatterIfInstalled(TestList.UseColorfulStackTrace);
+        ExceptionFormatter ??= StackCleanerExceptionFormatter.GetStackCleanerFormatterIfInstalled(TestList!.UseColorfulStackTrace);
 
 
         // Patches
@@ -258,11 +277,14 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         }
 
         Dummies = new DummyManager(this);
-        Dummies.ClearPlayerDataFromDummies();
+        if (Dedicator.isStandaloneDedicatedServer)
+            Dummies.ClearPlayerDataFromDummies();
 
         Environment = new TestEnvironmentServer(Logger);
 
-        Task t = DiscoverTestsAsync(TestList);
+        StartCoroutine(PingCoroutine());
+
+        Task t = DiscoverTestsAsync(TestList!);
         if (!t.IsCompleted)
         {
             _discoverTestsTask = t;
@@ -288,7 +310,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
             if (_hasQuit)
                 return;
 
-            Logger.LogWarning("Lost contact with runner, shutting down...");
+            Logger.LogError("Lost contact with runner, shutting down...");
             GameThread.Run(this, me =>
             {
                 me.ForceQuitGame("Shutdown due to losing contact with runner", UnturnedTestExitCode.GracefulShutdown);
@@ -346,6 +368,12 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
             });
             return true;
         });
+
+        Environment.AddMessageHandler<PingMessage>(_ =>
+        {
+            ++_pingResponses;
+            return true;
+        });
     }
 
     internal ILogger GetOrCreateLogger(string name)
@@ -358,6 +386,57 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
     public void Cancel()
     {
         _cancellationTokenSource?.Cancel();
+    }
+
+    private int _pingResponses;
+
+    private IEnumerator PingCoroutine()
+    {
+        _pingResponses = 0;
+        bool hasConnectedOnce = false;
+        while (!CancellationToken.IsCancellationRequested)
+        {
+            yield return new WaitForSecondsRealtime(0.5f);
+
+            int next = _pingResponses + 1;
+
+            if (Environment == null)
+                break;
+
+            if (Environment.IsConnected)
+            {
+                hasConnectedOnce = true;
+            }
+            else if (!hasConnectedOnce)
+                continue;
+
+            if (!Environment.IsConnected)
+            {
+                Logger.LogWarning("Not connected, skipping ping.");
+                continue;
+            }
+
+            try
+            {
+                _ = Environment.SendAsync(new PingMessage(true), CancellationToken);
+            }
+            catch (OperationCanceledException) when (CancellationToken.IsCancellationRequested)
+            {
+                Logger.LogWarning($"Ping cancelled {next}.");
+            }
+
+            float start = Time.realtimeSinceStartup;
+            while (_pingResponses != next && Time.realtimeSinceStartup - start < 5)
+            {
+                yield return null;
+            }
+
+            if (_pingResponses != next)
+            {
+                Logger.LogError($"Didn't respond to ping {next}.");
+                _pingResponses = next;
+            }
+        }
     }
 
     private void HandlePlayerConnected(CSteamID steamID)
@@ -410,7 +489,8 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
 
         Logger.LogInformation($"Discovering tests in \"{TestAssembly.GetName().FullName}\" ...");
 
-        List<UnturnedTestInstance> tests = await list.GetMatchingTestsAsync(Logger, filter, CancellationToken).ConfigureAwait(false);
+        ulong maxVariations = TestList?.MaxTestVariations ?? 65535ul;
+        List<UnturnedTestInstance> tests = await list.GetMatchingTestsAsync(Logger, filter, maxVariations, CancellationToken).ConfigureAwait(false);
 
         await GameThread.Switch();
 
@@ -585,15 +665,18 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         }
         _nextFrameLevelIsLoaded = true;
     }
-    
+
+    private bool _firstLevelLoad = true;
     // client only
     private void OnLevelLoaded(int level)
     {
         if (level != Level.BUILD_INDEX_MENU)
             return;
 
-        Level.onLevelLoaded -= OnLevelLoaded;
-        _nextFrameMenuIsLoaded = true;
+        // Level.onLevelLoaded -= OnLevelLoaded;
+        _nextFrameMenuIsLoaded = _firstLevelLoad;
+        _firstLevelLoad = false;
+        Logger.LogInformation("Menu loaded.");
     }
 
     /// <summary>
@@ -609,7 +692,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
             return;
         }
 
-        Logger.LogInformation(isMenu ? "Menu loaded." : "World loaded.");
+        Logger.LogInformation(isMenu ? "Triggering start cause menu loaded." : "Triggering start cause level loaded.");
 
         Task.Run(async () =>
         {
@@ -679,7 +762,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
                         continue;
                     }
 
-                    hook = hooks.Find(x => type.IsInstanceOfType(x));
+                    hook = hooks.Find(type.IsInstanceOfType);
                     if (hook == null)
                     {
                         ConstructorInfo? ctor = type.GetConstructor([ typeof(ILogger) ]);
@@ -786,7 +869,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         {
             try
             {
-                ILoggerIntegration openMod = LoggingIntegrations.TryInstallOpenModLoggingIntegration(Logger);
+                ILoggerIntegration openMod = LoggingIntegrations.TryInstallOpenModLoggingIntegration(Logger, TestList!.MinimumLogLevel);
 
                 integrations.Add(openMod);
             }
@@ -982,7 +1065,19 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
 
         UnturnedLog.info($"uTest Quit game: {reason}. Exit code: {(int)exitCode} ({exitCode}).");
         Dispose();
-        Application.Quit((int)exitCode);
+
+        Type? edtiorType = Type.GetType("UnityEditor.EditorApplication, UnityEditor");
+        if (edtiorType != null)
+        {
+            PropertyInfo? isPlaying = edtiorType.GetProperty("isPlaying", typeof(bool));
+            if (isPlaying is { CanWrite: true })
+                isPlaying.SetValue(null, false);
+        }
+        else
+        {
+            Application.Quit((int)exitCode);
+        }
+
         throw new QuitGameException();
     }
 }

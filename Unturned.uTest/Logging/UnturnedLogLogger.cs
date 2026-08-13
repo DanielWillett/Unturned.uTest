@@ -8,6 +8,8 @@ namespace uTest.Logging;
 /// </summary>
 public sealed class UnturnedLogLogger : ILogger
 {
+    internal LogLevel MinimumLogLevel { get; set; }
+
     /// <summary>
     /// Singleton instance of <see cref="UnturnedLogLogger"/>.
     /// </summary>
@@ -96,7 +98,7 @@ public sealed class UnturnedLogLogger : ILogger
     /// <inheritdoc />
     public Task LogAsync<TState>(LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        if (logLevel == LogLevel.None)
+        if (logLevel == LogLevel.None || logLevel < MinimumLogLevel)
             return Task.CompletedTask;
 
         string message = formatter(state, null);
@@ -117,7 +119,7 @@ public sealed class UnturnedLogLogger : ILogger
     /// <inheritdoc />
     public void Log<TState>(LogLevel logLevel, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        if (logLevel == LogLevel.None)
+        if (logLevel == LogLevel.None || logLevel < MinimumLogLevel)
             return;
 
         string message = formatter(state, null);
@@ -135,5 +137,5 @@ public sealed class UnturnedLogLogger : ILogger
         StringBuilderPool.Return(sb);
     }
 
-    public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
+    public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None && logLevel >= MinimumLogLevel;
 }

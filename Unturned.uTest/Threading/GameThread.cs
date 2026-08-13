@@ -14,6 +14,7 @@ public static class GameThread
     private static readonly List<IRunAndWaitState> Waiters = new List<IRunAndWaitState>();
     private static readonly ConcurrentQueue<Action> Continuations = new ConcurrentQueue<Action>();
     private static readonly ConcurrentQueue<GameThreadTaskAwaiter> TaskAwaiters = new ConcurrentQueue<GameThreadTaskAwaiter>();
+    private static readonly ConcurrentQueue<GameThreadTaskAwaiter> SkipQueue = new ConcurrentQueue<GameThreadTaskAwaiter>();
     private static bool _hasFlushedRunAndWaits;
 
     public static bool HasStartedShuttingDown => _hasFlushedRunAndWaits;
@@ -49,9 +50,7 @@ public static class GameThread
     /// </summary>
     public static GameThreadTask SwitchOrSkip(CancellationToken token = default)
     {
-        return IsCurrent
-            ? GameThreadTask.CompletedTask
-            : new GameThreadTask(false, true, token);
+        return new GameThreadTask(false, true, token);
     }
 
     /// <summary>
@@ -85,6 +84,11 @@ public static class GameThread
         {
             action();
         }
+
+        while (SkipQueue.TryDequeue(out GameThreadTaskAwaiter awaiter))
+        {
+            TaskAwaiters.Enqueue(awaiter);
+        }
     }
 
     internal static void FlushRunAndWaits()
@@ -95,9 +99,15 @@ public static class GameThread
 
         lock (Waiters)
         {
-            foreach (IRunAndWaitState state in Waiters)
+            while (Waiters.Count > 0)
             {
-                state.Run();
+                // a state can queue something else, so this needs to keep running
+                for (int i = Waiters.Count - 1; i >= 0; i--)
+                {
+                    IRunAndWaitState state = Waiters[i];
+                    Waiters.RemoveAt(i);
+                    state.Run();
+                }
             }
 
             Waiters.Clear();
@@ -112,9 +122,9 @@ public static class GameThread
     /// <remarks>Exceptions will be logged.</remarks>
     /// <param name="action">The code to run on the main thread.</param>
     /// <exception cref="InvalidOperationException">The game has started shutting down.</exception>
-    public static void Run(Action action)
+    public static void Run(Action action, bool forceQueue = false)
     {
-        if (IsCurrent)
+        if (IsCurrent && !forceQueue)
         {
             try
             {
@@ -144,9 +154,9 @@ public static class GameThread
     /// <param name="action">The code to run on the main thread.</param>
     /// <typeparam name="T">Generic argument to supply to the action. Helps avoid closure allocations.</typeparam>
     /// <exception cref="InvalidOperationException">The game has started shutting down.</exception>
-    public static void Run<T>(T arg, Action<T> action)
+    public static void Run<T>(T arg, Action<T> action, bool forceQueue = false)
     {
-        if (IsCurrent)
+        if (IsCurrent && !forceQueue)
         {
             try
             {
@@ -171,6 +181,11 @@ public static class GameThread
     internal static void QueueTask(GameThreadTaskAwaiter awaiterTask)
     {
         TaskAwaiters.Enqueue(awaiterTask);
+    }
+
+    internal static void QueueSkippedTask(GameThreadTaskAwaiter awaiterTask)
+    {
+        SkipQueue.Enqueue(awaiterTask);
     }
 
     /// <summary>

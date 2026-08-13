@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using Microsoft.Testing.Platform.Configurations;
 using uTest.Compat;
 using uTest.Logging;
 using uTest.Module;
 using uTest.Protocol;
+using uTest.Runner.Util;
 
 namespace uTest.Runner.Unturned;
 
@@ -16,6 +18,7 @@ internal class UnturnedLauncher : IDisposable
 
     private readonly bool _u3ds;
     private readonly ILogger _logger;
+    private readonly IConfiguration _configuration;
 
     private readonly InstallDirUtility _unturnedInstallDir;
 
@@ -28,8 +31,10 @@ internal class UnturnedLauncher : IDisposable
 
     // originally did a short amount of time here but OpenMod can start up pretty slowly the first time
     public TimeSpan StartupTimeout { get; set; } = TimeSpan.FromMinutes(1.5);
+    public TimeSpan SdkStartupTimeout { get; set; } = TimeSpan.FromMinutes(5);
     public TimeSpan LoadTimeout { get; set; } = TimeSpan.FromMinutes(5);
     public TimeSpan SteamLaunchTimeout { get; set; } = TimeSpan.FromMinutes(1);
+    public TimeSpan UnityLaunchTimeout { get; set; } = TimeSpan.FromMinutes(1);
 
     public string? UnturnedDirectoryOverride
     {
@@ -39,13 +44,14 @@ internal class UnturnedLauncher : IDisposable
 
     public UnturnedTestExitCode ExitCode { get; private set; }
 
-    public UnturnedLauncher(bool u3ds, ILogger logger, string? unturnedDirectoryOverride = null)
+    public UnturnedLauncher(bool u3ds, ILogger logger, IConfiguration configuration, string? unturnedDirectoryOverride = null)
     {
         if (u3ds && RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             throw new PlatformNotSupportedException("U3DS is not available for MacOS.");
 
         _u3ds = u3ds;
         _logger = logger;
+        _configuration = configuration;
 
         _unturnedInstallDir = new InstallDirUtility(u3ds, logger);
 
@@ -125,6 +131,144 @@ internal class UnturnedLauncher : IDisposable
         }
     }
 
+    public async Task LaunchSdk(string sdkPath, Assembly testAssembly, string serverId, CancellationToken token)
+    {
+        if (UnturnedDirectoryOverride == null)
+            throw new InvalidOperationException("SDK path not configured.");
+
+        string installDir = Path.Combine(sdkPath, "Builds", "Shared");
+
+        string mainWindowTitle = Path.GetFileName(sdkPath);
+
+        List<Process> existingUnityProcesses = Process
+            .GetProcessesByName("Unity Editor")
+            .Concat(Process.GetProcessesByName("Unity"))
+            .ToList();
+
+        Process? u3SdkEditorProcess = existingUnityProcesses.Find(
+            p => p.MainWindowTitle.StartsWith(mainWindowTitle, StringComparison.Ordinal)
+        );
+
+        existingUnityProcesses.ForEach(p =>
+        {
+            if (p != u3SdkEditorProcess)
+                p.Dispose();
+        });
+
+        if (u3SdkEditorProcess == null)
+        {
+            _logger.LogInformation($"{mainWindowTitle} is not open, attempting to launch.");
+            if (!LaunchUnity(sdkPath, ref u3SdkEditorProcess))
+            {
+                _logger.LogWarning("uTest failed to launch Unity. This may cause problems.");
+            }
+        }
+
+        _logger.LogInformation("Waiting for user to start playing in editor...");
+
+        UnturnedBootState state = new UnturnedBootState
+        {
+            DisabledModule = false,
+            MovedModule = false
+        };
+
+        TryWriteModuleDirectoryOrSetEnabled(installDir, testAssembly, serverId);    
+
+        try
+        {
+            await WaitForUnturnedStartup(u3SdkEditorProcess, true, installDir, testAssembly, serverId, state, token);
+        }
+        catch
+        {
+            if (!state.DisabledModule)
+                DisableModule(installDir, testAssembly, serverId);
+
+            if (!state.MovedModule)
+                ClientRemoveModule();
+
+            throw;
+        }
+
+        u3SdkEditorProcess?.Dispose();
+    }
+
+    private bool LaunchUnity(string sdkPath, ref Process? unityProcess)
+    {
+        if (!UnityInstallationHelper.TryGetUnityVersionFromProject(sdkPath, out UnityEngineVersion expectedVersion))
+        {
+            _logger.LogWarning($"Unable to determine Unity version from SDK at \"{sdkPath}\".");
+            return false;
+        }
+
+        if (!UnityInstallationHelper.TryFindUnityInstall(expectedVersion, out string? exe, out UnityEngineVersion version))
+        {
+            _logger.LogWarning($"Failed to find a Unity installation >= {version}.");
+            return false;
+        }
+
+        if (version != expectedVersion)
+        {
+            _logger.LogWarning($"Expected Unity {expectedVersion} but found {version} at {exe}.");
+            if (version.Major != expectedVersion.Major)
+                return false;
+        }
+
+        string args = $"-projectPath \"{sdkPath}\" ‑ignorecompilererrors";
+
+        _logger.LogDebug($"Starting \"{exe}\" with args: '{args}'");
+
+        ProcessStartInfo startInfo = new ProcessStartInfo(exe, args)
+        {
+            WorkingDirectory = Path.GetDirectoryName(exe)!,
+            WindowStyle = ProcessWindowStyle.Maximized
+        };
+
+        try
+        {
+            startInfo.UseShellExecute = false;
+        }
+        catch (NotSupportedException) { }
+
+        Process? process;
+        try
+        {
+            process = Process.Start(startInfo);
+            if (process == null)
+            {
+                _logger.LogWarning($"Failed to start Unity {version} at \"{exe}\".");
+                return false;
+            }
+
+            unityProcess = process;
+        }
+        catch (FileNotFoundException)
+        {
+            _logger.LogWarning($"Failed to find a Unity installation >= {version} at {exe}.");
+            return false;
+        }
+
+        _logger.LogDebug($"Waiting for Unity {version} to start...");
+        try
+        {
+            if (!process.WaitForInputIdle((int)UnityLaunchTimeout.TotalMilliseconds))
+            {
+                _logger.LogWarning($"Timed out waiting for Unity {version} to start.");
+            }
+            else
+            {
+                _logger.LogDebug($"Unity {version} started.");
+            }
+        }
+        catch (NotSupportedException) { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Error waiting on Unity to start. This can maybe be ignored.");
+            _logger.LogWarning(ex.ToString());
+        }
+
+        return true;
+    }
+
     public Task<Process> LaunchUnturned(out bool alreadyLaunched, Assembly testAssembly, string serverId, CancellationToken token)
     {
         Process? existingProcess = _process;
@@ -174,8 +318,6 @@ internal class UnturnedLauncher : IDisposable
 
         async Task<Process> Core(InstallDirUtility installDirUtil, string serverId, CancellationToken token)
         {
-            // Debugger.Launch();
-
             string installDir = installDirUtil.InstallDirectory;
             string exe = Path.Combine(installDir, installDirUtil.GetExecutableRelativePath());
 
@@ -204,7 +346,11 @@ internal class UnturnedLauncher : IDisposable
             TaskCompletionSource<Process> startupTcs = new TaskCompletionSource<Process>();
             _task = startupTcs;
 
-            bool disabledModule = true, movedModule = true;
+            UnturnedBootState state = new UnturnedBootState
+            {
+                DisabledModule = true,
+                MovedModule = true
+            };
 
             Process? process = null;
             try
@@ -243,8 +389,8 @@ internal class UnturnedLauncher : IDisposable
 
                 token.ThrowIfCancellationRequested();
 
-                disabledModule = false;
-                movedModule = false;
+                state.DisabledModule = false;
+                state.MovedModule = false;
                 TryWriteModuleDirectoryOrSetEnabled(installDir, testAssembly, serverId);
 
                 if (_task != startupTcs)
@@ -314,136 +460,7 @@ internal class UnturnedLauncher : IDisposable
 
                 _logger.LogInformation($"Unturned process started with PID {process.Id}.");
 
-                TaskCompletionSource<int> exitCompletionSource = new TaskCompletionSource<int>();
-
-                _process = process;
-                _processId = process.Id;
-
-                process.EnableRaisingEvents = true;
-                EventHandler onExit = (sender, _) =>
-                {
-                    Process process = (Process)sender;
-                    try
-                    {
-                        int exitCode = process.ExitCode;
-                        exitCompletionSource.TrySetResult(exitCode);
-                        _logger.LogInformation($"Unturned process exited with PID {_processId}, error code: {exitCode}.");
-                        ExitCode = (UnturnedTestExitCode)exitCode;
-                    }
-                    catch
-                    {
-                        exitCompletionSource.TrySetResult(int.MaxValue);
-                        _logger.LogInformation($"Unturned process exited with PID {_processId}.");
-                        ExitCode = (UnturnedTestExitCode)int.MaxValue;
-                    }
-                };
-                
-                process.Exited += onExit;
-
-                TaskCompletionSource<int> completionSource = new TaskCompletionSource<int>();
-
-                Action onConnection = () => { completionSource.SetResult(0); };
-
-                // wait for initial connection
-                Client.Connected += onConnection;
-                try
-                {
-                    await Task.WhenAny(Task.Delay(StartupTimeout, token), completionSource.Task, exitCompletionSource.Task);
-                    if (!completionSource.Task.IsCompleted)
-                    {
-                        if (exitCompletionSource.Task.IsCompleted)
-                        {
-                            throw new UnturnedStartException($"Exit code: {exitCompletionSource.Task.Result}.");
-                        }
-
-                        throw new TimeoutException($"Timed out starting server ({StartupTimeout}).");
-                    }
-                }
-                finally
-                {
-                    Client.Connected -= onConnection;
-                }
-
-                process.Exited -= onExit;
-                process.EnableRaisingEvents = false;
-
-                Action onDisconnection = () =>
-                {
-                    try
-                    {
-                        int exitCode = _process.ExitCode;
-                        exitCompletionSource.TrySetResult(exitCode);
-                        _logger.LogInformation($"Unturned process disconnected with PID {_processId}, error code: {exitCode}.");
-                        ExitCode = (UnturnedTestExitCode)exitCode;
-                    }
-                    catch
-                    {
-                        exitCompletionSource.TrySetResult(int.MaxValue);
-                        _logger.LogInformation($"Unturned process disconnected with PID {_processId}.");
-                        ExitCode = (UnturnedTestExitCode)int.MaxValue;
-                    }
-                };
-
-                Client.Disconnected += onDisconnection;
-                try
-                {
-                    _logger.LogInformation("Initial connection established.");
-
-                    completionSource = new TaskCompletionSource<int>();
-
-                    Action<ITransportMessage> onMessage = message =>
-                    {
-                        _logger.LogInformation($"Message received: {message.GetType().FullName}.");
-
-                        switch (message)
-                        {
-                            case LevelLoadedMessage:
-                                completionSource.SetResult(0);
-                                break;
-
-                            case ReadyToRevertModuleChanges:
-                                DisableServersideOnlyChanges(installDir);
-                                _ = Client.SendAsync(new ServerModuleChangesReverted(), token);
-                                break;
-
-                            case AllInstancesStartedMessage:
-                                disabledModule = true;
-                                DisableModule(installDir, testAssembly, serverId);
-                                break;
-                        }
-                    };
-
-
-                    Client.MessageReceived += onMessage;
-                    try
-                    {
-                        await Task.WhenAny(Task.Delay(LoadTimeout, token), completionSource.Task, exitCompletionSource.Task);
-                        if (!completionSource.Task.IsCompleted)
-                        {
-                            if (exitCompletionSource.Task.IsCompleted)
-                            {
-                                throw new UnturnedStartException($"Exit code: {exitCompletionSource.Task.Result}.");
-                            }
-
-                            throw new TimeoutException($"Timed out loading level ({LoadTimeout}).");
-                        }
-                    }
-                    finally
-                    {
-                        Client.MessageReceived -= onMessage;
-                    }
-                }
-                finally
-                {
-                    Client.Disconnected -= onDisconnection;
-                }
-
-                if (exitCompletionSource.Task.IsCompleted)
-                {
-                    throw new UnturnedStartException($"Exit code: {exitCompletionSource.Task.Result}.");
-                }
-
-                _logger.LogInformation("Level loaded.");
+                await WaitForUnturnedStartup(process, false, installDir, testAssembly, serverId, state, token);
 
                 _task?.SetResult(process);
                 _task = null;
@@ -452,10 +469,10 @@ internal class UnturnedLauncher : IDisposable
             }
             catch (Exception ex)
             {
-                if (!disabledModule)
+                if (!state.DisabledModule)
                     DisableModule(installDir, testAssembly, serverId);
 
-                if (!movedModule)
+                if (!state.MovedModule)
                     ClientRemoveModule();
 
                 try
@@ -469,6 +486,160 @@ internal class UnturnedLauncher : IDisposable
                 throw;
             }
         }
+    }
+
+    private class UnturnedBootState
+    {
+        public bool DisabledModule;
+        public bool MovedModule;
+    }
+
+    private async Task WaitForUnturnedStartup(
+        Process? process,
+        bool isSdk,
+        string installDir,
+        Assembly testAssembly,
+        string serverId,
+        UnturnedBootState state,
+        CancellationToken token)
+    {
+        TaskCompletionSource<int> exitCompletionSource = new TaskCompletionSource<int>();
+
+        _process = process;
+        _processId = process?.Id ?? 0;
+
+        EventHandler onExit = (sender, _) =>
+        {
+            Process process = (Process)sender;
+            try
+            {
+                int exitCode = process.ExitCode;
+                exitCompletionSource.TrySetResult(exitCode);
+                _logger.LogInformation($"{(isSdk ? "Unity" : "Unturned")} process exited with PID {_processId}, error code: {exitCode}.");
+                ExitCode = (UnturnedTestExitCode)exitCode;
+            }
+            catch
+            {
+                exitCompletionSource.TrySetResult(int.MaxValue);
+                _logger.LogInformation($"{(isSdk ? "Unity" : "Unturned")} process exited with PID {_processId}.");
+                ExitCode = (UnturnedTestExitCode)int.MaxValue;
+            }
+        };
+
+        if (process != null)
+        {
+            process.EnableRaisingEvents = true;
+            process.Exited += onExit;
+        }
+
+        TaskCompletionSource<int> completionSource = new TaskCompletionSource<int>();
+
+        Action onConnection = () => { completionSource.SetResult(0); };
+
+        // wait for initial connection
+        Client.Connected += onConnection;
+        try
+        {
+            TimeSpan timeout = isSdk ? SdkStartupTimeout : StartupTimeout;
+            await Task.WhenAny(Task.Delay(timeout, token), completionSource.Task, exitCompletionSource.Task);
+            if (!completionSource.Task.IsCompleted)
+            {
+                if (exitCompletionSource.Task.IsCompleted)
+                {
+                    throw new UnturnedStartException($"Exit code: {exitCompletionSource.Task.Result}.");
+                }
+
+                throw new TimeoutException($"Timed out starting server ({timeout}).");
+            }
+        }
+        finally
+        {
+            Client.Connected -= onConnection;
+        }
+
+        if (process != null)
+        {
+            process.Exited -= onExit;
+            process.EnableRaisingEvents = false;
+        }
+
+        Action onDisconnection = () =>
+        {
+            try
+            {
+                int exitCode = _process?.ExitCode ?? -1;
+                exitCompletionSource.TrySetResult(exitCode);
+                _logger.LogInformation($"Unturned process disconnected with PID {_processId}, error code: {exitCode}.");
+                ExitCode = (UnturnedTestExitCode)exitCode;
+            }
+            catch
+            {
+                exitCompletionSource.TrySetResult(int.MaxValue);
+                _logger.LogInformation($"Unturned process disconnected with PID {_processId}.");
+                ExitCode = (UnturnedTestExitCode)int.MaxValue;
+            }
+        };
+
+        Client.Disconnected += onDisconnection;
+        try
+        {
+            _logger.LogInformation("Initial connection established.");
+
+            completionSource = new TaskCompletionSource<int>();
+
+            Action<ITransportMessage> onMessage = message =>
+            {
+                _logger.LogInformation($"Message received: {message.GetType().FullName}.");
+
+                switch (message)
+                {
+                    case LevelLoadedMessage:
+                        completionSource.SetResult(0);
+                        break;
+
+                    case ReadyToRevertModuleChanges:
+                        DisableServersideOnlyChanges(installDir);
+                        _ = Client.SendAsync(new ServerModuleChangesReverted(), token);
+                        break;
+
+                    case AllInstancesStartedMessage:
+                        state.DisabledModule = true;
+                        DisableModule(installDir, testAssembly, serverId);
+                        break;
+                }
+            };
+
+
+            Client.MessageReceived += onMessage;
+            try
+            {
+                await Task.WhenAny(Task.Delay(LoadTimeout, token), completionSource.Task, exitCompletionSource.Task);
+                if (!completionSource.Task.IsCompleted)
+                {
+                    if (exitCompletionSource.Task.IsCompleted)
+                    {
+                        throw new UnturnedStartException($"Exit code: {exitCompletionSource.Task.Result}.");
+                    }
+
+                    throw new TimeoutException($"Timed out loading level ({LoadTimeout}).");
+                }
+            }
+            finally
+            {
+                Client.MessageReceived -= onMessage;
+            }
+        }
+        finally
+        {
+            Client.Disconnected -= onDisconnection;
+        }
+
+        if (exitCompletionSource.Task.IsCompleted)
+        {
+            throw new UnturnedStartException($"Exit code: {exitCompletionSource.Task.Result}.");
+        }
+
+        _logger.LogInformation("Level loaded.");
     }
 
     private string GetUnturnedClientProcessName()

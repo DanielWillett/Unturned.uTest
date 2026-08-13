@@ -1,0 +1,15 @@
+﻿{
+    "environmentVariables":
+    {
+        "TESTINGPLATFORM_DIAGNOSTIC": "1",
+        "TESTINGPLATFORM_DIAGNOSTIC_VERBOSITY": "Trace",
+        "TESTINGPLATFORM_DEFAULT_HANG_TIMEOUT": "00:10:00",
+        "TESTINGPLATFORM_DIAGNOSTIC_SYNCHRONOUS_WRITE": "1"
+    },
+    "uTest":
+    {
+        "preferSdk": false,
+        "sdkPath": "A:\\unity\\U3-SDK",
+        "serverId": "uTest"
+    }
+}

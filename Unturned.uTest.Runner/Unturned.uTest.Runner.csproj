@@ -11,7 +11,7 @@
     <LangVersion>13.0</LangVersion>
 
     <!-- Update build file as well -->
-    <MTPVersion>2.0.1</MTPVersion>
+    <MTPVersion>2.3.3</MTPVersion>
 
     <PackageId>Unturned.uTest.Runner</PackageId>
     <Title>uTest MTP Runner</Title>

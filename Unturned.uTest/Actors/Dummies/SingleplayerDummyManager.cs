@@ -8,8 +8,8 @@ namespace uTest.Dummies;
 internal class SingleplayerDummyManager : IDummyPlayerController, IDisposable
 {
     private readonly MainModule _module;
-    private TaskCompletionSource<int>? _connectCompletionSource;
-    private TaskCompletionSource<int>? _disconnectCompletionSource;
+    private UnityCompletionSource? _connectCompletionSource;
+    private UnityCompletionSource? _disconnectCompletionSource;
 
     private int _events;
 
@@ -47,6 +47,7 @@ internal class SingleplayerDummyManager : IDummyPlayerController, IDisposable
             throw new InvalidOperationException("This player doesn't belong to this controller.");
         }
 
+        _module.Logger.LogInformation($"Loading singleplayer: {State}.");
         await GameThread.Switch(token);
 
         if (State is DummyState.Loading)
@@ -72,7 +73,8 @@ internal class SingleplayerDummyManager : IDummyPlayerController, IDisposable
             throw new InvalidOperationException("Player is already spawned.");
         }
 
-        _connectCompletionSource = new TaskCompletionSource<int>();
+        _connectCompletionSource?.Dispose();
+        _connectCompletionSource = UnityCompletionSource.Create(continueInstantly: false);
         State = DummyState.Loading;
         
         SingleplayerJoinConfiguration config = new SingleplayerJoinConfiguration(Player.Steam64, Player.DisplayName);
@@ -91,6 +93,12 @@ internal class SingleplayerDummyManager : IDummyPlayerController, IDisposable
             _events |= 4;
         }
 
+        if ((_events & 16) == 0)
+        {
+            Provider.onServerShutdown += OnServerShutdown;
+            _events |= 16;
+        }
+
         string map = config.Map ?? Player.Test!.Instance.Test.Map ?? "PEI";
         if (Level.getLevel(map) == null)
         {
@@ -99,10 +107,16 @@ internal class SingleplayerDummyManager : IDummyPlayerController, IDisposable
 
         TryDeleteWorld();
 
+        _module.Logger.LogDebug($"Loading level in singleplayer: {map}.");
         Provider.map = map;
         Provider.singleplayer(config.Difficulty, config.HasCheats);
-        Dedicator.serverID = "uTest"; // this may cause issues in the future but should be good for now
+
+        // this may cause issues in the future but should be good for now and avoids extra patching
+        // a couple things load from ServerSavedata in singleplayer(,) but don't seem to be important
+        Dedicator.serverID = _module.TestList?.ServerId ?? "uTest";
+
         config.LevelConfigurer?.Invoke(Provider.configData, Provider.modeConfigData);
+
         await _connectCompletionSource.Task;
     }
 
@@ -128,7 +142,7 @@ internal class SingleplayerDummyManager : IDummyPlayerController, IDisposable
             // should be impossible
             throw new InvalidOperationException("This player doesn't belong to this controller.");
         }
-
+        
         await GameThread.Switch(token);
 
         if (State is DummyState.Loading)
@@ -158,20 +172,47 @@ internal class SingleplayerDummyManager : IDummyPlayerController, IDisposable
             throw new InvalidOperationException("Player is disconnected.");
         }
 
-        _disconnectCompletionSource = new TaskCompletionSource<int>();
+        _disconnectCompletionSource?.Dispose();
+        _disconnectCompletionSource = UnityCompletionSource.Create(continueInstantly: false);
         State = DummyState.Unloading;
 
-        Provider.RequestDisconnect("Ending singleplayer test.");
-
-        if ((_events & 2) == 0)
+        if (Level.isLoaded)
         {
-            TimeUtility.updated += OnUpdate;
-            _events |= 2;
+            Provider.RequestDisconnect("Ending singleplayer test.");
+        }
+        else
+        {
+            _module.Logger.LogWarning("Level not loaded while despawning actors.");
+        }
+
+        if ((_events & 8) == 0)
+        {
+            Level.onLevelLoaded += OnOtherLevelLoaded;
+            _events |= 8;
         }
 
         await _disconnectCompletionSource.Task;
 
+        await GameThread.Switch();
+
+        // should've already happened
+        if (Player.IsOnline)
+            Player.NotifyDisconnected();
+
+        if ((_events & 16) != 0)
+        {
+            Provider.onServerShutdown -= OnServerShutdown;
+            _events &= ~16;
+        }
+
         TryDeleteWorld();
+
+        _module.Logger.LogInformation("Ended singleplayer test.");
+    }
+
+    private void OnServerShutdown()
+    {
+        Player.NotifyDisconnected();
     }
 
     private void OnEnemyConnected(SteamPlayer player)
@@ -202,6 +243,22 @@ internal class SingleplayerDummyManager : IDummyPlayerController, IDisposable
         _events |= 2;
     }
 
+    private void OnOtherLevelLoaded(int level)
+    {
+        if (level != Level.BUILD_INDEX_MENU)
+            return;
+
+        if ((_events & 8) != 0)
+        {
+            Level.onLevelLoaded -= OnOtherLevelLoaded;
+            _events &= ~8;
+        }
+
+        State = DummyState.Menu;
+        _disconnectCompletionSource?.TryComplete();
+        _disconnectCompletionSource = null;
+    }
+
     private void OnUpdate()
     {
         if (State == DummyState.Loading)
@@ -210,17 +267,9 @@ internal class SingleplayerDummyManager : IDummyPlayerController, IDisposable
                 return;
 
             State = DummyState.Spawned;
-            _connectCompletionSource?.TrySetResult(0);
+            _module.Logger.LogDebug("Level finished loading.");
+            _connectCompletionSource?.TryComplete();
             _connectCompletionSource = null;
-        }
-        else if (State == DummyState.Unloading)
-        {
-            if (Level.isExiting)
-                return;
-
-            State = DummyState.Menu;
-            _disconnectCompletionSource?.TrySetResult(0);
-            _disconnectCompletionSource = null;
         }
 
         if ((_events & 2) == 0)
@@ -247,13 +296,25 @@ internal class SingleplayerDummyManager : IDummyPlayerController, IDisposable
             Provider.onEnemyConnected -= OnEnemyConnected;
         }
 
-        _connectCompletionSource?.TrySetCanceled();
-        _connectCompletionSource = null;
+        if ((_events & 8) != 0)
+        {
+            Level.onLevelLoaded -= OnOtherLevelLoaded;
+        }
 
-        _disconnectCompletionSource?.TrySetCanceled();
-        _disconnectCompletionSource = null;
+        if ((_events & 16) != 0)
+        {
+            Provider.onServerShutdown -= OnServerShutdown;
+        }
 
         _events = 0;
+
+        _connectCompletionSource?.TryCancel();
+        _connectCompletionSource?.Dispose();
+        _connectCompletionSource = null;
+
+        _disconnectCompletionSource?.TryCancel();
+        _disconnectCompletionSource?.Dispose();
+        _disconnectCompletionSource = null;
     }
 
     public enum DummyState
