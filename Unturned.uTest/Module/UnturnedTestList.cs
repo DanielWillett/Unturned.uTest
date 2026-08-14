@@ -36,7 +36,7 @@ internal class UnturnedTestList
     public bool UseColorfulStackTrace { get; set; }
     public ulong MaxTestVariations { get; set; }
     public SteamIdGenerationStyle SteamIdGenerationStyle { get; set; }
-    public LogLevel MinimumLogLevel { get; set; }
+    public Logging.LogLevel MinimumLogLevel { get; set; }
     public string ClientInstallDir { get; set; }
 }
 

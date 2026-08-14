@@ -5,14 +5,22 @@ uTest is a Unit Testing solution for Unturned plugins and modules, client or ser
 
 When you choose to run your tests, an instance of Unturned opens, executes the tests, then closes as quick as possible, reporting results to the IDE.
 
+## Features
+
+### Adaptability
+Run tests using U3DS (the Unturned 3 Dedicated Server), the Unturned client through Steam, or even the [U3-SDK](github.com/SmartlyDressedGames/U3-SDK).
+
+### Simulates Players
+For tests ran on U3DS, allocate dummy players to the tests for checking features that require players. Dummies can be simulated either using a system inspired by [DiFFoZ's Dummies](https://github.com/EvolutionPlugins/Dummy), or complete separate instances of Unturned.
+
 ### Assertions (xunit)
-uTest uses [**xunit** assertions](https://www.nuget.org/packages/xunit.assert) as a standalone package, so you don't have to learn yet another unit testing library's assertion syntax.
+uTest uses [**xunit** assertions](https://www.nuget.org/packages/xunit.v3.assert) as a standalone package, so you don't have to learn yet another unit testing library's assertion syntax.
 
 ### Source Generation
 uTest uses source generation to statically discover tests so what you see in your IDE is what is ran.
 
 ### Microsoft Testing Platform
-uTest is built on the [Microsoft.Testing.Platform](https://learn.microsoft.com/en-us/dotnet/core/testing/microsoft-testing-platform-intro) library which provides a modern unit test API that can run on basically any device and supports most modern IDEs. MTP is still in the experimental phase so some issues could occur.
+uTest is built on the [Microsoft.Testing.Platform](https://learn.microsoft.com/en-us/dotnet/core/testing/microsoft-testing-platform-intro) framework which provides a modern unit test API that can run on basically any device and supports most modern IDEs.
 
 ### .NET Standard or Framework
 uTest supports projects targeting either **.NET Framework 4.7.1+** or **.NET Standard 2.1**. It also works with multi-targeting.
@@ -89,6 +97,9 @@ public class PlayerTests : ITestClassSetup, ITestClassTearDown
 
 ## Installation
 
+> [!TIP]
+> Use project templates instead: [Unturned.uTest.Templates](https://github.com/DanielWillett/Unturned.uTest/blob/master/Unturned.uTest.Templates/README.md).
+
 Put the following properties and references in your csproj file:
 ```xml
 <PropertyGroup>
@@ -120,6 +131,8 @@ Run `dotnet ./TestProject/bin/Debug/netstandard2.1/TestProject.dll --treenode-fi
 
 ## Filtering
 
+Microsoft.Testing.Platform supports filters for running specific tests.
+
 ### Tree-Node
 uTest supports MTP tree-node filters to select tests easier with the `--treenode-filter` command line argument. The basic format is as follows:
 
@@ -143,3 +156,22 @@ The full format also includes generic type parameters and parameter values. More
 uTest also supports the MTP UID list argument with the `--filter-uid` command line argument.
 
 The format is a bit complex to allow for globally unique stable IDs, but it is described [here](https://github.com/DanielWillett/Unturned.uTest/blob/master/Unturned.uTest/Tests/UnturnedTestUid.cs#L18).
+
+## Legal
+```
+Unturned.uTest - An integration testing framework for Unturned.
+Copyright (C) 2026  Daniel Willett
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+```

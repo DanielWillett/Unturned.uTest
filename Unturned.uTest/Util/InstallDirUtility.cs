@@ -13,7 +13,7 @@ namespace uTest;
 public class InstallDirUtility
 {
     private readonly bool _u3ds;
-    private readonly ILogger _logger;
+    private readonly Logging.ILogger _logger;
     private readonly string _cacheFile;
 
     private string GameId => _u3ds ? "1110390" : "304930";
@@ -113,7 +113,7 @@ public class InstallDirUtility
         }
     }
 
-    public InstallDirUtility(bool u3ds, ILogger logger)
+    public InstallDirUtility(bool u3ds, Logging.ILogger logger)
     {
         _u3ds = u3ds;
         _logger = logger;
@@ -261,7 +261,7 @@ public class InstallDirUtility
         return true;
     }
 
-    internal string? FindU3DSInstallation(ILogger logger)
+    internal string? FindU3DSInstallation(Logging.ILogger logger)
     {
         string[] pathsToSearch;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -424,7 +424,7 @@ file static class UnixInstallDirUtility
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static bool TryFindSteamInstallDirectory([NotNullWhen(true)] out string? libraryVcf, [NotNullWhen(true)] out string? steamDirectory, ILogger logger)
+    public static bool TryFindSteamInstallDirectory([NotNullWhen(true)] out string? libraryVcf, [NotNullWhen(true)] out string? steamDirectory, Logging.ILogger logger)
     {
         libraryVcf = null;
 
@@ -471,7 +471,7 @@ file static class UnixInstallDirUtility
         string steamDir,
         [NotNullWhen(true)] ref string? libraryVcf,
         [NotNullWhen(true)] out string? steamDirectory,
-        ILogger logger,
+        Logging.ILogger logger,
         bool logDirNotFound)
     {
         if (!Directory.Exists(steamDir))
@@ -486,7 +486,7 @@ file static class UnixInstallDirUtility
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
-            steamDirectory = File.Exists(macDefaultSteamExeDir + "/steam.sh") ? macDefaultSteamExeDir : null;
+            steamDirectory = File.Exists(macDefaultSteamExeDir + "/steam.sh") ? macDefaultSteamExeDir : null!;
         }
         else
         {
@@ -516,7 +516,7 @@ file static class WindowsInstallDirUtility
     static WindowsInstallDirUtility() { }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static bool TryFindSteamInstallDirectory([NotNullWhen(true)] out string? libraryVcf, [NotNullWhen(true)] out string? steamDirectory, ILogger logger)
+    public static bool TryFindSteamInstallDirectory([NotNullWhen(true)] out string? libraryVcf, [NotNullWhen(true)] out string? steamDirectory, Logging.ILogger logger)
     {
         libraryVcf = null;
 

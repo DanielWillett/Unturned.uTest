@@ -16,7 +16,7 @@ internal static class IgnoreSocketExceptionsOnServer
 
     private static MethodInfo? _patchedMethod;
 
-    internal static bool TryPatch(Harmony harmony, ILogger logger)
+    internal static bool TryPatch(Harmony harmony, Logging.ILogger logger)
     {
         _hasPatch = false;
         Type? type = Type.GetType("SDG.NetTransport.SystemSockets.TransportConnection_SystemSocket, Assembly-CSharp", throwOnError: false, ignoreCase: false);

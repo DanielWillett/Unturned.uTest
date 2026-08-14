@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+
+    <RootNamespace>ProjectName</RootNamespace>
+    <TargetFramework>netstandard2.1</TargetFramework>
+
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <LangVersion>preview</LangVersion>
+
+    <IsUnturnedTestProject>True</IsUnturnedTestProject>
+
+    <DebugType>portable</DebugType>
+    <NoWarn>MSB3277</NoWarn>
+
+    <OpenModTests>False</OpenModTests>
+
+  </PropertyGroup>
+
+  <ItemGroup>
+
+    <PackageReference Include="Unturned.MSBuild" Version="*" IncludeAssets="build"/>
+
+    <UnturnedReference Include="Assembly-CSharp" />
+    <UnturnedReference Include="SDG.NetTransport" />
+    <UnturnedReference Include="UnityEngine.CoreModule" />
+
+    <PackageReference Include="Unturned.uTest" Version="*"/>
+    <PackageReference Include="Unturned.uTest.Runner" Version="*"/>
+
+  </ItemGroup>
+
+<!--/-:msbuild-conditional:noEmit -->
+  <!-- Required for .NET Framework projects. -->
+  <ItemGroup Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETFramework'">
+
+    <Reference Include="netstandard" Private="True" />
+
+  </ItemGroup>
+<!--/+:msbuild-conditional:noEmit -->
+
+  <ItemGroup>
+
+    <!-- Copy the testconfig.json file to your output directory so MTP can find it. -->
+    <None Update="ProjectName.testconfig.json" CopyToOutputDirectory="PreserveNewest"/>
+
+  </ItemGroup>
+
+</Project>

@@ -6,7 +6,7 @@ internal sealed class TestRunParameters
 {
     internal readonly UnturnedTestInstanceData Test;
     internal readonly CancellationToken Token;
-    internal readonly ILogger Logger;
+    internal readonly Logging.ILogger Logger;
 
     internal readonly Action<TestRunParameters, TestRunStopwatchStage>? SignalStart;
     internal readonly Action<TestRunParameters, TestRunStopwatchStage>? SignalEnd;
@@ -23,7 +23,7 @@ internal sealed class TestRunParameters
     internal TestRunParameters(
         UnturnedTestInstanceData test,
         CancellationToken token,
-        ILogger logger,
+        Logging.ILogger logger,
         TestAsyncStateMachine stateMachine,
         UnturnedTestList configuration,
         MainModule module,

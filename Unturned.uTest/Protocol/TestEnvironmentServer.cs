@@ -10,7 +10,7 @@ namespace uTest.Protocol;
 internal class TestEnvironmentServer : TestEnvironmentBaseHost<NamedPipeServerStream>
 {
     /// <inheritdoc />
-    internal TestEnvironmentServer(ILogger logger, int bufferSize = 8192) : base(true, logger, bufferSize) { }
+    internal TestEnvironmentServer(Logging.ILogger logger, int bufferSize = 8192) : base(true, logger, bufferSize) { }
 
     /// <inheritdoc />
     protected override NamedPipeServerStream CreateNewStream()

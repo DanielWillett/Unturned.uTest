@@ -39,7 +39,7 @@ public interface IUnconfiguredTestContext
     /// <summary>
     /// The logger used for this test.
     /// </summary>
-    ILogger Logger { get; }
+    Logging.ILogger Logger { get; }
 
     /// <summary>
     /// Adds an artifact (basically an attachment) to this test.
@@ -147,7 +147,7 @@ public static class TestContext
     /// <summary>
     /// The logger for the currently running test. Identical to accessing <see cref="IUnconfiguredTestContext.Logger"/> from <see cref="Current"/>.
     /// </summary>
-    public static ILogger Logger => Current.Logger;
+    public static Logging.ILogger Logger => Current.Logger;
 }
 
 /// <summary>

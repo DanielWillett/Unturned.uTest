@@ -13,7 +13,7 @@ internal class UnturnedLogClientHook
 
     internal static Action<string>? OnLog;
 
-    internal static bool TryPatch(Harmony harmony, ILogger logger)
+    internal static bool TryPatch(Harmony harmony, Logging.ILogger logger)
     {
         _hasPatch = false;
 

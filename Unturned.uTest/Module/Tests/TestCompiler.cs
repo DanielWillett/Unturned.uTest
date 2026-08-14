@@ -1,4 +1,4 @@
-﻿#define REFLECTION_TOOLS_DEBUG
+﻿// #define REFLECTION_TOOLS_DEBUG
 using System;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -30,7 +30,7 @@ internal static class TestCompiler
         typeof(object) /* awaiter */
     ];
 
-    internal static (TestInvoker?, TestFinalizer?) CompileTestMethods(TestRunParameters parameters, ILogger logger)
+    internal static (TestInvoker?, TestFinalizer?) CompileTestMethods(TestRunParameters parameters, uTest.Logging.ILogger logger)
     {
 #if REFLECTION_TOOLS_DEBUG
         if (Accessor.Logger is not ReflectionToolsLogger)
@@ -54,7 +54,7 @@ internal static class TestCompiler
         );
     }
 
-    private static TestInvoker? CompileTestInvoker(in TaskAwaitableHelper.AwaitableInfo awaitInfo, in UnturnedTestInstance test, ILogger logger)
+    private static TestInvoker? CompileTestInvoker(in TaskAwaitableHelper.AwaitableInfo awaitInfo, in UnturnedTestInstance test, uTest.Logging.ILogger logger)
     {
         DynamicMethod dynMethod = new DynamicMethod(
                 test.Uid + "_Invoke",

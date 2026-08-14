@@ -20,6 +20,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <DefineConstants>$(DefineConstants);SOURCE_GEN</DefineConstants>
+    <NoWarn>CS1591</NoWarn>
 
   </PropertyGroup>
 

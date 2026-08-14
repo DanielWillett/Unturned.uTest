@@ -1,0 +1,126 @@
+{
+	"$schema": "http://json.schemastore.org/template",
+	"name": "uTest Test Project",
+	"identity": "Unturned.uTest.Templates.Default",
+	"groupIdentity": "Unturned.uTest.Templates",
+	"shortName": "uTest",
+	"author": "Daniel Willett",
+	"sourceName": "ProjectName",
+	"preferNameDirectory": true,
+	"tags":
+	{
+		"language": "C#",
+		"type": "project"
+	},
+	"classifications":
+	[
+		"Linux",
+		"macOS",
+		"Windows",
+		"Desktop",
+		"uTest",
+		"Test",
+		"Unturned"
+	],
+	"constraints":
+	{
+		"net-10-or-later":
+		{
+			"type": "sdk-version",
+			"args": "10.*-*"
+		},
+		"project-type":
+		{
+			"type": "project-capability",
+			"args": "CSharp"
+		}
+	},
+	"symbols":
+	{
+		"Framework":
+		{
+			"type": "parameter",
+			"description": "The target framework for the project.",
+			"datatype": "choice",
+			"enableQuotelessLiterals": true,
+			"choices":
+			[
+				{
+					"choice": "netstandard2.1",
+					"description": "Target .NET Standard 2.1 (Recommended)"
+				},
+				{
+					"choice": "net471",
+					"description": "Target .NET Framework 4.7.1"
+				},
+				{
+					"choice": "net472",
+					"description": "Target .NET Framework 4.7.2"
+				},
+				{
+					"choice": "net48",
+					"description": "Target .NET Framework 4.8"
+				},
+				{
+					"choice": "net481",
+					"description": "Target .NET Framework 4.8.1"
+				}
+			],
+			"replaces": "netstandard2.1",
+			"defaultValue": "netstandard2.1"
+		}
+	},
+	"primaryOutputs":
+	[
+		{
+			"path": "ProjectName.csproj"
+		},
+		{
+			"path": "ProjectNameTests.cs"
+		},
+		{
+			"path": "ProjectName.testconfig.json"
+		}
+	],
+	"postActions":
+	[
+		{
+			"actionId": "210D431B-A78B-4D2F-B762-4ED3E3EA9025",
+			"continueOnError": true,
+			"description": "Restore uTest NuGet packages.",
+			"manualInstructions":
+			[
+				{
+					"text": "Run `dotnet restore` to download required packages."
+				}
+			]
+		},
+		{
+			"condition": "(HostIdentifier != \"dotnetcli\")",
+			"actionId": "84C0DA21-51C8-4541-9940-6CA19AF04EE6",
+			"continueOnError": true,
+			"description": "Open the template test file that was created.",
+			"args":
+			{
+				"files": "1"
+			},
+			"manualInstructions": [ ]
+		},
+		{
+			"actionId": "D396686C-DE0E-4DE6-906D-291CD29FC5DE",
+			"continueOnError": true,
+			"description": "Add the project to the solution.",
+			"manualInstructions":
+			[
+				{
+					"text": "Add project to solution."
+				}
+			],
+			"args":
+			{
+				"primaryOutputIndexes": "0",
+				"inRoot": true
+			}
+		}
+	]
+}

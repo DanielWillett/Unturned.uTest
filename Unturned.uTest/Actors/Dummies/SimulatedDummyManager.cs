@@ -15,9 +15,9 @@ internal class SimulatedDummyManager : IDummyPlayerController
     internal readonly Dictionary<ulong, SimulatedDummyPlayerActor> Dummies = new Dictionary<ulong, SimulatedDummyPlayerActor>();
 
     private readonly MainModule _module;
-    private readonly ILogger _logger;
+    private readonly uTest.Logging.ILogger _logger;
 
-    public SimulatedDummyManager(MainModule module, ILogger logger)
+    public SimulatedDummyManager(MainModule module, uTest.Logging.ILogger logger)
     {
         _module = module;
         _logger = logger;

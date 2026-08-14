@@ -27,7 +27,7 @@
 
     <Error Condition="'$(uTestMode)' == 'Unsupported'"
            Code="UNT900"
-           Text="Unsupported target framework: '$(TargetFramework)'. Expected either .NET Framework (&lt;= net481) or .NET Standard (&lt;= netstandard2.1)."
+           Text="Unsupported target framework: '$(TargetFramework)'. Expected either .NET Framework (&gt;= net471) or .NET Standard (&lt;= netstandard2.1)."
           />
 
   </Target>
@@ -49,14 +49,14 @@
     <DebugSymbols>True</DebugSymbols>
     <DebugType>portable</DebugType>
 
-		<!-- Extensions don't seem to get copied to output by default, this fixes it. -->
-		<!-- Unfortunately it also adds a lot of other files. -->
-	  <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- Extensions don't seem to get copied to output by default, this fixes it. -->
+    <!-- Unfortunately it also adds a lot of other files. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsUnturnedTestProject)' == 'True'">
-    
+
     <OutputType>Exe</OutputType>
 
   </PropertyGroup>
@@ -80,7 +80,7 @@
 
     <PropertyGroup Condition="'$(uTestNetTargetFramework)' == ''">
 
-      <uTestNetTargetFramework>net8.0</uTestNetTargetFramework>
+      <uTestNetTargetFramework>net10.0</uTestNetTargetFramework>
 
     </PropertyGroup>
 
@@ -117,7 +117,7 @@
   <ItemGroup Condition="$(IsUnturnedTestProject)">
 
     <!-- Testing Platform Extensions -->
-    
+
     <TestingPlatformBuilderHook Include="5903866E-B8B1-486A-ACD6-EBD76462F241">
       <DisplayName>uTest</DisplayName>
       <TypeFullName>uTest.Runner.TestingPlatformBuilderHook</TypeFullName>
@@ -129,5 +129,23 @@
     <Using Include="uTest"/>
     <Using Include="Xunit"/>
   </ItemGroup>
+
+  <Target Name="_uTest_GatherAnalyzers">
+
+    <ItemGroup>
+      <_uTest_Analyzer Include="@(Analyzer)" Condition="'%(Analyzer.NuGetPackageId)' == 'Unturned.uTest.Runner'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_uTest_RemoveAnalyzers"
+          Condition="'$(DisableUnturnedTestSourceGenerator)' == 'true'"
+          AfterTargets="ResolvePackageDependenciesForBuild;ResolveNuGetPackageAssets"
+          DependsOnTargets="_uTest_GatherAnalyzers">
+
+    <!-- Remove all our analyzers -->
+    <ItemGroup>
+      <Analyzer Remove="@(_uTest_Analyzer)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

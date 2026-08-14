@@ -6,8 +6,6 @@ using SDG.NetPak;
 using System;
 using System.Reflection;
 using System.Reflection.Emit;
-using uTest.Module;
-using uTest.Util;
 
 #pragma warning disable IDE0130
 
@@ -24,7 +22,7 @@ internal static class RemoveReadyToConnectChecks
 
     private static MethodInfo? _patchedMethod;
 
-    internal static bool TryPatch(Harmony harmony, ILogger logger)
+    internal static bool TryPatch(Harmony harmony, Logging.ILogger logger)
     {
         _hasPatch = false;
         Type? type = Type.GetType("SDG.Unturned.ServerMessageHandler_ReadyToConnect, Assembly-CSharp", throwOnError: false, ignoreCase: false);

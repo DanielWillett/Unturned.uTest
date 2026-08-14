@@ -15,7 +15,7 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
         _assembly = assembly;
     }
 
-    public async Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(ILogger logger, ITestFilter? filter, ulong maxVariations, CancellationToken token = default)
+    public async Task<List<UnturnedTestInstance>> GetMatchingTestsAsync(Logging.ILogger logger, ITestFilter? filter, ulong maxVariations, CancellationToken token = default)
     {
         List<UnturnedTest> tests = GetPotentiallyMatchingTests(filter, token);
         return await ExpandTestsAsync(logger, tests, filter, maxVariations, token);
@@ -98,12 +98,12 @@ internal class GeneratedTestRegistrationList : ITestRegistrationList
     }
 
     /// <inheritdoc />
-    public Task<List<UnturnedTest>> GetTestsAsync(ILogger logger, CancellationToken token = default)
+    public Task<List<UnturnedTest>> GetTestsAsync(Logging.ILogger logger, CancellationToken token = default)
     {
         return Task.FromResult(GetPotentiallyMatchingTests(null, token));
     }
 
-    public Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, ulong maxVariations, CancellationToken token = default)
+    public Task<List<UnturnedTestInstance>> ExpandTestsAsync(Logging.ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, ulong maxVariations, CancellationToken token = default)
     {
         return GeneratedTestExpansionHelper.ExpandTestsAsync(logger, originalTests, filter, token, maxVariations);
     }

@@ -1,5 +1,4 @@
-﻿using JetBrains.Annotations;
-using System;
+﻿using System;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -42,7 +41,7 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
 
     public CancellationToken CancellationToken => _parameters.Token;
 
-    public ILogger Logger { get; }
+    public Logging.ILogger Logger { get; }
 
     internal TestContext(TestRunParameters parameters, ITestClass runner)
     {
@@ -128,26 +127,26 @@ internal class TestContext : ITestContext, IDisposable, ICommandInputOutput
 
     private void HandleClientsideLog(string message)
     {
-        AddMessage(LogLevel.Information, message);
+        AddMessage(Logging.LogLevel.Information, message);
         StandardOutput.AppendLine(message);
     }
 
     void ICommandInputOutput.outputInformation(string information)
     {
-        AddMessage(LogLevel.Information, information);
+        AddMessage(Logging.LogLevel.Information, information);
     }
 
     void ICommandInputOutput.outputWarning(string warning)
     {
-        AddMessage(LogLevel.Warning, warning);
+        AddMessage(Logging.LogLevel.Warning, warning);
     }
 
     void ICommandInputOutput.outputError(string error)
     {
-        AddMessage(LogLevel.Error, error);
+        AddMessage(Logging.LogLevel.Error, error);
     }
 
-    private void AddMessage(LogLevel severity, string message)
+    private void AddMessage(Logging.LogLevel severity, string message)
     {
         if (!_parameters.Configuration.CollectTrxProperties)
             return;

@@ -37,7 +37,7 @@ internal class TestAsyncStateMachine
         .GetMethod(nameof(TryRunTestAsyncGeneric), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
         ?? throw new MissingMethodException(nameof(TestAsyncStateMachine), nameof(TryRunTestAsyncGeneric));
 
-    internal TestAsyncStateMachine(UnturnedTestInstanceData test, CancellationToken token, ILogger logger, Stopwatch sw, UnturnedTestList testList, MainModule module)
+    internal TestAsyncStateMachine(UnturnedTestInstanceData test, CancellationToken token, uTest.Logging.ILogger logger, Stopwatch sw, UnturnedTestList testList, MainModule module)
     {
         _parameters = new TestRunParameters(
             test,
@@ -77,7 +77,7 @@ internal class TestAsyncStateMachine
     internal static Task<TestInitErrorCode> TryRunTestAsync(
         UnturnedTestInstanceData test,
         CancellationToken token,
-        ILogger logger,
+        uTest.Logging.ILogger logger,
         Stopwatch sw,
         UnturnedTestList testList,
         MainModule module,

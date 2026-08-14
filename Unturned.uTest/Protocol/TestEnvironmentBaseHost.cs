@@ -16,7 +16,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
     private readonly List<MessageHandler> _handlers;
 
     protected TPipeStream? PipeStream;
-    protected readonly ILogger Logger;
+    protected readonly Logging.ILogger Logger;
 
     protected CancellationTokenSource TokenSource;
     protected readonly SemaphoreSlim Semaphore;
@@ -34,7 +34,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
     public event Action? Disconnected;
     public event Action<ITransportMessage>? MessageReceived;
 
-    private protected TestEnvironmentBaseHost(bool isServer, ILogger logger, int bufferSize = 8192)
+    private protected TestEnvironmentBaseHost(bool isServer, Logging.ILogger logger, int bufferSize = 8192)
     {
         Logger = logger;
         IsServer = isServer;

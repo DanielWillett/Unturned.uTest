@@ -43,29 +43,18 @@ internal static class ModuleFiles
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Threading.Tasks.Extensions.dll",                      "System.Threading.Tasks.Extensions.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
         
 
-        // note: all these weird libraries are used by xunit cause they still target .net standard 1.1
-
-        new EmbeddedModuleFile(SupportedTargetFramework.NetFramework, "uTest.Runner.Module.System.Buffers.dll",                                 "System.Buffers.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Threading.Tasks.dll",                                 "System.Threading.Tasks.exe"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Collections.Concurrent.dll",                          "System.Collections.Concurrent.exe"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Reflection.dll",                                      "System.Reflection.exe"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Reflection.Extensions.dll",                           "System.Reflection.Extensions.exe"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.ObjectModel.dll",                                     "System.ObjectModel.exe"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Globalization.dll",                                   "System.Globalization.exe"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Diagnostics.Debug.dll",                               "System.Diagnostics.Debug.exe"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Diagnostics.Tools.dll",                               "System.Diagnostics.Tools.exe"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Linq.dll",                                            "System.Linq.exe"),
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Text.RegularExpressions.dll",                         "System.Text.RegularExpressions.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Buffers.dll",                                         "System.Buffers.exe"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Collections.Immutable.dll",                           "System.Collections.Immutable.exe"),
         
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System.Diagnostics.DiagnosticSource.dll",                    "System.Diagnostics.DiagnosticSource.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Bcl.AsyncInterfaces.dll",                          "Microsoft.Bcl.AsyncInterfaces.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Extensions.FileSystemGlobbing.dll",                "Microsoft.Extensions.FileSystemGlobbing.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Extensions.DependencyInjection.Abstractions.dll",  "Microsoft.Extensions.DependencyInjection.Abstractions.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Extensions.Logging.Abstractions.dll",              "Microsoft.Extensions.Logging.Abstractions.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.xunit.assert.dll",                                           "xunit.assert.dll"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.xunit.v3.assert.dll",                                        "xunit.v3.assert.dll"),
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.0Harmony.dll",                                               "0Harmony.exe") { ModuleReferenceMode = ModuleFileReferenceMode.Dummies },
 
-        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.xunit.assert (License).txt",                                 "xunit.assert (License).txt"),
+        new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.xunit.v3.assert (License).txt",                              "xunit.v3.assert (License).txt"),
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.System+Microsoft .NET Libraries (License).txt",              "System+Microsoft .NET Libraries (License).txt"),
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Mono Class Libraries (License).txt",                         "Mono Class Libraries (License).txt"),
         new EmbeddedModuleFile(SupportedTargetFramework.Both, "uTest.Runner.Module.Microsoft.Testing.Platform (License).txt",                   "Microsoft.Testing.Platform (License).txt"),
@@ -168,7 +157,7 @@ internal static class ModuleFiles
     internal static void ClientRemoveModule(string moduleFolder, ILogger logger)
     {
         string moduleName = Path.GetFileName(moduleFolder); // uTest usually
-        if (!Directory.Exists(moduleName))
+        if (!Directory.Exists(moduleFolder))
             return;
 
         string unloadedModulesFolder = Path.GetFullPath(Path.Combine(moduleFolder, "..", "..", "UnloadedModules"));

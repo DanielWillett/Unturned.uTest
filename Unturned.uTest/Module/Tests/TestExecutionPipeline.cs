@@ -6,7 +6,7 @@ namespace uTest.Module;
 
 internal sealed class TestExecutionPipeline : IExceptionFormatter
 {
-    private readonly ILogger _logger;
+    private readonly uTest.Logging.ILogger _logger;
     private readonly UnturnedTestList _testList;
     private readonly MainModule _module;
     private readonly CancellationToken _token;
@@ -17,7 +17,7 @@ internal sealed class TestExecutionPipeline : IExceptionFormatter
 
     public IExceptionFormatter ExceptionFormatter { get; set; }
 
-    public TestExecutionPipeline(ILogger logger, UnturnedTestList testList, MainModule module, IExceptionFormatter? exceptionFormatter, CancellationToken token)
+    public TestExecutionPipeline(uTest.Logging.ILogger logger, UnturnedTestList testList, MainModule module, IExceptionFormatter? exceptionFormatter, CancellationToken token)
     {
         _logger = logger;
         _testList = testList;

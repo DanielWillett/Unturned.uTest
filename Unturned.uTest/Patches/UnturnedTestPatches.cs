@@ -9,9 +9,9 @@ namespace uTest.Patches;
 
 internal delegate IEnumerable<CodeInstruction> TranspilerSignature(IEnumerable<CodeInstruction> instructions, ILGenerator generator, MethodBase method);
 
-internal class UnturnedTestPatches(ILogger logger) : IDisposable
+internal class UnturnedTestPatches(Logging.ILogger logger) : IDisposable
 {
-    private readonly ILogger _logger = logger;
+    private readonly Logging.ILogger _logger = logger;
     private Harmony? _harmony;
     private List<Func<Harmony, bool>> _unpatches = null!;
 
@@ -27,7 +27,7 @@ internal class UnturnedTestPatches(ILogger logger) : IDisposable
         register(this);
     }
 
-    public void RegisterPatch(Func<Harmony, ILogger, bool> tryPatch, Func<Harmony, bool> tryUnpatch, bool critical = false)
+    public void RegisterPatch(Func<Harmony, Logging.ILogger, bool> tryPatch, Func<Harmony, bool> tryUnpatch, bool critical = false)
     {
         Harmony? h = _harmony;
         if (h == null)

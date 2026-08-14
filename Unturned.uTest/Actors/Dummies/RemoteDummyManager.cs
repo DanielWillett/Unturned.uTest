@@ -30,7 +30,7 @@ namespace uTest.Dummies;
 internal partial class RemoteDummyManager : IDummyPlayerController, IDisposable
 {
     private readonly MainModule _module;
-    private readonly ILogger _logger;
+    private readonly Logging.ILogger _logger;
     private NamedPipeEndpoint? _rpcServer;
     private TaskCompletionSource<object?>? _condServerModuleChangesReverted;
 
@@ -40,7 +40,7 @@ internal partial class RemoteDummyManager : IDummyPlayerController, IDisposable
 
     internal IServiceProvider ModularRpcsServices { get; private set; }
 
-    public RemoteDummyManager(MainModule module, ILogger logger, IServiceProvider serviceProvider)
+    public RemoteDummyManager(MainModule module, Logging.ILogger logger, IServiceProvider serviceProvider)
     {
         _module = module;
         _logger = logger;

@@ -1,7 +1,7 @@
+using Microsoft.Testing.Platform.Configurations;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using Microsoft.Testing.Platform.Configurations;
 using uTest.Compat;
 using uTest.Logging;
 using uTest.Module;
@@ -21,6 +21,7 @@ internal class UnturnedLauncher : IDisposable
     private readonly IConfiguration _configuration;
 
     private readonly InstallDirUtility _unturnedInstallDir;
+    internal bool HadDummies;
 
     private int _processId;
     private Process? _process;
@@ -356,9 +357,9 @@ internal class UnturnedLauncher : IDisposable
             try
             {
                 if (string.IsNullOrEmpty(launchArgs))
-                    _logger.LogInformation($"Starting Unturned with shell: \"{exe}\".");
+                    await _logger.LogInformationAsync($"Starting Unturned with shell: \"{exe}\".");
                 else
-                    _logger.LogInformation($"Starting Unturned at \"{exe}\" with args \"{launchArgs}\".");
+                    await _logger.LogInformationAsync($"Starting Unturned at \"{exe}\" with args \"{launchArgs}\".");
 
                 string processName = GetUnturnedClientProcessName();
                 if (!_u3ds)
@@ -367,16 +368,26 @@ internal class UnturnedLauncher : IDisposable
                     if (existingUnturnedProcesses.Length > 0)
                     {
                         foreach (Process p in existingUnturnedProcesses) p.Dispose();
-                        _logger.LogError($"Unturned is already open. PID(s): {string.Join(", ", existingUnturnedProcesses.Select(x => x.Id))}");
+                        await _logger.LogErrorAsync($"Unturned is already open. PID(s): {string.Join(", ", existingUnturnedProcesses.Select(x => x.Id))}");
                         throw new InvalidOperationException("Close Unturned before attempting to run singleplayer tests.");
                     }
 
-                    _logger.LogDebug($"Found no existing processes by the name \"{processName}\".");
+                    await _logger.LogDebugAsync($"Found no existing processes by the name \"{processName}\".");
+                }
+
+                // it opens in the background by default if I don't do this
+                if (_u3ds && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    const string conhost = @"C:\Windows\System32\conhost.exe";
+                    if (File.Exists(conhost))
+                    {
+                        launchArgs = $"-- \"{exe}\" {launchArgs}";
+                        exe = "conhost.exe";
+                    }
                 }
 
                 ProcessStartInfo startInfo = new ProcessStartInfo(exe, launchArgs)
                 {
-                    CreateNoWindow = false,
                     WorkingDirectory = installDir,
                     WindowStyle = ProcessWindowStyle.Normal
                 };
@@ -458,7 +469,7 @@ internal class UnturnedLauncher : IDisposable
                     process = newestUnturnedProcess;
                 }
 
-                _logger.LogInformation($"Unturned process started with PID {process.Id}.");
+                await _logger.LogInformationAsync($"Unturned process started with PID {process.Id}.");
 
                 await WaitForUnturnedStartup(process, false, installDir, testAssembly, serverId, state, token);
 
@@ -583,7 +594,7 @@ internal class UnturnedLauncher : IDisposable
         Client.Disconnected += onDisconnection;
         try
         {
-            _logger.LogInformation("Initial connection established.");
+            await _logger.LogInformationAsync("Initial connection established.");
 
             completionSource = new TaskCompletionSource<int>();
 
@@ -604,6 +615,7 @@ internal class UnturnedLauncher : IDisposable
 
                     case AllInstancesStartedMessage:
                         state.DisabledModule = true;
+                        HadDummies = true;
                         DisableModule(installDir, testAssembly, serverId);
                         break;
                 }
@@ -639,19 +651,12 @@ internal class UnturnedLauncher : IDisposable
             throw new UnturnedStartException($"Exit code: {exitCompletionSource.Task.Result}.");
         }
 
-        _logger.LogInformation("Level loaded.");
+        await _logger.LogInformationAsync("Level loaded.");
     }
 
-    private string GetUnturnedClientProcessName()
+    private static string GetUnturnedClientProcessName()
     {
         return "Unturned";
-#if false
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return "Unturned.exe";
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            return "Unturned";
-        return _u3ds ? "Unturned_Headless.x86_64" : "Unturned.x86_64";
-#endif
     }
 
     private void CreateUnturnedLaunchArgsForSteam(ref string exe, ref string launchArgs, out bool foundSteamExe)

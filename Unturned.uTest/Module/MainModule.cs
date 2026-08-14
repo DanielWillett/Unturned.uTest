@@ -74,7 +74,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
     /// <summary>
     /// The Unturned logger.
     /// </summary>
-    public ILogger Logger { get; private set; } = DefaultLogger.Logger;
+    public uTest.Logging.ILogger Logger { get; private set; } = DefaultLogger.Logger;
 
     /// <summary>
     /// The highest-priority logger integration currently being used from the available modules.
@@ -179,14 +179,14 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
             return;
         }
 
-        LogLevel minLogLevel = TestList!.MinimumLogLevel;
-        if (minLogLevel > LogLevel.Debug)
+        Logging.LogLevel minLogLevel = TestList!.MinimumLogLevel;
+        if (minLogLevel > Logging.LogLevel.Debug)
             Accessor.LogDebugMessages = false;
-        if (minLogLevel > LogLevel.Information)
+        if (minLogLevel > Logging.LogLevel.Information)
             Accessor.LogInfoMessages = false;
-        if (minLogLevel > LogLevel.Warning)
+        if (minLogLevel > Logging.LogLevel.Warning)
             Accessor.LogWarningMessages = false;
-        if (minLogLevel > LogLevel.Error)
+        if (minLogLevel > Logging.LogLevel.Error)
             Accessor.LogErrorMessages = false;
 
         LoadLoggerIntegration();
@@ -376,7 +376,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
         });
     }
 
-    internal ILogger GetOrCreateLogger(string name)
+    internal Logging.ILogger GetOrCreateLogger(string name)
     {
         ILoggerIntegration? integration = LoggerIntegration;
         return integration != null ? integration.CreateNamedLogger(name) : Logger;

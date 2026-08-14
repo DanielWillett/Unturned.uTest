@@ -15,18 +15,33 @@
     <DebugType>portable</DebugType>
     <NoWarn>MSB3277</NoWarn>
 
+    <OpenModTests>False</OpenModTests>
+
   </PropertyGroup>
 
-	<ItemGroup>
+  <PropertyGroup Condition="$(OpenModTests)">
 
-		<UnturnedReference Include="Assembly-CSharp" />
+    <DefineConstants>$(DefineConstants);OPENMOD</DefineConstants>
+
+  </PropertyGroup>
+
+  <ItemGroup Condition="$(OpenModTests)">
 
     <PackageReference Include="OpenMod.API" Version="3.6.0" />
 
-		<PackageReference Include="Unturned.MSBuild" Version="1.0.1">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-		</PackageReference>
+  </ItemGroup>
+
+	<ItemGroup>
+
+    <PackageReference Include="Unturned.MSBuild" Version="1.0.1">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    
+    <UnturnedReference Include="Assembly-CSharp" />
+    <UnturnedReference Include="SDG.NetTransport" />
+    <UnturnedReference Include="UnityEngine.CoreModule" />
+
     <ProjectReference Include="../Unturned.uTest/Unturned.uTest.csproj" />
 		<ProjectReference Include="../Unturned.uTest.Runner/Unturned.uTest.Runner.csproj" />
 		<ProjectReference Include="../Unturned.uTest.Runner.SourceGenerator/Unturned.uTest.Runner.SourceGenerator.csproj" ReferenceOutputAssembly="false" OutputItemType="Analyzer" />

@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <Import Project="../Version.props"/>
+  <Import Project="../Version.props" />
 
   <PropertyGroup>
 
@@ -10,20 +10,22 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
+    <PackageId>Unturned.uTest</PackageId>
+
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
     <NoWarn>CS1591;CS1573</NoWarn>
 
     <DefineConstants>$(DefineConstants);JETBRAINS_ANNOTATIONS</DefineConstants>
     <DefineConstants>$(DefineConstants);REFLECTION_TOOLS_ENABLE_HARMONY_LOG</DefineConstants>
-	  <PublicizerClearCacheOnClean>true</PublicizerClearCacheOnClean>
+	  <PublicizerClearCacheOnClean>True</PublicizerClearCacheOnClean>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
   </PropertyGroup>
 
   <ItemGroup>
     <Using Include="System.ComponentModel" />
     <Using Include="System.Diagnostics.CodeAnalysis" />
-    <Using Include="uTest.Logging.ILogger" Alias="ILogger" />
     <Using Include="uTest.Logging" />
   </ItemGroup>
 
@@ -35,10 +37,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Unturned.MSBuild" Version="1.0.1">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
+    <PackageReference Include="Unturned.MSBuild" Version="$(UnturnedMSBuildVersion)" IncludeAssets="build" />
 
     <UnturnedReference Include="Assembly-CSharp" />
     <UnturnedReference Include="UnityEngine.CoreModule" />
@@ -50,19 +49,22 @@
     <UnturnedReference Include="UnityEx" />
 
     <!-- Update ModuleLibraryHelper if any of the versions of the fallback assemblies change. -->
-    <PackageReference Include="DanielWillett.ReflectionTools" Version="4.0.0" />
-    <PackageReference Include="DanielWillett.ReflectionTools.Harmony" Version="4.0.0" />
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease27,2.0.0)" />
-    <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease22,2.0.0)" />
-    <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease22,2.0.0)" />
+    <PackageReference Include="DanielWillett.ReflectionTools" Version="4.1.0" />
+    <PackageReference Include="DanielWillett.ReflectionTools.Harmony" Version="4.1.0" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease33,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease29,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease29,2.0.0)" />
     <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" ExcludeAssets="all" />
+    <PackageReference Include="System.Collections.Immutable" Version="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="3.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="3.1.0" />
 
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="3.1.0" PrivateAssets="all" />
 
-		<PackageReference Include="xunit.assert" Version="2.9.3" PrivateAssets="none" />
-    <PackageReference Include="xunit.analyzers" Version="1.24.0" PrivateAssets="none" ExcludeAssets="all" />
+    <PackageReference Include="xunit.v3.assert" Version="4.0.0-*" />
+    <PackageReference Include="xunit.analyzers" Version="2.0.0-*" PrivateAssets="none" ExcludeAssets="all" />
     <PackageReference Include="Lib.Harmony" Version="[2.3.3,3.0)" PrivateAssets="all" />
     <PackageReference Include="DanielWillett.StackCleaner" Version="1.5.1" PrivateAssets="all" />
 

@@ -7,18 +7,21 @@
     <LangVersion>14.0</LangVersion>
     <Nullable>enable</Nullable>
     <RootNamespace>uTest.Compat</RootNamespace>
+    
+    <PackageId>Unturned.uTest.Compat</PackageId>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+    <NoWarn>MSB3277</NoWarn>
 
   </PropertyGroup>
 
 
   <ItemGroup>
 
-    <PackageReference Include="Unturned.MSBuild" Version="1.0.1">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-
+    <PackageReference Include="Unturned.MSBuild" Version="$(UnturnedMSBuildVersion)" IncludeAssets="build" PrivateAssets="all"/>
     <UnturnedReference Include="com.rlabrecque.steamworks.net" />
+
+    <None Include="..\README.md" Pack="true" PackagePath="/" />
 
   </ItemGroup>
 

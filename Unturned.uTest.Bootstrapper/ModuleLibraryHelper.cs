@@ -31,12 +31,11 @@ internal class ModuleLibraryHelper(string moduleHomePath)
         AssemblyName? msExtDepInjAbs;
         if (VersionCompare(msExtLoggerAbs.Version, new Version(8, 0, 0, 0)) >= 0)
         {
-            if (TryAddFallback(msExtLoggerAbs.Version, "Microsoft.Extensions.DependencyInjection.Abstractions.exe", out msExtDepInjAbs))
+            TryAddFallback(msExtLoggerAbs.Version, "Microsoft.Extensions.DependencyInjection.Abstractions.exe", out msExtDepInjAbs);
+
+            if (VersionCompare(msExtLoggerAbs.Version, new Version(9, 0, 0, 0)) >= 0)
             {
-                if (VersionCompare(msExtLoggerAbs.Version, new Version(9, 0, 0, 0)) >= 0)
-                {
-                    TryAddFallback(msExtLoggerAbs.Version, "System.Diagnostics.DiagnosticSource.exe", out _);
-                }
+                TryAddFallback(msExtLoggerAbs.Version, "System.Diagnostics.DiagnosticSource.exe", out _);
             }
         }
         else
@@ -50,27 +49,23 @@ internal class ModuleLibraryHelper(string moduleHomePath)
         }
 
         TryAddFallback(new Version(1, 1, 2, 0), "DanielWillett.SpeedBytes.exe", out _);
-        TryAddFallback(_4000, "ReflectionTools.exe", out _, load: true);
-        TryAddFallback(new Version(4, 0, 0, 1), "ReflectionTools.Harmony.exe", out _);
+        TryAddFallback(new Version(4, 1, 0, 0), "ReflectionTools.exe", out _, load: true);
+        TryAddFallback(new Version(4, 1, 0, 1), "ReflectionTools.Harmony.exe", out _);
         if (TryAddFallback(new Version(1, 0, 0, 0), "ModularRpcs.exe", out AssemblyName modRpcs, load: true))
         {
             TryAddFallback(modRpcs.Version, "ModularRpcs.NamedPipes.exe", out _, load: true);
             TryAddFallback(modRpcs.Version, "ModularRpcs.Unity.exe", out _, load: true);
         }
         TryAddFallback(new Version(2, 4, 2, 0), "0Harmony.exe", out _);
-        TryAddFallback(_4000, "System.Collections.Concurrent.exe", out _);
-        TryAddFallback(_4000, "System.Diagnostics.Debug.exe", out _);
-        TryAddFallback(_4000, "System.Diagnostics.Tools.exe", out _);
-        TryAddFallback(_4000, "System.Globalization.exe", out _);
-        TryAddFallback(_4000, "System.Linq.exe", out _);
-        TryAddFallback(_4000, "System.ObjectModel.exe", out _);
-        TryAddFallback(_4000, "System.Reflection.exe", out _);
-        TryAddFallback(_4000, "System.Reflection.Extensions.exe", out _);
-        TryAddFallback(_4000, "System.Text.RegularExpressions.exe", out _);
-        TryAddFallback(_4000, "System.Threading.Tasks.exe", out _);
-        TryAddFallback(new Version(4, 2, 0, 1), "System.Threading.Tasks.Extensions.exe", out _);
+        TryAddFallback(new Version(4, 2, 1, 0), "System.Threading.Tasks.Extensions.exe", out _);
+
+        // unity's facade 4.0.99.0
         TryAddFallback(new Version(4, 0, 5, 0), "System.Buffers.exe", out _);
-        TryAddFallback(new Version(2, 9, 3, 0), "xunit.assert.dll", out _);
+
+        // custom facade compatible with nuget v4.6.3, 4.0.99.0
+        TryAddFallback(new Version(4, 0, 2, 0), "System.Memory.exe", out _);
+        TryAddFallback(new Version(6, 0, 0, 0), "System.Collections.Immutable.exe", out _);
+        TryAddFallback(_4000, "xunit.v3.assert.dll", out _);
 
         if (Dedicator.isStandaloneDedicatedServer)
         {

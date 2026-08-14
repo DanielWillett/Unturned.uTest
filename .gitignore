@@ -377,3 +377,5 @@ FodyWeavers.xsd
 /Unturned.uTest.Runner/Module/Microsoft.Bcl.AsyncInterfaces.dll
 /Unturned.uTest.Runner/Module/System.Diagnostics.DiagnosticSource.dll
 /Unturned.uTest.Runner/Module/DanielWillett.SpeedBytes.dll
+/Unturned.uTest.Runner/Module/System.Collections.Immutable.dll
+/Unturned.uTest.Runner/Module/xunit.v3.assert (License).txt

@@ -14,7 +14,6 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using uTest.Discovery;
-using uTest.Dummies;
 using uTest.Module;
 using uTest.Protocol;
 using uTest.Runner.Unturned;
@@ -108,6 +107,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
     // uTest.sdkPath            : string    = ""
     // uTest.serverId           : string    = "uTest"
     // uTest.maxTestVariations  : ulong     = 65535
+    // remember to add new properties to the schema file
     private readonly IConfiguration _configuration;
 
     // countdown pattern from https://github.com/microsoft/testfx/blob/main/src/Platform/Microsoft.Testing.Extensions.VSTestBridge/SynchronizedSingleSessionVSTestAndTestAnywhereAdapter.cs
@@ -330,6 +330,12 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                     launcher = _clientLauncher;
                     if (serverIsLaunched)
                     {
+                        if (_serverLauncher!.HadDummies)
+                        {
+                            // give steam some time to notice that the dummies were shut down
+                            await Task.Delay(5000);
+                        }
+
                         _serverLauncher!.Dispose();
                         _serverLauncher = null;
                         serverIsLaunched = false;

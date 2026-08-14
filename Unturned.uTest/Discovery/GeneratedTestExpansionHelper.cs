@@ -21,7 +21,7 @@ internal static class GeneratedTestExpansionHelper
         public CancellationToken Token;
     }
 
-    public static async Task<List<UnturnedTestInstance>> ExpandTestsAsync(ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, CancellationToken token, ulong maxVariations)
+    public static async Task<List<UnturnedTestInstance>> ExpandTestsAsync(uTest.Logging.ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, CancellationToken token, ulong maxVariations)
     {
         TestExpandProcessor processor = new TestExpandProcessor(logger, originalTests, token, maxVariations);
 
@@ -175,7 +175,7 @@ internal static class GeneratedTestExpansionHelper
 
 internal class TestExpandProcessor
 {
-    private readonly ILogger _logger;
+    private readonly uTest.Logging.ILogger _logger;
     private readonly List<UnturnedTest> _originalTests;
     private readonly Dictionary<Type, object?> _runners;
     private readonly CancellationToken _token;
@@ -210,7 +210,7 @@ internal class TestExpandProcessor
     private string _managedMethod;
 
 #nullable restore
-    public TestExpandProcessor(ILogger logger, List<UnturnedTest> originalTests, CancellationToken token, ulong maxVariations)
+    public TestExpandProcessor(uTest.Logging.ILogger logger, List<UnturnedTest> originalTests, CancellationToken token, ulong maxVariations)
     {
         token.ThrowIfCancellationRequested();
 

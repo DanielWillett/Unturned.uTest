@@ -17,7 +17,7 @@ internal static class SkipSteamAuthenticationForDummyPlayers
 
     private static MethodInfo? _patchedMethod;
 
-    internal static bool TryPatch(Harmony harmony, ILogger logger)
+    internal static bool TryPatch(Harmony harmony, Logging.ILogger logger)
     {
         _hasPatch = false;
         _patchedMethod = typeof(Provider).GetMethod(

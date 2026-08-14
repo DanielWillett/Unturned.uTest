@@ -16,7 +16,7 @@ internal static class SkipAddFoundAssetIfNotRequired
 
     private static MethodInfo? _patchedMethod;
 
-    internal static bool TryPatch(Harmony harmony, ILogger logger)
+    internal static bool TryPatch(Harmony harmony, Logging.ILogger logger)
     {
         _hasPatch = false;
         Type? type = Type.GetType("SDG.Unturned.AssetsWorker+WorkerThreadState, Assembly-CSharp", throwOnError: false, ignoreCase: false);
@@ -84,11 +84,11 @@ internal static class SkipAddFoundAssetIfNotRequired
         if (mainModule == null)
             return true;
 
-        ILogger logger = mainModule.Logger;
+        uTest.Logging.ILogger logger = mainModule.Logger;
 
         AssetLoadModel? model = mainModule.AssetLoadModel;
         bool shouldLoadAsset = model == null || model.Includes(filePath);
-        if (false && logger.IsEnabled(LogLevel.Trace))
+        if (false && logger.IsEnabled(uTest.Logging.LogLevel.Trace))
         {
             string fn;
             if (!filePath.EndsWith("Asset.dat"))

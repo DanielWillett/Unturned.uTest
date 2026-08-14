@@ -16,12 +16,9 @@
   <ItemGroup>
 
     
-    <ProjectReference Include="../Unturned.uTest.Compat/Unturned.uTest.Compat.csproj" /> 
+    <ProjectReference Include="../Unturned.uTest.Compat/Unturned.uTest.Compat.csproj" />
 
-    <PackageReference Include="Unturned.MSBuild" Version="1.0.1">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
+    <PackageReference Include="Unturned.MSBuild" Version="$(UnturnedMSBuildVersion)" IncludeAssets="build" />
 
     <UnturnedReference Include="Assembly-CSharp" />
 

@@ -10,9 +10,11 @@
     <FileVersion>$(uTestVersion).0</FileVersion>
     <AssemblyVersion>$(uTestVersion).0</AssemblyVersion>
 
-    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/DanielWillett/uTest</PackageProjectUrl>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/DanielWillett/Unturned.uTest</PackageProjectUrl>
     <RepositoryUrl>$(PackageProjectUrl).git</RepositoryUrl>
+
+    <PackageTags>Unturned;SDG;unit;integration;testing;tests;modding;plugins;RocketMod;Rocket-Mod;OpenMod;Open-Mod;LDM;Legally-Distinct-Missile;LegallyDistinctMissile;Uncreated</PackageTags>
 
     <Authors>Daniel Willett</Authors>
     <Company>$(Authors)</Company>
@@ -24,6 +26,12 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <NeutralLanguage>en-US</NeutralLanguage>
     <DebugType>portable</DebugType>
+
+  </PropertyGroup>
+
+  <PropertyGroup>
+
+    <UnturnedMSBuildVersion>1.0.1</UnturnedMSBuildVersion>
 
   </PropertyGroup>
 

@@ -34,7 +34,7 @@ public interface IUnturnedTestRuntime
     /// <summary>
     /// The logger used to write to the console and log file.
     /// </summary>
-    ILogger Logger { get; }
+    uTest.Logging.ILogger Logger { get; }
     
     /// <summary>
     /// Cancellation token which is cancelled if the IDE aborts a test run.

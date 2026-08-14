@@ -10,7 +10,7 @@ namespace uTest.Protocol;
 public class TestEnvironmentClient : TestEnvironmentBaseHost<NamedPipeClientStream>
 {
     /// <inheritdoc />
-    public TestEnvironmentClient(ILogger logger, int bufferSize = 8192) : base(false, logger, bufferSize) { }
+    public TestEnvironmentClient(Logging.ILogger logger, int bufferSize = 8192) : base(false, logger, bufferSize) { }
 
     /// <inheritdoc />
     protected override NamedPipeClientStream CreateNewStream()

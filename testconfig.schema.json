@@ -1,0 +1,67 @@
+{
+	"$schema": "https://json-schema.org/draft-07/schema",
+	"allOf":
+	[
+		{
+			"$ref": "https://raw.githubusercontent.com/microsoft/testfx/main/docs/testconfig.schema.json"
+		},
+		{
+			"type": "object",
+			"properties":
+			{
+				"uTest":
+				{
+					"type": "object",
+					"properties":
+					{
+						"preferSdk":
+						{
+							"type": "boolean",
+							"description": "When true, attempts to use the SDK when running tests in singleplayer mode. Must also include 'sdkPath'."
+						},
+						"sdkPath":
+						{
+							"type": "string",
+							"format": "uri",
+							"description": "Absolute path to the root folder of the U3-SDK."
+						},
+						"serverId":
+						{
+							"type": "string",
+							"description": "Server ID or singleplayer world name to use for tests. Defaults to 'uTest'. Must be a valid folder name.",
+							"pattern": "^[^<\\/*?\"\\\\>:|\\n\\r\\t\\v\\b\\0]+$"
+						},
+						"maxTestVariations":
+						{
+							"type": "integer",
+							"minimum": 1,
+							"description": "Maximum number of variations a test can have before the calculation short-circuits. It is very easy to accidentally define a test that has millions of variations so this limit is important. Defaults to 65535."
+						}
+					},
+					"if":
+					{
+						"properties":
+						{
+							"preferSdk":
+							{
+								"const": true
+							}
+						},
+						"required":
+						[
+							"preferSdk"
+						]
+					},
+					"then":
+					{
+						"required":
+						[
+							"sdkPath"
+						]
+					},
+					"additionalProprties": false
+				}
+			}
+		}
+	]
+}

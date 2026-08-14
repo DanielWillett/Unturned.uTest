@@ -11,7 +11,7 @@ namespace uTest.Module;
 internal sealed class TestRunner
 {
     private readonly MainModule _module;
-    private readonly ILogger _logger;
+    private readonly uTest.Logging.ILogger _logger;
     private readonly string _testResultsFolder;
     private readonly JsonSerializer _serializer;
 
@@ -89,7 +89,7 @@ internal sealed class TestRunner
                     ExceptionMessage = ex.Message,
                     StackTrace = ex.StackTrace,
                     ExceptionFullString = pipeline.ExceptionFormatter.FormatException(ex),
-                    OutputMessages = [ new TestOutputMessage((int)LogLevel.Critical, ex.ToString()) ]
+                    OutputMessages = [ new TestOutputMessage((int)Logging.LogLevel.Critical, ex.ToString()) ]
                 }));
             }
         }

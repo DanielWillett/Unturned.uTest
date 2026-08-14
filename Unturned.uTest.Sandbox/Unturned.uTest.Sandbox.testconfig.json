@@ -8,7 +8,7 @@
     },
     "uTest":
     {
-        "preferSdk": false,
+        "preferSdk": true,
         "sdkPath": "A:\\unity\\U3-SDK",
         "serverId": "uTest"
     }

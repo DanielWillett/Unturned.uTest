@@ -1,4 +1,5 @@
-﻿using OpenMod.API.Users;
+﻿#if OPENMOD
+using OpenMod.API.Users;
 
 namespace uTest.Sandbox.PlayerConnectionTests;
 
@@ -47,3 +48,4 @@ public class MultiplePlayers : ITestClass
         Assert.Equal(1, Provider.clients.Count);
     }
 }
+#endif
