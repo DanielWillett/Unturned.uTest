@@ -1,7 +1,0 @@
-{
-    "$schema": "../../../testconfig.schema.json",
-    "uTest":
-    {
-        "serverId": "ProjectName"
-    }
-}

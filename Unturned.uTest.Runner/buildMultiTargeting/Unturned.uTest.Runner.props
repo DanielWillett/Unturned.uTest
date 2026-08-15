@@ -1,31 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <Project>
 
-  <Choose>
-
-    <When Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETStandard'">
-      <PropertyGroup>
-        <uTestMode>NETStandard</uTestMode>
-      </PropertyGroup>
-    </When>
-
-    <When Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETFramework'">
-      <PropertyGroup>
-        <uTestMode>NETFramework</uTestMode>
-      </PropertyGroup>
-    </When>
-
-    <Otherwise>
-      <PropertyGroup>
-        <uTestMode>Unsupported</uTestMode>
-      </PropertyGroup>
-    </Otherwise>
-
-  </Choose>
-
   <Target BeforeTargets="Build" Name="uTest_CheckValidTargetFramework" Condition="'$(TargetFramework)' != ''">
 
-    <Error Condition="'$(uTestMode)' == 'Unsupported'"
+    <Error Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' != '.NETStandard' And '$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' != '.NETFramework'"
            Code="UNT900"
            Text="Unsupported target framework: '$(TargetFramework)'. Expected either .NET Framework (&gt;= net471) or .NET Standard (&lt;= netstandard2.1)."
           />
@@ -38,7 +16,8 @@
     <MTPVersion>2.3.3</MTPVersion>
 
     <!-- Treats the 'generator failed to generate source' warnings as errors. -->
-    <WarningsAsErrors>CS8785</WarningsAsErrors>
+    <WarningsAsErrors>$(WarningsAsErrors);CS8785</WarningsAsErrors>
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
 
   </PropertyGroup>
 
@@ -61,7 +40,7 @@
 
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(uTestMode)' == 'NETStandard'">
+  <ItemGroup Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETStandard'">
 
     <PackageReference Include="Microsoft.Testing.Platform" GeneratePathProperty="True" Version="$(MTPVersion)" />
     <PackageReference Include="Microsoft.Testing.Platform.MSBuild" GeneratePathProperty="True" Version="$(MTPVersion)" />
@@ -69,14 +48,14 @@
 
   </ItemGroup>
 
-  <Target Name="uTest_CopyTPMToOutput" Condition="'$(uTestMode)' == 'NETStandard'" AfterTargets="Build">
+  <Target Name="uTest_CopyTPMToOutput" Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETStandard'" AfterTargets="Build">
 
     <Copy SkipUnchangedFiles="True" SourceFiles="$(PkgMicrosoft_Testing_Platform)\lib\netstandard2.0\Microsoft.Testing.Platform.dll" DestinationFiles="$(OutDir)\Microsoft.Testing.Platform.dll" />
     <Copy SkipUnchangedFiles="True" SourceFiles="$(PkgMicrosoft_Testing_Platform_MSBuild)\lib\netstandard2.0\Microsoft.Testing.Extensions.MSBuild.dll" DestinationFiles="$(OutDir)\Microsoft.Testing.Extensions.MSBuild.dll" />
     <Copy SkipUnchangedFiles="True" SourceFiles="$(PkgNewtonsoft_Json)\lib\netstandard2.0\Newtonsoft.Json.dll" DestinationFiles="$(OutDir)\Newtonsoft.Json.dll" />
 
   </Target>
-  <Target Name="uTest_WriteRuntimeConfig" Condition="'$(uTestMode)' == 'NETStandard'" AfterTargets="Build">
+  <Target Name="uTest_WriteRuntimeConfig" Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETStandard'" AfterTargets="Build">
 
     <PropertyGroup Condition="'$(uTestNetTargetFramework)' == ''">
 
@@ -86,13 +65,13 @@
 
     <ItemGroup>
       <_RuntimeConfigLine Include="{" />
-      <_RuntimeConfigLine Include="  &quot;runtimeOptions&quot;: {" />
-      <_RuntimeConfigLine Include="    &quot;tfm&quot;: &quot;$(uTestNetTargetFramework)&quot;," />
-      <_RuntimeConfigLine Include="    &quot;framework&quot;: {" />
-      <_RuntimeConfigLine Include="      &quot;name&quot;: &quot;Microsoft.NETCore.App&quot;," />
-      <_RuntimeConfigLine Include="      &quot;version&quot;: &quot;$([MSBuild]::GetTargetFrameworkVersion($(uTestNetTargetFramework))).0&quot;" />
-      <_RuntimeConfigLine Include="    }" />
-      <_RuntimeConfigLine Include="  }" />
+      <_RuntimeConfigLine Include="&#009;&quot;runtimeOptions&quot;: {" />
+      <_RuntimeConfigLine Include="&#009;&#009;&quot;tfm&quot;: &quot;$(uTestNetTargetFramework)&quot;," />
+      <_RuntimeConfigLine Include="&#009;&#009;&quot;framework&quot;: {" />
+      <_RuntimeConfigLine Include="&#009;&#009;&#009;&quot;name&quot;: &quot;Microsoft.NETCore.App&quot;," />
+      <_RuntimeConfigLine Include="&#009;&#009;&#009;&quot;version&quot;: &quot;$([MSBuild]::GetTargetFrameworkVersion($(uTestNetTargetFramework))).0&quot;" />
+      <_RuntimeConfigLine Include="&#009;&#009;}" />
+      <_RuntimeConfigLine Include="&#009;}" />
       <_RuntimeConfigLine Include="}" />
     </ItemGroup>
 
@@ -106,7 +85,7 @@
 
   </Target>
 
-  <ItemGroup Condition="'$(uTestMode)' == 'NETFramework'">
+  <ItemGroup Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETFramework'">
 
     <!-- Reference MTP -->
     <PackageReference Include="Microsoft.Testing.Platform" Version="$(MTPVersion)"/>

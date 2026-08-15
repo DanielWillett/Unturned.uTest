@@ -11,7 +11,7 @@ dotnet new install Unturned.uTest.Templates
 Create a new project.
 
 * **Visual Studio**: `Solution > Add > New Project > uTest Test Project`
-* **CLI**: `dotnet new uTest -o "PROJECT-NAME-GOES-HERE" -f netstandard2.1`
+* **CLI**: `dotnet new uTest -o "PROJECT-NAME-GOES-HERE"`
 
 ## Legal
 ```

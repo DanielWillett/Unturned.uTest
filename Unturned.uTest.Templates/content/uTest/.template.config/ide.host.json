@@ -1,0 +1,16 @@
+{
+	"$schema": "https://json.schemastore.org/ide.host",
+	"icon": "icon.ico",
+	"tags":
+	[
+		{
+			"type": "platform",
+			"add":
+			[
+				"Linux",
+				"macOS",
+				"Windows"
+			]
+		}
+	]
+}

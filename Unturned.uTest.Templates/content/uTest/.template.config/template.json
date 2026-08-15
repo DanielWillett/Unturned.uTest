@@ -3,10 +3,12 @@
 	"name": "uTest Test Project",
 	"identity": "Unturned.uTest.Templates.Default",
 	"groupIdentity": "Unturned.uTest.Templates",
+	"description": "A project that contains unit tests that can run in Unturned, U3DS, or the U3-SDK.",
 	"shortName": "uTest",
 	"author": "Daniel Willett",
-	"sourceName": "ProjectName",
+	"sourceName": "uTestProject",
 	"preferNameDirectory": true,
+	"defaultName": "TestProject1",
 	"tags":
 	{
 		"language": "C#",
@@ -14,12 +16,9 @@
 	},
 	"classifications":
 	[
-		"Linux",
-		"macOS",
-		"Windows",
-		"Desktop",
-		"uTest",
 		"Test",
+		"uTest",
+		"Desktop",
 		"Unturned"
 	],
 	"constraints":
@@ -73,13 +72,13 @@
 	"primaryOutputs":
 	[
 		{
-			"path": "ProjectName.csproj"
+			"path": "uTestProject.csproj"
 		},
 		{
-			"path": "ProjectNameTests.cs"
+			"path": "uTestProjectTests.cs"
 		},
 		{
-			"path": "ProjectName.testconfig.json"
+			"path": "uTestProject.testconfig.json"
 		}
 	],
 	"postActions":

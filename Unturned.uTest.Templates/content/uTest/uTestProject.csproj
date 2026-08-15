@@ -2,49 +2,53 @@
 
   <PropertyGroup>
 
-    <RootNamespace>ProjectName</RootNamespace>
+    <RootNamespace>uTestProject</RootNamespace>
     <TargetFramework>netstandard2.1</TargetFramework>
 
-    <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-
-    <LangVersion>preview</LangVersion>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
 
     <IsUnturnedTestProject>True</IsUnturnedTestProject>
 
-    <DebugType>portable</DebugType>
-    <NoWarn>MSB3277</NoWarn>
+  </PropertyGroup>
 
-    <OpenModTests>False</OpenModTests>
+  <PropertyGroup>
+
+    <OutputType>Exe</OutputType>
+    <DebugType>portable</DebugType>
+
+    <!-- Instructs MSBuild to copy all dependencies to the output directory. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
   </PropertyGroup>
 
   <ItemGroup>
 
-    <PackageReference Include="Unturned.MSBuild" Version="*" IncludeAssets="build"/>
+    <PackageReference Include="Unturned.MSBuild" Version="*" IncludeAssets="build" />
 
     <UnturnedReference Include="Assembly-CSharp" />
     <UnturnedReference Include="SDG.NetTransport" />
     <UnturnedReference Include="UnityEngine.CoreModule" />
 
-    <PackageReference Include="Unturned.uTest" Version="*"/>
-    <PackageReference Include="Unturned.uTest.Runner" Version="*"/>
+    <PackageReference Include="Unturned.uTest" Version="*" />
+    <PackageReference Include="Unturned.uTest.Runner" Version="*" />
 
   </ItemGroup>
 
-<!--/-:msbuild-conditional:noEmit -->
+  <!--/-:msbuild-conditional:noEmit -->
   <!-- Required for .NET Framework projects. -->
   <ItemGroup Condition="'$([MSBuild]::GetTargetFrameworkIdentifier($(TargetFramework)))' == '.NETFramework'">
 
     <Reference Include="netstandard" Private="True" />
 
   </ItemGroup>
-<!--/+:msbuild-conditional:noEmit -->
+  <!--/+:msbuild-conditional:noEmit -->
 
   <ItemGroup>
 
     <!-- Copy the testconfig.json file to your output directory so MTP can find it. -->
-    <None Update="ProjectName.testconfig.json" CopyToOutputDirectory="PreserveNewest"/>
+    <None Update="uTestProject.testconfig.json" CopyToOutputDirectory="PreserveNewest" />
 
   </ItemGroup>
 

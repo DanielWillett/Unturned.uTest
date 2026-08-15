@@ -1,0 +1,7 @@
+{
+    "$schema": "https://raw.githubusercontent.com/DanielWillett/Unturned.uTest/refs/heads/master/testconfig.schema.json",
+    "uTest":
+    {
+        "serverId": "uTestProject"
+    }
+}

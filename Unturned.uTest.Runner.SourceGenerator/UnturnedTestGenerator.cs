@@ -383,6 +383,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 // start class
                 bldr.String("[global::System.ComponentModel.EditorBrowsableAttribute(global::System.ComponentModel.EditorBrowsableState.Never)]")
                     .String("[global::System.Runtime.CompilerServices.CompilerGeneratedAttribute]")
+                    .String("[global::System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverageAttribute]")
                     .Build($"[global::System.CodeDom.Compiler.GeneratedCodeAttribute(\"Unturned.uTest\", \"{Assembly.GetExecutingAssembly().GetName().Version.ToString(3)}\")]")
                     .Build($"internal sealed class {className} : global::uTest.Discovery.IGeneratedTestProvider")
                     .String("{").In();

@@ -2,7 +2,7 @@
 
   <PropertyGroup>
 
-    <uTestVersion>0.0.1</uTestVersion>
+    <uTestVersion>0.0.2</uTestVersion>
 
     <Version>$(uTestVersion)</Version>
     <PackageVersion>$(uTestVersion)</PackageVersion>
