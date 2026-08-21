@@ -6,7 +6,7 @@ namespace uTest.Logging;
 /// <summary>
 /// Thread-safe <see cref="ILogger"/> implementation that logs to the <see cref="Console"/>.
 /// </summary>
-public sealed class ConsoleLogger : ILogger
+internal sealed class ConsoleLogger : ILogger
 {
     /// <summary>
     /// Singleton instance of <see cref="ConsoleLogger"/>.

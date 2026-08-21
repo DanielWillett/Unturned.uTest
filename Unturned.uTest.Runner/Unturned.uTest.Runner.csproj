@@ -9,6 +9,7 @@
 	  <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <RootNamespace>uTest.Runner</RootNamespace>
     <LangVersion>13.0</LangVersion>
+    <Description>Microsoft.Testing.Platform runner for uTest, an integration testing platform for Unturned.</Description>
 
     <!-- Update build file as well -->
     <MTPVersion>2.3.3</MTPVersion>

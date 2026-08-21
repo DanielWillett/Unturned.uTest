@@ -61,6 +61,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 INamedTypeSymbol? workshopItemAttribute = compilation.GetTypeByMetadataName("uTest.RequiredWorkshopItemAttribute");
                 INamedTypeSymbol? mapAttribute = compilation.GetTypeByMetadataName("uTest.RequiredMapAttribute");
                 INamedTypeSymbol? playerSimModeAttribute = compilation.GetTypeByMetadataName("uTest.PlayerSimulationModeAttribute");
+                INamedTypeSymbol? disabledModuleAttribute = compilation.GetTypeByMetadataName("uTest.DisabledModuleAttribute");
 
                 EquatableList<TestTypeArgsAttributeInfo>? classTypeArgs = null;
                 EquatableList<TestTypeParameterInfo>? classTypeParameters = null;
@@ -109,7 +110,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
 
                         ImmutableArray<IParameterSymbol> parameters = method.Parameters;
                         EquatableList<TestParameterInfo>? parameterInfo = null;
-                        
+                        EquatableList<string>? disabledModules = null;
+
                         // Method parameters (Set, Range)
                         if (!parameters.IsDefaultOrEmpty)
                         {
@@ -251,6 +253,29 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             attributeBuffer.Clear();
                         }
 
+                        // Disabled modules
+                        if (disabledModuleAttribute != null)
+                        {
+                            method.GetTestAttributes(disabledModuleAttribute, attributeBuffer);
+
+                            foreach (AttributeData attribute in attributeBuffer)
+                            {
+                                if (attribute.ConstructorArguments.Length <= 0
+                                    || attribute.ConstructorArguments[0] is not { Kind: TypedConstantKind.Primitive } arg)
+                                {
+                                    continue;
+                                }
+                                if (arg.Value is string { Length: > 0 } str)
+                                {
+                                    disabledModules ??= new EquatableList<string>(attributeBuffer.Count);
+                                    if (!disabledModules.Contains(str))
+                                        disabledModules.Add(str);
+                                }
+                            }
+
+                            attributeBuffer.Clear();
+                        }
+
                         methods.Add(
                             new TestMethodInfo(
                                 ManagedMethod: managedMethod,
@@ -274,7 +299,8 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                                 TypeArgsAttributes: methodTypeArgs,
                                 WorkshopItems: workshopItems,
                                 Map: map,
-                                SimulationMode: simMode
+                                SimulationMode: simMode,
+                                DisabledModules: disabledModules
                             ));
                     }
 
@@ -328,7 +354,7 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                 );
             });
 
-        context.RegisterSourceOutput(
+        context.RegisterImplementationSourceOutput(
             testFixtures,
             (context, input) =>
             {
@@ -509,6 +535,18 @@ public class UnturnedTestGenerator : IIncrementalGenerator
                             .Build($"TreePath = \"{StringLiteralEscaper.Escape(method.TreeNodePath)}\",")
                             .Build($"SimulationMode = global::uTest.PlayerSimulationMode.{method.SimulationMode},");
 
+                    if (method.DisabledModules is { Count: > 0 })
+                    {
+                        bldr.String("DisabledModules = new string[]")
+                            .String("{").In();
+
+                        for (int i = 0; i < method.DisabledModules.Count; ++i)
+                        {
+                            bldr.Build($"\"{StringLiteralEscaper.Escape(method.DisabledModules[i])}\"{(i == method.DisabledModules.Count - 1 ? string.Empty : ",")}");
+                        }
+
+                        bldr.Out().String("},");
+                    }
 
                     if (delegateType != null)
                     {

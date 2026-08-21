@@ -3,7 +3,7 @@ using System.IO;
 
 namespace uTest.Protocol;
 
-public interface ITransportMessage
+internal interface ITransportMessage
 {
     /// <summary>
     /// Writes this message to a stream. Writing is responsible for writing the message ID or type name.

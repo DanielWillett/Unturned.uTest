@@ -8,6 +8,10 @@
     <Authors>Daniel Willett</Authors>
     <Description>Project templates for uTest, an integration testing platform for Unturned.</Description>
 
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/DanielWillett/Unturned.uTest</PackageProjectUrl>
+    <RepositoryUrl>$(PackageProjectUrl).git</RepositoryUrl>
+
     <PackageTags>Unturned;SDG;unit;integration;testing;tests;modding;plugins;RocketMod;Rocket-Mod;OpenMod;Open-Mod;LDM;Legally-Distinct-Missile;LegallyDistinctMissile;Uncreated</PackageTags>
 
     <PackageType>Template</PackageType>

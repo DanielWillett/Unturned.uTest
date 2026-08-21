@@ -6,7 +6,7 @@ namespace uTest.Logging;
 /// <summary>
 /// Thread-safe <see cref="ILogger"/> implementation that logs to <see cref="UnturnedLog"/>.
 /// </summary>
-public sealed class UnturnedLogLogger : ILogger
+internal sealed class UnturnedLogLogger : ILogger
 {
     internal LogLevel MinimumLogLevel { get; set; }
 

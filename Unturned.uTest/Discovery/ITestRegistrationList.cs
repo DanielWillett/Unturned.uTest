@@ -12,10 +12,8 @@ internal interface ITestRegistrationList
     Task<List<UnturnedTestInstance>> ExpandTestsAsync(Logging.ILogger logger, List<UnturnedTest> originalTests, ITestFilter? filter, ulong maxVariations, CancellationToken token = default);
 }
 
-internal readonly struct UnturnedTestInstance
+internal class UnturnedTestInstance
 {
-    internal static UnturnedTestInstance Null = default;
-
     public Type Type { get; }
     public MethodInfo Method { get; }
     public Type[] TypeArgs { get; }
@@ -76,7 +74,7 @@ internal readonly struct UnturnedTestInstance
         ManagedMethod = managedMethod;
 
         // has to go last, this method relies on the other properties
-        processor.GetNames(in this, out string uid, out string displayName, out string treePath);
+        processor.GetNames(this, out string uid, out string displayName, out string treePath);
         Uid = uid;
         DisplayName = displayName;
         TreePath = treePath;

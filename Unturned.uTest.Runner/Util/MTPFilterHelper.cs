@@ -22,7 +22,7 @@ internal static class MTPFilterHelper
         return (TreeNodeFilter)_treeCtor.Invoke([filter]);
     }
 
-    public static bool MatchesFilter(TreeNodeFilter filter, in UnturnedTestInstance instance)
+    public static bool MatchesFilter(TreeNodeFilter filter, UnturnedTestInstance instance)
     {
         bool needsPropertyBag = filter.Filter.IndexOf('[') >= 0;
         PropertyBag bag = EmptyBag;
@@ -72,12 +72,12 @@ internal class TreeNodeFilterWrapper(TreeNodeFilter tree) : ITestFilter
 
     public string TreePath => tree.Filter;
 
-    public bool MatchesTreePathFilter(in UnturnedTestInstance instance)
+    public bool MatchesTreePathFilter(UnturnedTestInstance instance)
     {
-        return MTPFilterHelper.MatchesFilter(tree, in instance);
+        return MTPFilterHelper.MatchesFilter(tree, instance);
     }
 
-    public bool MatchesTreePathFilter(in UnturnedTestInstance instance, bool needsProperties)
+    public bool MatchesTreePathFilter(UnturnedTestInstance instance, bool needsProperties)
     {
         PropertyBag bag = MTPFilterHelper.EmptyBag;
         if (needsProperties)

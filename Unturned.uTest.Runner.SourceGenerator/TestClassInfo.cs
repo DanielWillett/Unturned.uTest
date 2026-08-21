@@ -41,7 +41,8 @@ internal sealed record TestMethodInfo(
     string ReturnTypeFullName,
     string ReturnTypeGloballyQualifiedName,
     DelegateType? DelegateType,
-    PlayerSimulationMode SimulationMode
+    PlayerSimulationMode SimulationMode,
+    EquatableList<string>? DisabledModules
 );
 
 internal record struct TestParameterInfo(

@@ -36,6 +36,18 @@
 							"type": "integer",
 							"minimum": 1,
 							"description": "Maximum number of variations a test can have before the calculation short-circuits. It is very easy to accidentally define a test that has millions of variations so this limit is important. Defaults to 65535."
+						},
+						"minLogLevel":
+						{
+							"type": "string",
+							"enum": [ "Trace", "Debug", "Information", "Warning", "Error", "Critical", "None" ],
+							"description": "Lowest level of logging to output to the test log. Defaults to 'Information'."
+						},
+						"steamIdGenerationStyle":
+						{
+							"type": "string",
+							"enum": [ "Random", "DevUniverse" ],
+							"description": "Defines how Steam IDs are generated for dummy players. Defaults to 'Random'."
 						}
 					},
 					"if":

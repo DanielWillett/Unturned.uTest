@@ -49,13 +49,13 @@ internal static class GeneratedTestExpansionHelper
                 }
 
                 UnturnedTestInstance? instance = task.GetAwaiter().GetResult();
-                if (!instance.HasValue)
+                if (instance == null)
                 {
                     (state.UidsToFind ??= new List<string>()).Add(id);
                 }
                 else
                 {
-                    state.Instances.Add(instance.Value);
+                    state.Instances.Add(instance);
                 }
 
                 return default;
@@ -63,13 +63,13 @@ internal static class GeneratedTestExpansionHelper
                 static async Task CoreTask(ValueTask<UnturnedTestInstance?> task, ForEachUidLookupIdState state, string id)
                 {
                     UnturnedTestInstance? instance = await task.ConfigureAwait(false);
-                    if (!instance.HasValue)
+                    if (instance == null)
                     {
                         state.UidsToFind!.Add(id);
                         return;
                     }
 
-                    state.Instances.Add(instance.Value);
+                    state.Instances.Add(instance);
                 }
             });
 
@@ -635,7 +635,7 @@ internal class TestExpandProcessor
         if (!test.Expandable)
         {
             UnturnedTestInstance instance = new UnturnedTestInstance(test);
-            if (TreeFilter == null || TreeFilter.MatchesTreePathFilter(in instance, _treeFilterNeedsPropertyBag))
+            if (TreeFilter == null || TreeFilter.MatchesTreePathFilter(instance, _treeFilterNeedsPropertyBag))
                 _instances.Add(instance);
             return default;
         }
@@ -1291,7 +1291,7 @@ internal class TestExpandProcessor
             methodArgs
         );
 
-        if (TreeFilter != null && !TreeFilter.MatchesTreePathFilter(in instance, _treeFilterNeedsPropertyBag))
+        if (TreeFilter != null && !TreeFilter.MatchesTreePathFilter(instance, _treeFilterNeedsPropertyBag))
             return false;
 
         _instances.Add(instance);
@@ -1461,7 +1461,7 @@ internal class TestExpandProcessor
         return TaskAwaitableHelper.CreateTaskFromReturnValue(returnValue);
     }
 
-    internal void GetNames(in UnturnedTestInstance test, out string uid, out string displayName, out string treePath)
+    internal void GetNames(UnturnedTestInstance test, out string uid, out string displayName, out string treePath)
     {
         if (!test.Test.Expandable)
         {
@@ -1522,6 +1522,6 @@ internal class TestExpandProcessor
             StringBuilderPool.Return(sb);
         }
         
-        displayName = TestDisplayNameFormatter.GetTestDisplayName(in test);
+        displayName = TestDisplayNameFormatter.GetTestDisplayName(test);
     }
 }

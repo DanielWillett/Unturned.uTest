@@ -7,7 +7,7 @@ namespace uTest.Protocol;
 /// <summary>
 /// A message with no content (a notification).
 /// </summary>
-public abstract class BaseEmptyMessage : ITransportMessage
+internal abstract class BaseEmptyMessage : ITransportMessage
 {
     protected abstract byte Id { get; }
 

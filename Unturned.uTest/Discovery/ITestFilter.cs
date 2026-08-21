@@ -32,10 +32,10 @@ internal interface ITestFilter
     string TreePath { get; }
 
     /// <exception cref="InvalidOperationException"/>
-    bool MatchesTreePathFilter(in UnturnedTestInstance instance);
+    bool MatchesTreePathFilter(UnturnedTestInstance instance);
 
     /// <exception cref="InvalidOperationException"/>
-    bool MatchesTreePathFilter(in UnturnedTestInstance instance, bool needsProperties);
+    bool MatchesTreePathFilter(UnturnedTestInstance instance, bool needsProperties);
 
     #endregion
 }
@@ -126,6 +126,6 @@ internal sealed class UidListFilter : ITestFilter
     }
 
     string ITestFilter.TreePath => throw new InvalidOperationException();
-    bool ITestFilter.MatchesTreePathFilter(in UnturnedTestInstance instance) => throw new InvalidOperationException();
-    bool ITestFilter.MatchesTreePathFilter(in UnturnedTestInstance instance, bool needsProperties) => throw new InvalidOperationException();
+    bool ITestFilter.MatchesTreePathFilter(UnturnedTestInstance instance) => throw new InvalidOperationException();
+    bool ITestFilter.MatchesTreePathFilter(UnturnedTestInstance instance, bool needsProperties) => throw new InvalidOperationException();
 }

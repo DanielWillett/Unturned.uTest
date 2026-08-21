@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 
 namespace uTest.Protocol;
 
-public class PingMessage : ITransportMessage
+internal sealed class PingMessage : ITransportMessage
 {
     public DateTime TimeStamp { get; private set; }
     public DateTime OriginalTimeStamp { get; private set; }

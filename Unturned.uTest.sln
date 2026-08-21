@@ -28,6 +28,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		testconfig.schema.json = testconfig.schema.json
 		Version.props = Version.props
 	EndProjectSection
+	ProjectSection(FolderGlobals) = preProject
+		A_5_4repos_4Unturned_1uTest_4testconfig_1schema_1json__JsonSchema = https://json-schema.org/draft-07/schema
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Unturned.uTest.Templates", "Unturned.uTest.Templates\Unturned.uTest.Templates.csproj", "{4B50E7E7-6868-3ED6-FD7F-73A1831EA641}"
 EndProject

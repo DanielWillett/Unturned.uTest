@@ -1,0 +1,6 @@
+apiRules:
+  - exclude:
+    hasAttribute:
+      uid: System.ComponentModel.EditorBrowsable
+      ctorArguments:
+        - System.ComponentModel.EditorBrowsableState.Never

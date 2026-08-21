@@ -3,7 +3,7 @@ namespace uTest.Module;
 /// <summary>
 /// Possible exit codes for the Unturned process.
 /// </summary>
-public enum UnturnedTestExitCode
+internal enum UnturnedTestExitCode
 {
     /// <summary>
     /// All tests succeeded.

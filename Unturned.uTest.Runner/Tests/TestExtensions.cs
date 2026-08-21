@@ -7,7 +7,7 @@ namespace uTest.Runner;
 
 internal static class TestExtensions
 {
-    public static void AddProperties(in this UnturnedTestInstance instance, PropertyBag bag)
+    public static void AddProperties(this UnturnedTestInstance instance, PropertyBag bag)
     {
         if (instance.Test is UnturnedMTPTest mtpTest)
         {
@@ -17,10 +17,10 @@ internal static class TestExtensions
                 bag.Add(mtpTest.IdentifierInfo);
         }
 
-        TrxSwitch.AddTrxTestProperties(in instance, bag);
+        TrxSwitch.AddTrxTestProperties(instance, bag);
     }
 
-    public static void AddPropertiesFromSummary(in this UnturnedTestInstance instance, TestExecutionSummary summary, PropertyBag bag)
+    public static void AddPropertiesFromSummary(this UnturnedTestInstance instance, TestExecutionSummary summary, PropertyBag bag)
     {
         TrxSwitch.AddTrxTestSummaryProperties(summary, bag);
 
@@ -82,7 +82,7 @@ internal static class TestExtensions
         }
     }
 
-    public static TestNode CreateTestNode(in this UnturnedTestInstance instance, out TestNodeUid? parentUid)
+    public static TestNode CreateTestNode(this UnturnedTestInstance instance, out TestNodeUid? parentUid)
     {
         TestNode node = new TestNode
         {
@@ -101,7 +101,7 @@ internal static class TestExtensions
         return node;
     }
 
-    public static TestNode CreateTestNode(in this UnturnedTestInstance instance)
+    public static TestNode CreateTestNode(this UnturnedTestInstance instance)
     {
         return instance.CreateTestNode(out _);
     }

@@ -7,7 +7,7 @@ namespace uTest.Protocol;
 /// <summary>
 /// The test host client running on the test runner.
 /// </summary>
-public class TestEnvironmentClient : TestEnvironmentBaseHost<NamedPipeClientStream>
+internal class TestEnvironmentClient : TestEnvironmentBaseHost<NamedPipeClientStream>
 {
     /// <inheritdoc />
     public TestEnvironmentClient(Logging.ILogger logger, int bufferSize = 8192) : base(false, logger, bufferSize) { }

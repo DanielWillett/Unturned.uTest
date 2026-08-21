@@ -6,7 +6,7 @@ namespace uTest.Logging;
 /// <summary>
 /// Thread-safe <see cref="ILogger"/> implementation that logs to the <see cref="CommandWindow"/>.
 /// </summary>
-public sealed class CommandWindowLogger : ILogger
+internal sealed class CommandWindowLogger : ILogger
 {
     internal LogLevel MinimumLogLevel { get; set; }
 

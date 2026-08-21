@@ -80,7 +80,7 @@ internal static class FilterHelper
                     else
                     {
                         UnturnedTestInstance instance = new UnturnedTestInstance(test);
-                        if (filter.MatchesTreePathFilter(in instance, needsProperties))
+                        if (filter.MatchesTreePathFilter(instance, needsProperties))
                             continue;
                     }
 

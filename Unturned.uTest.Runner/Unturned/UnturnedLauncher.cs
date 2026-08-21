@@ -270,7 +270,7 @@ internal class UnturnedLauncher : IDisposable
         return true;
     }
 
-    public Task<Process> LaunchUnturned(out bool alreadyLaunched, Assembly testAssembly, string serverId, CancellationToken token)
+    public Task<Process> LaunchUnturned(out bool alreadyLaunched, Assembly testAssembly, string serverId, string commandLine, CancellationToken token)
     {
         Process? existingProcess = _process;
         if (existingProcess is { HasExited: true })
@@ -315,9 +315,9 @@ internal class UnturnedLauncher : IDisposable
         }
 
         alreadyLaunched = false;
-        return Core(_unturnedInstallDir, serverId, token);
+        return Core(_unturnedInstallDir, serverId, commandLine, token);
 
-        async Task<Process> Core(InstallDirUtility installDirUtil, string serverId, CancellationToken token)
+        async Task<Process> Core(InstallDirUtility installDirUtil, string serverId, string? commandLine, CancellationToken token)
         {
             string installDir = installDirUtil.InstallDirectory;
             string exe = Path.Combine(installDir, installDirUtil.GetExecutableRelativePath());
@@ -326,22 +326,31 @@ internal class UnturnedLauncher : IDisposable
 
             string launchArgs = string.Empty;
 
-            bool foundSteamExe;
+            bool foundSteamExe = true;
+
+            bool launchedUsingSteamWebProtocol = false;
 
             if (_u3ds)
             {
-                launchArgs = $"-batchmode " +
-                             $"-nogui " +
-                             $"-uTestSettings \"{settingsFile}\" " +
-                             $"-NetTransport SystemSockets " +
-                             $"-LogAssemblyResolve " +
-                             $"-LogBadMessages " +
+                launchArgs =  "-batchmode " +
+                              "-nogui " +
+                             $"-uTestSettings \"{settingsFile.Replace("\\", "/")}\" " +
+                              "-NetTransport SystemSockets " +
+                              "-LogAssemblyResolve " +
+                              "-LogBadMessages " +
+                             (string.IsNullOrEmpty(commandLine) ? string.Empty : commandLine + " ") +
                              $"+lanserver/{serverId}";
-                foundSteamExe = true;
             }
             else
             {
-                CreateUnturnedLaunchArgsForSteam(ref exe, ref launchArgs, out foundSteamExe);
+                launchArgs = $"-uTestSettings \"{settingsFile.Replace("\\", "/")}\" " +
+                             (string.IsNullOrEmpty(commandLine) ? string.Empty : commandLine + " ") +
+                              "-LogAssemblyResolve " +
+                              "-LogBadMessages";
+
+                // launch with steam URL:
+                // CreateUnturnedLaunchArgsForSteam(ref exe, ref launchArgs, out foundSteamExe, commandLine);
+                // launchedUsingSteamWebProtocol = true;
             }
 
             TaskCompletionSource<Process> startupTcs = new TaskCompletionSource<Process>();
@@ -362,7 +371,7 @@ internal class UnturnedLauncher : IDisposable
                     await _logger.LogInformationAsync($"Starting Unturned at \"{exe}\" with args \"{launchArgs}\".");
 
                 string processName = GetUnturnedClientProcessName();
-                if (!_u3ds)
+                if (!_u3ds && launchedUsingSteamWebProtocol)
                 {
                     Process[] existingUnturnedProcesses = Process.GetProcessesByName(processName);
                     if (existingUnturnedProcesses.Length > 0)
@@ -382,7 +391,7 @@ internal class UnturnedLauncher : IDisposable
                     if (File.Exists(conhost))
                     {
                         launchArgs = $"-- \"{exe}\" {launchArgs}";
-                        exe = "conhost.exe";
+                        exe = conhost;
                     }
                 }
 
@@ -415,7 +424,7 @@ internal class UnturnedLauncher : IDisposable
                     throw new InvalidOperationException("Failed to start Unturned.");
                 }
 
-                if (!_u3ds)
+                if (!_u3ds && launchedUsingSteamWebProtocol)
                 {
                     DateTime start = DateTime.UtcNow;
                     Process? newestUnturnedProcess = null;
@@ -659,7 +668,7 @@ internal class UnturnedLauncher : IDisposable
         return "Unturned";
     }
 
-    private void CreateUnturnedLaunchArgsForSteam(ref string exe, ref string launchArgs, out bool foundSteamExe)
+    private void CreateUnturnedLaunchArgsForSteam(ref string exe, ref string launchArgs, out bool foundSteamExe, string commandLine)
     {
         const string protocolLink = $"steam://launch/{UnturnedAppId}/OPTION{UnturnedNoBattlEyeOptionIndex}";
         string steamDir;

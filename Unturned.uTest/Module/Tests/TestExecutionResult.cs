@@ -1,6 +1,6 @@
 namespace uTest.Module;
 
-public record TestExecutionResult(
+internal record TestExecutionResult(
     TestResult Result,
     TestExecutionSummary? Summary
 )

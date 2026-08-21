@@ -9,6 +9,7 @@
     <RootNamespace>uTest</RootNamespace>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Unofficial integration testing platform for Unturned, a Unity survival game.</Description>
 
     <PackageId>Unturned.uTest</PackageId>
 
@@ -51,7 +52,7 @@
     <!-- Update ModuleLibraryHelper if any of the versions of the fallback assemblies change. -->
     <PackageReference Include="DanielWillett.ReflectionTools" Version="4.1.0" />
     <PackageReference Include="DanielWillett.ReflectionTools.Harmony" Version="4.1.0" />
-    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease33,2.0.0)" />
+    <PackageReference Include="DanielWillett.ModularRpcs" Version="[1.0.0-prerelease33,2.0.0)" PrivateAssets="contentFiles;analyzers;build;buildMultitargeting;buildTransitive" />
     <PackageReference Include="DanielWillett.ModularRpcs.Unity" Version="[1.0.0-prerelease29,2.0.0)" />
     <PackageReference Include="DanielWillett.ModularRpcs.NamedPipes" Version="[1.0.0-prerelease29,2.0.0)" />
     <PackageReference Include="JetBrains.Annotations" Version="2018.2.1" PrivateAssets="All" ExcludeAssets="all" />

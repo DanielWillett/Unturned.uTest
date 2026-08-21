@@ -9,7 +9,7 @@ namespace uTest.Protocol;
 /// <summary>
 /// Message sent by the module to inform the runner about a test completion.
 /// </summary>
-public class ReportTestResultMessage : ITransportMessage
+internal sealed class ReportTestResultMessage : ITransportMessage
 {
     public string SessionUid { get; set; } = null!;
     public string Uid { get; set; } = null!;

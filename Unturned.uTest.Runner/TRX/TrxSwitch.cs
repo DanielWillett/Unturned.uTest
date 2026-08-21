@@ -34,12 +34,12 @@ internal static class TrxSwitch
         return !HasTrx ? null : GetTrxCapabilityIntl(capabilities);
     }
 
-    internal static void AddTrxTestProperties(in UnturnedTestInstance instance, PropertyBag bag)
+    internal static void AddTrxTestProperties(UnturnedTestInstance instance, PropertyBag bag)
     {
         if (!HasTrx)
             return;
 
-        AddTrxTestPropertiesIntl(in instance, bag);
+        AddTrxTestPropertiesIntl(instance, bag);
     }
 
     internal static void AddTrxTestSummaryProperties(TestExecutionSummary summary, PropertyBag bag)
@@ -63,7 +63,7 @@ internal static class TrxSwitch
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void AddTrxTestPropertiesIntl(in UnturnedTestInstance instance, PropertyBag bag)
+    private static void AddTrxTestPropertiesIntl(UnturnedTestInstance instance, PropertyBag bag)
     {
         TrxFullyQualifiedTypeNameProperty property = new TrxFullyQualifiedTypeNameProperty(instance.Type.FullName ?? instance.Type.Name);
         bag.Add(property);

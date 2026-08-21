@@ -11,7 +11,7 @@ internal static class TestDisplayNameFormatter
     /// <summary>
     /// Formats the display name for a single test instance.
     /// </summary>
-    public static string GetTestDisplayName(in UnturnedTestInstance test)
+    public static string GetTestDisplayName(UnturnedTestInstance test)
     {
         if (!test.Test.Expandable)
         {

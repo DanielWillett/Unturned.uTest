@@ -20,6 +20,7 @@ public class SingleplayerTests : ITestClass
 
     [Test]
     [RequiredMap("PEI")]
+    [DisabledModule("USMN Sample Module")]
     public async Task PEITest()
     {
         GameThread.Assert();

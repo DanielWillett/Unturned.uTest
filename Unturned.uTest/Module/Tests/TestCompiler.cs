@@ -39,22 +39,22 @@ internal static class TestCompiler
         }
 #endif
 
-        ref readonly UnturnedTestInstance test = ref parameters.Test.Instance;
+        UnturnedTestInstance test = parameters.Test.Instance;
 
         TaskAwaitableHelper.AwaitableInfo awaitInfo = TaskAwaitableHelper.GetAwaitableInfo(test.Method.ReturnType);
 
-        TestInvoker? compileTestInvoker = CompileTestInvoker(in awaitInfo, in test, logger);
+        TestInvoker? compileTestInvoker = CompileTestInvoker(in awaitInfo, test, logger);
 
         if (compileTestInvoker == null)
             return (null, null);
 
         return (
             compileTestInvoker,
-            CompileTestFinalizer(in awaitInfo, in test)
+            CompileTestFinalizer(in awaitInfo, test)
         );
     }
 
-    private static TestInvoker? CompileTestInvoker(in TaskAwaitableHelper.AwaitableInfo awaitInfo, in UnturnedTestInstance test, uTest.Logging.ILogger logger)
+    private static TestInvoker? CompileTestInvoker(in TaskAwaitableHelper.AwaitableInfo awaitInfo, UnturnedTestInstance test, uTest.Logging.ILogger logger)
     {
         DynamicMethod dynMethod = new DynamicMethod(
                 test.Uid + "_Invoke",
@@ -93,7 +93,7 @@ internal static class TestCompiler
         {
             // push parameters.Test.Arguments[i]
             ParameterInfo parameter = methodParameters[i];
-            if (TryLoadParameter(in test, il, i, parameter))
+            if (TryLoadParameter(test, il, i, parameter))
                 continue;
 
             logger.LogError(
@@ -291,7 +291,7 @@ internal static class TestCompiler
         return (TestInvoker)dynMethod.CreateDelegate(typeof(TestInvoker));
     }
 
-    private static TestFinalizer? CompileTestFinalizer(in TaskAwaitableHelper.AwaitableInfo awaitInfo, in UnturnedTestInstance test)
+    private static TestFinalizer? CompileTestFinalizer(in TaskAwaitableHelper.AwaitableInfo awaitInfo, UnturnedTestInstance test)
     {
         if (!awaitInfo.IsValidAwaitable)
             return null;
@@ -335,7 +335,7 @@ internal static class TestCompiler
         return (TestFinalizer)dynMethod.CreateDelegate(typeof(TestFinalizer));
     }
 
-    private static bool TryLoadParameter(in UnturnedTestInstance test,
+    private static bool TryLoadParameter(UnturnedTestInstance test,
 #if REFLECTION_TOOLS_DEBUG
         IOpCodeEmitter il,
 #else

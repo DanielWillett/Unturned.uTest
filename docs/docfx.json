@@ -1,0 +1,52 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dotnet/docfx/main/schemas/docfx.schema.json",
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "..",
+          "files": [
+            "Unturned.uTest/Unturned.uTest.csproj",
+            "Unturned.uTest.Compat/Unturned.uTest.Compat.csproj"
+          ]
+        }
+      ],
+      "output": "api",
+      "filter": "filterConfig.yml"
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "**/*.{md,yml}"
+        ],
+        "exclude": [
+          "_site/**"
+        ]
+      }
+    ],
+    "xref": [
+      "https://learn.microsoft.com/en-us/dotnet/.xrefmap.json",
+      "file://A:/repos/UnturnedXRefMap/bin/Debug/net10.0/xrefmap.json"
+    ],
+    "resource": [
+      {
+        "files": [
+          "images/**"
+        ]
+      }
+    ],
+    "output": "_site",
+    "template": [
+      "default",
+      "modern"
+    ],
+    "globalMetadata": {
+      "_appName": "uTest",
+      "_appTitle": "uTest",
+      "_enableSearch": true,
+      "pdf": false
+    }
+  }
+}

@@ -3,7 +3,7 @@ using System;
 
 namespace uTest.Logging;
 
-public static class DefaultLoggerReflectionTools
+internal static class DefaultLoggerReflectionTools
 {
     public static IReflectionToolsLogger Logger { get; } = new ReflectionToolsLoggerWrapper(DefaultLogger.Logger);
 }

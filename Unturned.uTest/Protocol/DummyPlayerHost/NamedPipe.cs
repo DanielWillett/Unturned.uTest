@@ -1,6 +1,6 @@
 ﻿namespace uTest.Protocol.DummyPlayerHost;
 
-public static class NamedPipe
+internal static class NamedPipe
 {
     public const string PipeName = "uTest_DPH_";
 }

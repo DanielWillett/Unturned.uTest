@@ -9,7 +9,7 @@ namespace uTest.Protocol;
 /// Hosts test results and allows for triggering tests for test adapters.
 /// The Unturned instance is the server and the test runner is the client.
 /// </summary>
-public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where TPipeStream : PipeStream
+internal abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where TPipeStream : PipeStream
 {
     public const string RunnerPipeName = "Unturned.uTest.Runner";
 
@@ -74,7 +74,7 @@ public abstract class TestEnvironmentBaseHost<TPipeStream> : IDisposable where T
 
     protected abstract TPipeStream CreateNewStream();
 
-    public async Task SendAsync(ITransportMessage message, CancellationToken token = default)
+    internal async Task SendAsync(ITransportMessage message, CancellationToken token = default)
     {
         if (!ProbablyConnected)
         {

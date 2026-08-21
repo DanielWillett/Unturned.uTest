@@ -21,6 +21,7 @@ public class UnturnedTest : ITypeParamsProvider
     public required string TreePath { get; init; }
     public required PlayerSimulationMode SimulationMode { get; init; }
     public string[]? Categories { get; init; }
+    public string[]? DisabledModules { get; init; }
     public required MethodInfo Method { get; init; }
     public required string? Map { get; init; }
     public required ulong[] WorkshopItems { get; init; }

@@ -158,7 +158,7 @@ internal class MainModule : MonoBehaviour, IDisposable, IUnturnedTestRuntime
 
         bool failedToParse = false;
         bool failed;
-        if (Dedicator.isStandaloneDedicatedServer)
+        if (Dedicator.isStandaloneDedicatedServer || _clTestFile.hasValue)
         {
             failed = !_clTestFile.hasValue || !TryRefreshTestFile(_clTestFile.value, out failedToParse);
         }

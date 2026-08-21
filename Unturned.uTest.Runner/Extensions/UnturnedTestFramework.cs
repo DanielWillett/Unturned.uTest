@@ -18,6 +18,7 @@ using uTest.Module;
 using uTest.Protocol;
 using uTest.Runner.Unturned;
 using uTest.Runner.Util;
+using LogLevel = uTest.Logging.LogLevel;
 
 namespace uTest.Runner;
 
@@ -103,10 +104,12 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
     private readonly GracefulStopCapability? _stopCapability;
     private readonly ILoggerFactory _loggerFactory;
 
-    // uTest.preferSdk          : bool      = false
-    // uTest.sdkPath            : string    = ""
-    // uTest.serverId           : string    = "uTest"
-    // uTest.maxTestVariations  : ulong     = 65535
+    // uTest.preferSdk              : bool                      = false
+    // uTest.sdkPath                : string                    = ""
+    // uTest.serverId               : string                    = "uTest"
+    // uTest.maxTestVariations      : ulong                     = 65535
+    // uTest.minLogLevel            : LogLevel                  = Information
+    // uTest.steamIdGenerationStyle : SteamIdGenerationStyle    = Random
     // remember to add new properties to the schema file
     private readonly IConfiguration _configuration;
 
@@ -116,7 +119,9 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
     // null = no session,
     // null UIDs are replaced with string.Empty
     private string? _currentSessionUid;
-    private ulong _maxVariations;
+    private readonly ulong _maxVariations;
+    private readonly LogLevel _minLogLevel;
+    private readonly SteamIdGenerationStyle _steamIdGenerationStyle;
 
     private UnturnedLauncher? _serverLauncher;
     private UnturnedLauncher? _clientLauncher;
@@ -152,6 +157,16 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         if (!ulong.TryParse(_configuration[ConfigurationPrefix + "maxTestVariations"], out _maxVariations))
         {
             _maxVariations = 65535;
+        }
+
+        if (!Enum.TryParse(_configuration[ConfigurationPrefix + "minLogLevel"], out _minLogLevel))
+        {
+            _minLogLevel = LogLevel.Information;
+        }
+
+        if (!Enum.TryParse(_configuration[ConfigurationPrefix + "steamIdGenerationStyle"], out _steamIdGenerationStyle))
+        {
+            _steamIdGenerationStyle = SteamIdGenerationStyle.Random;
         }
     }
 
@@ -251,42 +266,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                 return;
             }
 
-            const string singleplayerMapSentinal = "__uTest_SP__";
-
-            // group tests by map, separating singleplayer tests because they can switch maps without restarting
-            List<IGrouping<string?, UnturnedTestInstance>> groupings = allTests.GroupBy(x =>
-                x.Test.SimulationMode == PlayerSimulationMode.Singleplayer ? singleplayerMapSentinal : x.Test.Map
-            ).ToList();
-            int nullIndex = groupings.FindIndex(x => x.Key == null);
-            int nonNullIndex = groupings.FindIndex(x => x.Key != null && x.Key != singleplayerMapSentinal);
-            int singleplayerIndex = groupings.FindIndex(x => x.Key == singleplayerMapSentinal);
-            if (singleplayerIndex >= 0 && singleplayerIndex < groupings.Count - 1)
-            {
-                // move to end of list (run singleplayers last)
-                IGrouping<string?, UnturnedTestInstance> spGrouping = groupings[singleplayerIndex];
-                groupings.RemoveAt(singleplayerIndex);
-                groupings.Add(spGrouping);
-            }
-
-            List<List<UnturnedTestInstance>> testGroups = new List<List<UnturnedTestInstance>>(groupings.Count);
-            if (nullIndex >= 0 && nonNullIndex >= 0)
-            {
-                // combine all null maps with the first non-null map
-                for (int i = 0; i < groupings.Count; ++i)
-                {
-                    if (i == nullIndex)
-                        continue;
-
-                    testGroups.Add(i == nonNullIndex
-                        ? groupings[nullIndex].Concat(groupings[i]).ToList()
-                        : groupings[i].ToList()
-                    );
-                }
-            }
-            else
-            {
-                testGroups.AddRange(groupings.Select(x => x.ToList()));
-            }
+            List<List<UnturnedTestInstance>> testGroups = GetTestGroups(allTests);
 
             string sessionId = r.Session.SessionUid.Value;
 
@@ -294,6 +274,8 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
             foreach (List<UnturnedTestInstance> tests in testGroups)
             {
                 BitArray testReturnMask = new BitArray(tests.Count);
+
+                string commandLine = string.Empty;
 
                 List<Task> runningPublishTasks = new List<Task>();
 
@@ -303,6 +285,15 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                 
                 UnturnedLauncher launcher;
                 bool isClient = simulationMode == PlayerSimulationMode.Singleplayer;
+
+                if (tests[0].Test.DisabledModules is { Length: > 0 } disabledModules)
+                {
+                    for (int i = 0; i < disabledModules.Length; i++)
+                    {
+                        string mod = disabledModules[i];
+                        commandLine += $"-disableModule/{mod}{(i == disabledModules.Length - 1 ? string.Empty : " ")}";
+                    }
+                }
 
                 string? sdkPath = null, sdkHomePath = null;
                 if (isClient && bool.TryParse(_configuration["uTest:preferSdk"], out bool preferSdk) && preferSdk)
@@ -403,7 +394,6 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
 
                 List<UnturnedTestReference> exportedTests = new List<UnturnedTestReference>(tests.Count);
 
-
                 foreach (UnturnedTestInstance test in tests)
                 {
                     if (testAssembly == null)
@@ -434,6 +424,8 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                         TestAssembly = testAssembly!.FullName,
                         ServerId = serverId,
                         MaxTestVariations = _maxVariations,
+                        MinimumLogLevel = _minLogLevel,
+                        SteamIdGenerationStyle = _steamIdGenerationStyle,
                         // null grp + specific grp for first set so has to be from last test
                         Map = tests[^1].Test.Map
                     });
@@ -446,7 +438,7 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
                 }
                 else
                 {
-                    process = await launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssembly, serverId, token);
+                    process = await launcher.LaunchUnturned(out bool isAlreadyLaunched, testAssembly, serverId, commandLine, token);
 
                     if (!isClient)
                     {
@@ -567,6 +559,109 @@ internal class UnturnedTestFramework : ITestFramework, IDisposable, IDataProduce
         {
             ctx.Complete();
         }
+    }
+
+    /// <summary>
+    /// Separate a list of discovered tests into batches, where each batch will launch a separate instance of U3DS or Unturned.
+    /// </summary>
+    private static List<List<UnturnedTestInstance>> GetTestGroups(List<UnturnedTestInstance> allTests)
+    {
+        List<List<UnturnedTestInstance>> groups = new List<List<UnturnedTestInstance>>(4);
+
+        foreach (UnturnedTestInstance instance in allTests)
+        {
+            bool added = false;
+            for (int i = 0; i < groups.Count; ++i)
+            {
+                UnturnedTestInstance representative = groups[i][0];
+                int cmp = CompareWithBatch(instance, representative);
+                if (cmp == 0)
+                {
+                    groups[i].Add(instance);
+                    added = true;
+                    break;
+                }
+
+                if (cmp >= 0)
+                    continue;
+
+                groups.Insert(i, new List<UnturnedTestInstance>(allTests.Count / 4) { instance });
+                added = true;
+                break;
+            }
+
+            if (!added)
+            {
+                groups.Add(new List<UnturnedTestInstance>(allTests.Count / 4) { instance });
+            }
+        }
+
+        return groups;
+    }
+
+    /// <summary>
+    /// This function is responsible for separating tests into batches.
+    /// Each batch is a separate launch of either U3DS or Unturned. For example, U3DS requires a restart to change the map.
+    /// </summary>
+    private static int CompareWithBatch(UnturnedTestInstance a, UnturnedTestInstance b)
+    {
+        UnturnedTest testA = a.Test,
+                     testB = b.Test;
+
+        bool isServer;
+
+        if (testA.SimulationMode == PlayerSimulationMode.Singleplayer)
+        {
+            if (testB.SimulationMode != PlayerSimulationMode.Singleplayer)
+                return -1;
+
+            isServer = false;
+        }
+        else if (testB.SimulationMode == PlayerSimulationMode.Singleplayer)
+        {
+            return 1;
+        }
+        else
+        {
+            isServer = true;
+        }
+
+        int cmp;
+
+        if (isServer && testA.Map != null && testB.Map != null)
+        {
+            cmp = string.Compare(testA.Map, testB.Map, StringComparison.OrdinalIgnoreCase);
+            if (cmp != 0)
+                return cmp;
+        }
+
+        string[]? disabledModulesA = testA.DisabledModules,
+                  disabledModulesB = testB.DisabledModules;
+
+        if (disabledModulesA == null || disabledModulesA.Length == 0)
+        {
+            if (disabledModulesB != null && disabledModulesB.Length != 0)
+                return 1;
+        }
+        else if (disabledModulesB == null || disabledModulesB.Length == 0)
+        {
+            return -1;
+        }
+        else
+        {
+            cmp = disabledModulesA.Length.CompareTo(disabledModulesB!.Length);
+            if (cmp != 0)
+                return cmp;
+
+            for (int i = 0; i < disabledModulesA.Length; ++i)
+            {
+                cmp = string.Compare(disabledModulesA[i], disabledModulesB[i], StringComparison.Ordinal);
+                if (cmp != 0)
+                    return cmp;
+            }
+        }
+
+        return 0;
     }
 
     private static void KillProcess(UnturnedLauncher launcher, Process process)
